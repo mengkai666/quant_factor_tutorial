@@ -1,0 +1,57 @@
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+dist/
+build/
+*.spec
+*.exe
+
+# === 运行时生成的缓存数据 (过大，不适合存仓库) ===
+# 这些文件在 GitHub Actions 中通过 actions/cache 管理
+price_history_cache.csv
+industry_cache.csv
+
+# === 运行时生成的输出/报告 ===
+*.html
+data_quality_report.json
+focus_pool.csv
+连板高度分析.xlsx
+
+# === IDE / 编辑器 ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# === 系统文件 ===
+Thumbs.db
+.DS_Store
+
+# === 临时/调试文件 ===
+temp_*.py
+ai_*.txt
+
+# === 打包归档 ===
+*.zip
+backups/
+
+# === PyInstaller ===
+*.manifest
+*.spec
+
+# === 虚拟环境 ===
+venv/
+.venv/
+env/
+
+# === 提取的归档 ===
+_extracted_zip/
+
+# === Pyrefly ===
+pyrefly.toml

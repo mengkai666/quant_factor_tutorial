@@ -1,0 +1,72 @@
+name: 每日主线强度追踪跑批
+
+on:
+  schedule:
+    # 每天北京时间下午 4:30 (A股收市后数据稳定时) 执行，即 UTC 时间 08:30
+    - cron: '30 8 * * 1-5'
+  workflow_dispatch:  # 允许在 GitHub 页面上手动点击 "Run workflow" 运行
+
+jobs:
+  run-tracker:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+      
+    - name: 设置 Python 3.10
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        
+    - name: 缓存 pip 依赖
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: 恢复数据缓存 (CSV)
+      uses: actions/cache@v4
+      id: data-cache
+      with:
+        path: |
+          price_history_cache.csv
+          industry_cache.csv
+        key: market-data-cache-${{ github.run_number }}
+        restore-keys: |
+          market-data-cache-
+          
+    - name: 安装 Python 依赖
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: 安装 CJK 字体 (词云用)
+      run: |
+        sudo apt-get update -qq > /dev/null 2>&1
+        sudo apt-get install -y -qq fonts-wqy-zenhei > /dev/null 2>&1
+
+    - name: 执行主线强度追踪脚本 (并发送邮件)
+      env:
+        # 从 GitHub Secrets 动态读取邮箱配置，避免密码硬编码泄露
+        EMAIL_ENABLE: "1"
+        EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
+        EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+        EMAIL_RECEIVERS: ${{ secrets.EMAIL_RECEIVERS }}
+      run: |
+        python 主线强度追踪.py
+        
+    - name: 提交并推送更新的缓存数据
+      # 只提交小体积的种子缓存 (涨停历史、板块、情绪)
+      # 大文件 (price_history_cache, industry_cache) 由 actions/cache 管理
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        # 只 add 小体积缓存文件和 JSON 报告，不 add 大体积 CSV 和 HTML
+        git add 涨停历史缓存.csv cls_plate_cache.csv sentiment_history_cache.csv data_quality_report.json 2>/dev/null || true
+        # 如果文件有变更，则自动 Commit 和 Push
+        git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-update market data caches [skip ci]" && git push)
