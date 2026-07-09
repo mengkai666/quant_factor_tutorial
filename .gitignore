@@ -55,3 +55,6 @@ _extracted_zip/
 
 # === Pyrefly ===
 pyrefly.toml
+
+# === Claude Code 本地配置 (含权限设置, 不公开) ===
+.claude/

@@ -124,106 +124,136 @@ EMAIL_RECEIVERS = [r.strip() for r in _receivers_env.split(",") if r.strip()] if
 # ============================================================
 # CLS up_tags / plate_name → (细分板块, 大主线)
 CONCEPT_TO_SECTOR = {
-    # ===== 大周期 =====
-    '有色金属': ('有色', '大周期'), '铜': ('有色', '大周期'), '锆': ('有色', '大周期'),
-    '黄金': ('有色', '大周期'), '白银': ('有色', '大周期'), '稀土': ('有色', '大周期'),
-    '钨': ('有色', '大周期'), '锡': ('有色', '大周期'), '锂': ('有色', '大周期'),
-    '铝': ('有色', '大周期'), '锌': ('有色', '大周期'), '钴': ('有色', '大周期'),
-    '化工': ('化工', '大周期'), '农药': ('化工', '大周期'), '染料': ('化工', '大周期'),
-    '化肥': ('化工', '大周期'), '氟化工': ('化工', '大周期'), '钛白粉': ('化工', '大周期'),
-    '有机硅': ('化工', '大周期'), '化纤': ('化工', '大周期'), '煤化工': ('化工', '大周期'),
-    '石油化工': ('化工', '大周期'), '磷化工': ('化工', '大周期'), '纯碱': ('化工', '大周期'),
-    '橡胶': ('化工', '大周期'), '涂料': ('化工', '大周期'), '聚氨酯': ('化工', '大周期'),
-    '玻璃': ('化工', '大周期'), '水泥': ('化工', '大周期'),
-    '油气设服': ('油气', '大周期'), '石油': ('油气', '大周期'), '页岩气': ('油气', '大周期'),
-    '天然气': ('天然气', '大周期'), '煤炭': ('煤炭', '大周期'),
-    '钢铁': ('黑色', '大周期'), '铁矿石': ('黑色', '大周期'),
-    # ===== 人工智能 =====
-    'AI应用': ('AI应用', '人工智能'), 'AI医疗': ('AI应用', '人工智能'),
-    'AI教育': ('AI应用', '人工智能'), 'AI+': ('AI应用', '人工智能'),
-    'AI算力': ('算力', '人工智能'), '算力': ('算力', '人工智能'), '算力租赁': ('算力', '人工智能'),
-    '华为算力': ('算力', '人工智能'), '液冷': ('液冷', '人工智能'),
-    '光通信': ('光通信', '人工智能'), '光纤光缆': ('光通信', '人工智能'),
-    '光模块': ('光通信', '人工智能'), 'CPO': ('光通信', '人工智能'),
-    '缆线光纤': ('光通信', '人工智能'), '光纤光纤': ('光通信', '人工智能'),
-    '机器人': ('机器人', '人工智能'), '机器人概念': ('机器人', '人工智能'),
-    '大模型': ('AI应用', '人工智能'), 'AIGC': ('AI应用', '人工智能'),
-    'Sora': ('AI应用', '人工智能'), 'Kimi': ('AI应用', '人工智能'),
-    'ChatGPT': ('AI应用', '人工智能'), '多模态': ('AI应用', '人工智能'),
-    '文生视频': ('AI应用', '人工智能'), '虚拟人': ('AI应用', '人工智能'),
-    '知识付费': ('AI应用', '人工智能'), '短剧': ('AI应用', '人工智能'),
-    'IDC电源': ('算力', '人工智能'),
-    '数据要素': ('AI应用', '人工智能'), '数字经济': ('AI应用', '人工智能'),
-    '云计算': ('算力', '人工智能'), '边缘计算': ('算力', '人工智能'),
-    '自动驾驶': ('AI应用', '人工智能'), '智能驾驶': ('AI应用', '人工智能'),
-    # ===== 半导体 =====
-    '存储芯片': ('存储', '半导体'), '存储器': ('存储', '半导体'),
-    '半导体': ('半导体', '半导体'), '半导体材料': ('半导体', '半导体'),
-    '芯片': ('芯片', '半导体'), 'EDA': ('芯片', '半导体'),
-    'PCB': ('PCB', '半导体'), '封装': ('封装', '半导体'), '电子布': ('PCB', '半导体'), '覆铜板': ('PCB', '半导体'), '铜箔': ('PCB', '半导体'),
-    '光刻胶': ('半导体', '半导体'), '第三代半导体': ('半导体', '半导体'),
-    'IGBT': ('半导体', '半导体'), 'GPU': ('芯片', '半导体'),
-    'MCU': ('芯片', '半导体'), 'RISC-V': ('芯片', '半导体'),
-    # ===== 商业航天/军工 =====
-    '商业航天': ('航天', '商业航天'), '航天': ('航天', '商业航天'),
-    '军工': ('军工', '商业航天'), '国防军工': ('军工', '商业航天'),
-    '无人机': ('无人机', '商业航天'), '无人机物流': ('无人机', '商业航天'),
-    '卫星通信': ('卫星', '商业航天'), '卫星导航': ('卫星', '商业航天'),
-    '低空经济': ('低空经济', '商业航天'), 'eVTOL': ('低空经济', '商业航天'),
-    '航空发动机': ('军工', '商业航天'), '船舶': ('船舶', '商业航天'),
-    # ===== 大消费 =====
-    '食品': ('食品', '大消费'), '白酒': ('饮料', '大消费'), '饮料': ('饮料', '大消费'),
-    '养老': ('养老', '大消费'), '旅游': ('旅游', '大消费'), '免税': ('免税', '大消费'),
-    '医药': ('医药', '大消费'), '新药获批上市': ('医药', '大消费'),
-    '农业种植': ('农业', '大消费'), '种业': ('农业', '大消费'),
-    '体育': ('体育', '大消费'), '服装': ('服装', '大消费'),
-    '家电': ('家电', '大消费'), '化妆品': ('化妆品', '大消费'),
-    '教育': ('教育', '大消费'), '传媒': ('传媒', '大消费'),
-    '游戏': ('传媒', '大消费'), '影视': ('传媒', '大消费'),
-    # ===== 电网 =====
-    '智能电网': ('电网', '电网'), '电网设备': ('电网', '电网'),
-    '特高压': ('特高压', '电网'), '电缆': ('电缆', '电网'),
-    '电力': ('电力', '电网'), '绿电': ('电力', '电网'),
-    '核聚变': ('核电', '电网'), '核电': ('核电', '电网'),
-    '储能': ('储能', '电网'), '光伏': ('光伏', '电网'),
-    '锂电池': ('储能', '电网'), '钠电池': ('储能', '电网'),
-    '充电桩': ('充电桩', '电网'), '风电': ('风电', '电网'),
-    '氢能': ('氢能', '电网'), '基建': ('电网', '电网'),
+    # ============================================================
+    # 主线1: AI算力 (AI硬件全产业链 —— 当下第一主线)
+    #   涵盖 算力/芯片/PCB/光通信/液冷/元件/消费电子/存储 等联动分支
+    # ============================================================
+    # -- 算力 --
+    '算力工程': ('算力', 'AI算力'), 'AI算力': ('算力', 'AI算力'), '算力': ('算力', 'AI算力'),
+    '算力租赁': ('算力', 'AI算力'), '华为算力': ('算力', 'AI算力'),
+    'AI服务器': ('算力', 'AI算力'), '服务器': ('算力', 'AI算力'),
+    '云计算': ('算力', 'AI算力'), '边缘计算': ('算力', 'AI算力'),
+    'IDC电源': ('算力', 'AI算力'), 'IDC': ('算力', 'AI算力'), '数据中心': ('算力', 'AI算力'),
+    # -- 液冷 (数据中心散热) --
+    '液冷IDC': ('液冷', 'AI算力'), '液冷': ('液冷', 'AI算力'),
+    # -- 芯片/半导体 --
+    '芯片产业链': ('芯片', 'AI算力'), '芯片': ('芯片', 'AI算力'), 'GPU': ('芯片', 'AI算力'),
+    'EDA': ('芯片', 'AI算力'), 'MCU': ('芯片', 'AI算力'), 'RISC-V': ('芯片', 'AI算力'),
+    '半导体材料': ('半导体', 'AI算力'), '半导体': ('半导体', 'AI算力'),
+    '光刻胶': ('半导体', 'AI算力'), '第三代半导体': ('半导体', 'AI算力'), 'IGBT': ('半导体', 'AI算力'),
+    '存储芯片': ('存储', 'AI算力'), '存储器': ('存储', 'AI算力'), '存储': ('存储', 'AI算力'), 'HBM': ('存储', 'AI算力'),
+    # -- PCB (含玻璃基板/覆铜板等载板链) --
+    '玻璃基板': ('PCB', 'AI算力'), 'PCB': ('PCB', 'AI算力'), '覆铜板': ('PCB', 'AI算力'),
+    '铜箔': ('PCB', 'AI算力'), '电子布': ('PCB', 'AI算力'), '封装': ('PCB', 'AI算力'),
+    # -- 光通信 --
+    '光通信': ('光通信', 'AI算力'), '光纤光缆': ('光通信', 'AI算力'), '光模块': ('光通信', 'AI算力'),
+    'CPO': ('光通信', 'AI算力'), '缆线光纤': ('光通信', 'AI算力'), '交换机': ('光通信', 'AI算力'),
+    '6G': ('光通信', 'AI算力'),
+    # -- 被动元件/连接器 --
+    'MLCC': ('元件', 'AI算力'), '高速连接器': ('元件', 'AI算力'), '连接器': ('元件', 'AI算力'),
+    '电感': ('元件', 'AI算力'), '超级电容': ('元件', 'AI算力'), '铜连接': ('元件', 'AI算力'),
+    # -- 消费电子 --
+    'AIPC': ('消费电子', 'AI算力'), '消费电子': ('消费电子', 'AI算力'), '折叠屏': ('消费电子', 'AI算力'),
+    '苹果概念': ('消费电子', 'AI算力'), '华为概念': ('消费电子', 'AI算力'), 'MR': ('消费电子', 'AI算力'),
+    # ============================================================
+    # 主线2: 机器人 (独立主线)
+    # ============================================================
+    '机器人概念': ('机器人', '机器人'), '人形机器人': ('机器人', '机器人'), '机器人': ('机器人', '机器人'),
+    '减速器': ('减速器', '机器人'), '谐波减速器': ('减速器', '机器人'), '丝杠': ('减速器', '机器人'),
+    '灵巧手': ('机器人', '机器人'), '电子皮肤': ('机器人', '机器人'), '机器视觉': ('机器人', '机器人'),
+    'PEEK材料': ('PEEK', '机器人'), 'PEEK': ('PEEK', '机器人'),
+    # ============================================================
+    # 主线3: AI应用 (软件/应用/传媒层)
+    # ============================================================
+    'AI应用': ('AI应用', 'AI应用'), 'AI医疗': ('AI应用', 'AI应用'), 'AI教育': ('AI应用', 'AI应用'),
+    'AI+': ('AI应用', 'AI应用'), '大模型': ('AI应用', 'AI应用'), 'AIGC': ('AI应用', 'AI应用'),
+    'Sora': ('AI应用', 'AI应用'), 'Kimi': ('AI应用', 'AI应用'), 'ChatGPT': ('AI应用', 'AI应用'),
+    '多模态': ('AI应用', 'AI应用'), '文生视频': ('AI应用', 'AI应用'), '虚拟人': ('AI应用', 'AI应用'),
+    '数据要素': ('AI应用', 'AI应用'), '数字经济': ('AI应用', 'AI应用'), '工业互联网': ('AI应用', 'AI应用'),
+    '短剧': ('传媒', 'AI应用'), '游戏': ('传媒', 'AI应用'), '影视': ('传媒', 'AI应用'),
+    '传媒': ('传媒', 'AI应用'), '知识付费': ('传媒', 'AI应用'), 'IP经济': ('传媒', 'AI应用'),
+    '智能驾驶': ('智能驾驶', 'AI应用'), '自动驾驶': ('智能驾驶', 'AI应用'),
+    '金融科技': ('金融科技', 'AI应用'), '跨境支付': ('金融科技', 'AI应用'), '数字货币': ('金融科技', 'AI应用'),
+    # ============================================================
+    # 主线4: 新能源电网 (电力/储能/光伏/核电/氢能)
+    # ============================================================
+    '智能电网': ('电网', '新能源电网'), '电网设备': ('电网', '新能源电网'), '特高压': ('电网', '新能源电网'),
+    '电缆': ('电网', '新能源电网'), '发电机概念': ('电网', '新能源电网'), '发电机': ('电网', '新能源电网'),
+    '电力': ('电力', '新能源电网'), '绿电': ('电力', '新能源电网'), '虚拟电厂': ('电力', '新能源电网'),
+    '锂电池': ('储能', '新能源电网'), '钠电池': ('储能', '新能源电网'), '固态电池': ('储能', '新能源电网'),
+    '储能': ('储能', '新能源电网'), '充电桩': ('储能', '新能源电网'),
+    '核聚变': ('核电', '新能源电网'), '核电': ('核电', '新能源电网'),
+    '光伏': ('光伏', '新能源电网'), '风电': ('风电', '新能源电网'),
+    '氢能': ('氢能', '新能源电网'), '燃料电池': ('氢能', '新能源电网'),
+    # ============================================================
+    # 主线5: 军工航天 (商业航天/低空/军工/卫星)
+    # ============================================================
+    '商业航天': ('航天', '军工航天'), '航天': ('航天', '军工航天'), '火箭': ('航天', '军工航天'),
+    '军工': ('军工', '军工航天'), '国防军工': ('军工', '军工航天'), '航空发动机': ('军工', '军工航天'),
+    '低空经济': ('低空经济', '军工航天'), 'eVTOL': ('低空经济', '军工航天'), '飞行汽车': ('低空经济', '军工航天'),
+    '无人机': ('无人机', '军工航天'), '无人机物流': ('无人机', '军工航天'),
+    '卫星通信': ('卫星', '军工航天'), '卫星导航': ('卫星', '军工航天'), '卫星互联网': ('卫星', '军工航天'),
+    '船舶': ('船舶', '军工航天'),
+    # ============================================================
+    # 主线6: 周期资源 (有色/化工/煤炭/油气/新材料)
+    # ============================================================
+    '有色金属': ('有色', '周期资源'), '稀土永磁': ('有色', '周期资源'), '稀土': ('有色', '周期资源'),
+    '黄金概念': ('有色', '周期资源'), '黄金': ('有色', '周期资源'), '白银': ('有色', '周期资源'),
+    '铜': ('有色', '周期资源'), '铝': ('有色', '周期资源'), '锌': ('有色', '周期资源'),
+    '钨': ('有色', '周期资源'), '锡': ('有色', '周期资源'), '钴': ('有色', '周期资源'), '锆': ('有色', '周期资源'),
+    '工业气体': ('化工', '周期资源'), '有机硅': ('化工', '周期资源'), '化工': ('化工', '周期资源'),
+    '农药': ('化工', '周期资源'), '化肥': ('化工', '周期资源'), '染料': ('化工', '周期资源'),
+    '氟化工': ('化工', '周期资源'), '钛白粉': ('化工', '周期资源'), '磷化工': ('化工', '周期资源'),
+    '纯碱': ('化工', '周期资源'), '橡胶': ('化工', '周期资源'), '涂料': ('化工', '周期资源'),
+    '聚氨酯': ('化工', '周期资源'), '煤化工': ('化工', '周期资源'), '石油化工': ('化工', '周期资源'),
+    '玻璃': ('化工', '周期资源'), '水泥': ('化工', '周期资源'), '造纸': ('化工', '周期资源'),
+    '超硬材料': ('新材料', '周期资源'), '培育钻石': ('新材料', '周期资源'), '石墨烯': ('新材料', '周期资源'),
+    '陶瓷产业': ('新材料', '周期资源'), '碳纤维': ('新材料', '周期资源'),
+    '煤炭': ('煤炭', '周期资源'),
+    '油气设服': ('油气', '周期资源'), '页岩气': ('油气', '周期资源'), '石油': ('油气', '周期资源'),
+    '天然气': ('油气', '周期资源'), '航运': ('航运', '周期资源'),
+    '钢铁': ('黑色', '周期资源'), '铁矿石': ('黑色', '周期资源'),
+    # ============================================================
+    # 主线7: 医药 (单列)
+    # ============================================================
+    '创新药': ('创新药', '医药'), '新药获批上市': ('创新药', '医药'), 'CXO': ('创新药', '医药'),
+    '减肥药': ('创新药', '医药'), '医药': ('医药', '医药'), '中药': ('医药', '医药'),
+    '生物医药': ('医药', '医药'), '疫苗': ('医药', '医药'), '医疗器械': ('医药', '医药'),
+    '脑机接口': ('医药', '医药'),
 }
 
-MAINLINE_NAMES = ['人工智能', '大周期', '商业航天', '半导体', '大消费', '电网']
-DACHOUQI_SUBS = ['有色', '化工', '油气', '天然气', '煤炭', '黑色']
+MAINLINE_NAMES = ['AI算力', '机器人', 'AI应用', '新能源电网', '军工航天', '周期资源', '医药']
 
 # baostock行业代码 → (细分板块, 大主线) 回退映射
 INDUSTRY_TO_SECTOR = {
-    'C39计算机、通信和其他电子设备制造业': ('AI应用', '人工智能'),
-    'I65软件和信息技术服务业': ('AI应用', '人工智能'),
-    'I64互联网和相关服务': ('AI应用', '人工智能'),
-    'C40仪器仪表制造业': ('机器人', '人工智能'),
-    'C38电气机械和器材制造业': ('电网', '电网'),
-    'C37铁路、船舶、航空航天和其他运输设备制造业': ('航天机械', '商业航天'),
-    'C35专用设备制造业': ('军工', '商业航天'),
-    'C34通用设备制造业': ('军工', '商业航天'),
-    'C36汽车制造业': ('军工', '商业航天'),
-    'B06石油和天然气开采业': ('油气', '大周期'),
-    'B07金属矿采选业': ('有色', '大周期'),
-    'B09有色金属矿采选业': ('有色', '大周期'),
-    'C32有色金属冶炼和压延加工业': ('有色', '大周期'),
-    'C31黑色金属冶炼和压延加工业': ('黑色', '大周期'),
-    'C26化学原料和化学制品制造业': ('化工', '大周期'),
-    'C25石油加工、炼焦和核燃料加工业': ('油气', '大周期'),
-    'B08非金属矿采选业': ('化工', '大周期'),
-    'B11煤炭开采和洗选业': ('煤炭', '大周期'),
-    'D44电力、热力生产和供应业': ('电力', '电网'),
-    'C27医药制造业': ('医药', '大消费'),
-    'A01农业': ('农业', '大消费'),
-    'C14食品制造业': ('食品', '大消费'),
-    'C15酒、饮料和精制茶制造业': ('饮料', '大消费'),
-    'N77生态保护和环境治理业': ('化工', '大周期'),
-    'M74专业技术服务业': ('航天机械', '商业航天'),
-    'C33金属制品业': ('军工', '商业航天'),
-    'C30非金属矿物制品业': ('化工', '大周期'),
-    'L72商务服务业': ('其他', ''),
+    'C39计算机、通信和其他电子设备制造业': ('芯片', 'AI算力'),
+    'I65软件和信息技术服务业': ('AI应用', 'AI应用'),
+    'I64互联网和相关服务': ('AI应用', 'AI应用'),
+    'C40仪器仪表制造业': ('机器人', '机器人'),
+    'C38电气机械和器材制造业': ('电网', '新能源电网'),
+    'C37铁路、船舶、航空航天和其他运输设备制造业': ('航天', '军工航天'),
+    'C35专用设备制造业': ('军工', '军工航天'),
+    'C34通用设备制造业': ('军工', '军工航天'),
+    'C36汽车制造业': ('智能驾驶', 'AI应用'),
+    'B06石油和天然气开采业': ('油气', '周期资源'),
+    'B07金属矿采选业': ('有色', '周期资源'),
+    'B09有色金属矿采选业': ('有色', '周期资源'),
+    'C32有色金属冶炼和压延加工业': ('有色', '周期资源'),
+    'C31黑色金属冶炼和压延加工业': ('黑色', '周期资源'),
+    'C26化学原料和化学制品制造业': ('化工', '周期资源'),
+    'C25石油加工、炼焦和核燃料加工业': ('油气', '周期资源'),
+    'B08非金属矿采选业': ('化工', '周期资源'),
+    'B11煤炭开采和洗选业': ('煤炭', '周期资源'),
+    'D44电力、热力生产和供应业': ('电力', '新能源电网'),
+    'C27医药制造业': ('医药', '医药'),
+    'A01农业': ('农业', '其它'),
+    'C14食品制造业': ('食品', '其它'),
+    'C15酒、饮料和精制茶制造业': ('饮料', '其它'),
+    'N77生态保护和环境治理业': ('化工', '周期资源'),
+    'M74专业技术服务业': ('航天', '军工航天'),
+    'C33金属制品业': ('军工', '军工航天'),
+    'C30非金属矿物制品业': ('化工', '周期资源'),
+    'L72商务服务业': ('其它', ''),
 }
 
 # ============================================================
@@ -494,26 +524,44 @@ def generate_wordclouds(plate_stock_data, output_dir):
         print(f"  [警告] 词云生成失败 (请确保已安装 wordcloud): {e}")
         return {}
 
+# 概念键按长度从长到短排序: 保证"锂电池"先于"锂"、"煤化工"先于"煤炭"命中,
+# 避免短键截胡 (dict 顺序无关)。模块加载时构建一次。
+_SORTED_CONCEPT_KEYS = sorted(CONCEPT_TO_SECTOR.keys(), key=len, reverse=True)
+
 def classify_by_tags(up_tags):
-    """根据CLS up_tags分类到 (细分板块, 大主线)"""
+    """根据CLS up_tags分类到 (细分板块, 大主线)
+
+    匹配策略 (修复子串黑洞):
+      1. 精确匹配优先;
+      2. 模糊匹配只保留"概念键出现在标签内" (k in tag), 即标签比键更具体
+         (如键"光模块"命中标签"CPO光模块"); 去掉反向 tag in k ——
+         那个方向会让短键 (如"铝""锂") 把无关标签疯狂误吸进大周期;
+      3. 长键优先, 避免"锂"截胡"锂电池";
+      4. 全不匹配返回 None, 由上游归入"其它", 不再被有色系兜底吸走。
+    """
     if not up_tags:
         return None, None
+    # 精确匹配
     for tag in up_tags:
         if tag in CONCEPT_TO_SECTOR:
             return CONCEPT_TO_SECTOR[tag]
+    # 单向模糊: 键是标签的子串, 且长键优先
     for tag in up_tags:
-        for k, v in CONCEPT_TO_SECTOR.items():
-            if k in tag or tag in k:
-                return v
+        for k in _SORTED_CONCEPT_KEYS:
+            if k in tag:
+                return CONCEPT_TO_SECTOR[k]
     return None, None
 
 def classify_by_plate_name(plate_name):
-    """根据CLS板块名分类"""
+    """根据CLS板块名分类 (同 classify_by_tags 的安全匹配策略)"""
+    if not plate_name:
+        return None, None
     if plate_name in CONCEPT_TO_SECTOR:
         return CONCEPT_TO_SECTOR[plate_name]
-    for k, v in CONCEPT_TO_SECTOR.items():
-        if k in plate_name or plate_name in k:
-            return v
+    # 单向模糊: 概念键出现在板块名内, 长键优先
+    for k in _SORTED_CONCEPT_KEYS:
+        if k in plate_name:
+            return CONCEPT_TO_SECTOR[k]
     return None, None
 
 # ============================================================
@@ -568,7 +616,9 @@ def load_and_classify_zt(n_days=60):
                 try:
                     day_data = future.result()
                     for plate in day_data.get('plate_stock', []):
-                        p_name = plate.get('plate_name', '')
+                        # CLS 板块名字段是 secu_name (plate_name 不存在), 之前一直取空串
+                        # 导致板块名分类从未生效, 全靠个股 up_tags 兜底。此处修正。
+                        p_name = plate.get('secu_name', '') or plate.get('plate_name', '')
                         sub, mainline = classify_by_plate_name(p_name)
                         for stock in plate.get('stock_list', []):
                             code = stock.get('secu_code', '')
@@ -599,11 +649,17 @@ def load_and_classify_zt(n_days=60):
     df[['细分板块', '大主线']] = df.apply(apply_cls, axis=1)
     return df
 
-def build_echelon_table(cls_data):
-    """构建涨停梯队属性梳理表"""
-    clu = cls_data.get('continuous_limit_up', [])
+def build_echelon_table(cls_data, zt_today=None):
+    """构建涨停梯队属性梳理表。
+
+    连板高度来自涨停缓存的"连板数"(zt_today, DataFrame 含 代码/名称/连板数),
+    CLS 的 plate_stock 仅用于个股板块归因。
+    注意: CLS 接口的 continuous_limit_up 字段实测恒为空, 不能用于分组
+    (曾导致所有涨停股被误判为"首板", 梯队表只剩一行)。
+    """
     ps = cls_data.get('plate_stock', [])
-    
+
+    # 个股代码 -> 板块标签 (用于归因: 主属性/次属性/细分主线)
     stock_plates = {}
     for plate in ps:
         pname = plate.get('secu_name', '') or plate.get('plate_name', '')
@@ -613,106 +669,165 @@ def build_echelon_table(cls_data):
             stock_plates.setdefault(code, []).extend(tags)
             if pname and pname not in stock_plates[code]:
                 stock_plates[code].append(pname)
-    
+
     echelon = []
-    
-    for item in clu:
-        height = item.get('height', 1)
-        stocks = item.get('stock_list', [])
-        count = len(stocks)
-        
+    if zt_today is None or len(zt_today) == 0:
+        return echelon
+
+    def _best_ml_sub(code):
+        plates = stock_plates.get(code, [])
+        for p in plates:
+            sub, ml = classify_by_tags([p])
+            if not ml:
+                sub, ml = classify_by_plate_name(p)
+            if ml:
+                return sub, ml
+        return (plates[0] if plates else ''), ''
+
+    # 按连板数从高到低分组 (高板在前, 首板在后)
+    heights = sorted({int(h) for h in zt_today['连板数'].tolist()}, reverse=True)
+    for h in heights:
+        grp = zt_today[zt_today['连板数'] == h]
+        count = len(grp)
+        if count == 0:
+            continue
+
         plate_count = {}
         stock_names = []
-        for s in stocks:
-            code = s.get('secu_code', '')
-            name = s.get('secu_name', '')
+        stock_details = []
+        for _, row in grp.iterrows():
+            code = str(row['代码'])
+            name = str(row['名称'])
             stock_names.append(name)
-            plates = stock_plates.get(code, [])
-            for p in plates:
-                sub, ml = classify_by_tags([p])
-                if not ml:
-                    sub, ml = classify_by_plate_name(p)
-                label = p
-                plate_count[label] = plate_count.get(label, 0) + 1
-        
+            for p in stock_plates.get(code, []):
+                plate_count[p] = plate_count.get(p, 0) + 1
+            best_sub, best_ml = _best_ml_sub(code)
+            stock_details.append({'name': name, 'sub': best_sub or '', 'ml': best_ml or ''})
+
         sorted_plates = sorted(plate_count.items(), key=lambda x: -x[1])
         primary = f'{sorted_plates[0][0]}{int(sorted_plates[0][1]/count*100)}%' if sorted_plates else '/'
         secondary = f'{sorted_plates[1][0]}{int(sorted_plates[1][1]/count*100)}%' if len(sorted_plates) > 1 else '/'
-        
-        stock_details = []
-        for s in stocks:
-            code = s.get('secu_code', '')
-            name = s.get('secu_name', '')
-            plates = stock_plates.get(code, [])
-            best_sub, best_ml = None, None
-            for p in plates:
-                sub, ml = classify_by_tags([p])
-                if not ml: sub, ml = classify_by_plate_name(p)
-                if ml:
-                    best_sub, best_ml = sub, ml
-                    break
-            if not best_ml and plates: best_sub = plates[0]
-            stock_details.append({'name': name, 'sub': best_sub or '', 'ml': best_ml or ''})
 
+        label = '首板' if h == 1 else f'{h}连板'
         echelon.append({
-            'height': f'{height}连板', 'count': count,
+            'height': label, 'count': count,
             'primary': primary, 'secondary': secondary,
-            'stocks': stock_names[:5],
+            'stocks': stock_names[:6],
             'stock_details': stock_details
         })
-    
-    first_board_plates = {}
-    first_board_count = 0
-    first_board_stocks = []
-    for plate in ps:
-        pname = plate.get('secu_name', '') or plate.get('plate_name', '')
-        for s in plate.get('stock_list', []):
-            code = s.get('secu_code', '')
-            name = s.get('secu_name', '')
-            is_lianban = False
-            for item in clu:
-                for cs in item.get('stock_list', []):
-                    if cs.get('secu_code') == code:
-                        is_lianban = True
-                        break
-            if not is_lianban:
-                first_board_count += 1
-                first_board_stocks.append(name)
-                first_board_plates[pname] = first_board_plates.get(pname, 0) + 1
-    
-    if first_board_count > 0:
-        sorted_fp = sorted(first_board_plates.items(), key=lambda x: -x[1])
-        primary = f'{sorted_fp[0][0]}{int(sorted_fp[0][1]/first_board_count*100)}%' if sorted_fp else '/'
-        secondary = f'{sorted_fp[1][0]}{int(sorted_fp[1][1]/first_board_count*100)}%' if len(sorted_fp) > 1 else '/'
-        
-        stock_details = []
-        for plate in ps:
-            pname = plate.get('secu_name', '') or plate.get('plate_name', '')
-            for s in plate.get('stock_list', []):
-                code = s.get('secu_code', '')
-                name = s.get('secu_name', '')
-                if name in first_board_stocks:
-                    plates = stock_plates.get(code, [])
-                    best_sub, best_ml = None, None
-                    for p in plates:
-                        sub, ml = classify_by_tags([p])
-                        if not ml: sub, ml = classify_by_plate_name(p)
-                        if ml:
-                            best_sub, best_ml = sub, ml
-                            break
-                    if not best_ml and plates: best_sub = plates[0]
-                    stock_details.append({'name': name, 'sub': best_sub or '', 'ml': best_ml or ''})
-                    
-        unique_details = {d['name']: d for d in stock_details}.values()
 
-        echelon.append({
-            'height': '首板', 'count': first_board_count,
-            'primary': primary, 'secondary': secondary,
-            'stocks': first_board_stocks[:6],
-            'stock_details': list(unique_details)
-        })
-    
     return echelon
+
+
+# ============================================================
+# 主线天梯 (全市场强势股 × 强度分级)
+# ============================================================
+# 强度分级阈值 (score = 20日涨幅% + 连板数×20)。调这里即可微调分布。
+LADDER_GRADES = [
+    ('S级', 80),
+    ('B级', 50),
+    ('C级', 25),
+    ('D级', 12),
+    ('E级', 5),
+]
+LADDER_MIN_SCORE = 5  # 低于此分不入梯队
+
+
+def build_mainline_ladder(price_df, classified, zt_today=None, ret_window=20):
+    """构建主线天梯: 全市场强势股按强度分 S/B/C/D/E 级, 并归入 (大主线×细分板块) 矩阵。
+
+    强度 score = ret_window 日涨幅% + 连板数×20 (连板加权突出情绪龙头)。
+    分支归属优先级: cls_plate_cache 概念 > classified 涨停分类 > INDUSTRY_TO_SECTOR 行业回退。
+    返回 {grade_label: [{name, code, sub, ml, score}, ...]}, 每级内按 score 降序。
+    """
+    if price_df is None or price_df.empty:
+        return {}
+
+    # 1. 全市场 N 日涨幅
+    p_df = price_df.pivot(index='date', columns='code', values='close').ffill()
+    if len(p_df) <= ret_window:
+        return {}
+    latest = p_df.iloc[-1]
+    prev = p_df.iloc[-(ret_window + 1)]
+    valid = (latest > 0) & latest.notna() & (prev > 0) & prev.notna()
+    ret = ((latest[valid] / prev[valid]) - 1) * 100
+
+    # 2. 连板数映射 (code -> 连板数), 用于加权
+    lianban = {}
+    if zt_today is not None and len(zt_today) > 0:
+        for _, r in zt_today.iterrows():
+            try:
+                lianban[str(r['代码'])] = int(r['连板数'])
+            except (ValueError, KeyError, TypeError):
+                pass
+
+    # 3. 分支归属映射 (三级优先级)
+    code_to_sub_ml = {}   # code -> (sub, ml)
+    code_to_name = {}
+    # (C) 行业回退 (最低优先级, 先填)
+    if os.path.exists(INDUSTRY_CACHE):
+        try:
+            idf = pd.read_csv(INDUSTRY_CACHE, dtype=str)
+            for _, row in idf.iterrows():
+                code = row['code']
+                code_to_name[code] = row['name']
+                sub, ml = INDUSTRY_TO_SECTOR.get(row.get('industry', ''), (None, None))
+                if sub and ml:
+                    code_to_sub_ml[code] = (sub, ml)
+        except Exception:
+            pass
+    # (B) 涨停分类 (覆盖行业)
+    if classified is not None and not classified.empty:
+        cc = classified.drop_duplicates('代码')
+        for _, row in cc.iterrows():
+            code = row['代码']
+            code_to_name[code] = row['名称']
+            sub, ml = row.get('细分板块', ''), row.get('大主线', '')
+            if sub and sub != '其它' and ml in MAINLINE_NAMES:
+                code_to_sub_ml[code] = (sub, ml)
+    # (A) CLS 概念缓存 (最高优先级)
+    if os.path.exists(CLS_PLATE_CACHE):
+        try:
+            cdf = pd.read_csv(CLS_PLATE_CACHE, dtype=str)
+            if not cdf.empty and 'date' in cdf.columns:
+                latest_cls_date = cdf['date'].max()
+                cdf = cdf[cdf['date'] == latest_cls_date]
+            for _, row in cdf.iterrows():
+                code = row['code']
+                sub, ml = row.get('sub', ''), row.get('mainline', '')
+                if sub and sub != '其它' and ml in MAINLINE_NAMES:
+                    code_to_sub_ml[code] = (sub, ml)
+        except Exception:
+            pass
+
+    # 4. 打分 + 分级
+    ladder = {g[0]: [] for g in LADDER_GRADES}
+    for code, r20 in ret.items():
+        lb = lianban.get(code, 0)
+        score = float(r20) + lb * 20
+        if score < LADDER_MIN_SCORE:
+            continue
+        sub_ml = code_to_sub_ml.get(code)
+        if not sub_ml:
+            continue  # 无法归入主线矩阵的强势股跳过
+        sub, ml = sub_ml
+        # 定级
+        grade = None
+        for label, thresh in LADDER_GRADES:
+            if score >= thresh:
+                grade = label
+                break
+        if grade is None:
+            continue
+        ladder[grade].append({
+            'name': code_to_name.get(code, code),
+            'code': code, 'sub': sub, 'ml': ml,
+            'score': round(score, 1),
+        })
+
+    for g in ladder:
+        ladder[g].sort(key=lambda x: -x['score'])
+    return ladder
 
 
 # ============================================================
@@ -1085,6 +1200,94 @@ def _check_bs_data_availability(args):
         sys.stdout = old_stdout
     return has_target_data
 
+def _probe_bs_max_date(args):
+    """探测 baostock 在 [start, end] 区间内实际能返回的最大交易日。
+    返回 'YYYY-MM-DD' 字符串; 无任何数据时返回 ''。
+    用于'取到哪补到哪', 避免因最新日尚未更新而整段跳过。"""
+    start_date_str, latest_zt_str = args
+    import baostock as bs
+    import sys, os, socket
+    socket.setdefaulttimeout(10)
+    old_stdout = sys.stdout
+    sys.stdout = open(os.devnull, 'w')
+    max_date = ''
+    try:
+        bs.login()
+        rs = bs.query_history_k_data_plus(
+            "sh.600000", "date,close",
+            start_date=start_date_str, end_date=latest_zt_str,
+            frequency="d", adjustflag="2"
+        )
+        if rs and rs.error_code == '0':
+            while rs.next():
+                d = rs.get_row_data()[0]
+                if d > max_date:
+                    max_date = d
+        bs.logout()
+    except Exception:
+        pass
+    finally:
+        sys.stdout.close()
+        sys.stdout = old_stdout
+    return max_date
+
+def _fetch_tencent_close(all_codes, trade_date_str, retry=3):
+    """用腾讯行情接口 (qt.gtimg.cn) 批量获取全市场最新收盘价。
+    一次请求可取数百只, 全市场 5000+ 只约 2 秒, 且不走系统代理 (直连)。
+    all_codes: ['sh600000', 'sz000001', ...]  trade_date_str: 'YYYY-MM-DD'
+    返回 [{'date', 'code', 'close'}, ...]; 失败返回 []。
+
+    注意: 腾讯接口只返回"当前/最新"收盘价, 仅适用于补当天。历史缺口仍需 baostock。
+    """
+    import requests as _req
+    rows = []
+    session = _req.Session()
+    # 关键: 绕过系统代理 (本机 Clash 白名单不含行情域名, 走代理会被拒)
+    session.trust_env = False
+    session.proxies = {'http': None, 'https': None}
+
+    batch = 800  # 单次 URL 拼接的股票数, 800 只实测稳定
+    for i in range(0, len(all_codes), batch):
+        chunk = all_codes[i:i + batch]
+        # 腾讯代码格式即 sh600000 / sz000001, 与内部格式一致
+        query = ','.join(chunk)
+        url = f'https://qt.gtimg.cn/q={query}'
+        ok = False
+        for attempt in range(retry):
+            try:
+                resp = session.get(url, timeout=10)
+                resp.encoding = 'gbk'  # 腾讯接口 GBK 编码
+                text = resp.text
+                # 每行形如: v_sh600000="1~浦发银行~600000~8.98~...";
+                for line in text.split(';'):
+                    line = line.strip()
+                    if not line.startswith('v_'):
+                        continue
+                    eq = line.find('="')
+                    if eq < 0:
+                        continue
+                    code = line[2:eq]  # v_sh600000 -> sh600000
+                    payload = line[eq + 2:].rstrip('"')
+                    parts = payload.split('~')
+                    if len(parts) > 3:
+                        try:
+                            close_val = float(parts[3])
+                            if close_val > 0:
+                                rows.append({'date': trade_date_str, 'code': code, 'close': close_val})
+                        except (ValueError, IndexError):
+                            pass
+                ok = True
+                break
+            except Exception:
+                if attempt < retry - 1:
+                    time.sleep(0.5)
+                continue
+        if not ok:
+            # 单批失败不致命, 继续后续批次 (可能网络抖动)
+            continue
+    return rows
+
+
 def _fetch_bs_chunk(args):
     codes, start, end = args
     import socket
@@ -1166,11 +1369,36 @@ def update_price_cache(classified_df):
     GLOBAL_TIMEOUT = 300  # 整个价格更新不超过5分钟
     new_rows = []
 
+    # === 策略0: 腾讯快照 (仅补最新一天, 全市场约2秒) ===
+    # 日常场景: 缓存只差最新交易日, 腾讯批量接口秒取全市场收盘价, 避免 baostock 逐股慢查。
+    # 仅当缺口就是"最新一天"时启用: start_date 与 latest_zt 属同一交易日缺口
+    # (日历差 <=4 天可涵盖周末/单个假期), 且腾讯只返回最新价, 只能填 latest_zt_str 当天。
+    gap_days = (latest_zt_dt - start_date_dt).days if not price_df.empty else 999
+    if not price_df.empty and 0 <= gap_days <= 4:
+        print(f"    ⚡ 仅缺最新交易日 ({latest_zt_str}), 尝试腾讯快照秒补...")
+        try:
+            tx_rows = _fetch_tencent_close(all_codes, latest_zt_str)
+            if tx_rows and len(tx_rows) > len(all_codes) * 0.8:
+                print(f"    ✅ 腾讯快照获取 {len(tx_rows)} 条 (耗时 {time.time()-t0:.1f}s), 跳过 baostock")
+                tx_df = pd.DataFrame(tx_rows)
+                combined_df = pd.concat([price_df, tx_df], ignore_index=True)
+                combined_df = combined_df.drop_duplicates(subset=['code', 'date'])
+                combined_df = combined_df.sort_values(['code', 'date']).reset_index(drop=True)
+                combined_df.to_csv(PRICE_CACHE, index=False)
+                trim_cache_file(PRICE_CACHE, date_col='date', encoding='utf-8')
+                return combined_df
+            else:
+                got = len(tx_rows) if tx_rows else 0
+                print(f"    ⚠️ 腾讯快照覆盖不足 ({got}/{len(all_codes)}), 回退 baostock")
+        except Exception as e:
+            print(f"    ⚠️ 腾讯快照异常: {e}, 回退 baostock")
+
     # === 策略1: baostock (首选, 稳定可靠) ===
     try:
         import multiprocessing
         print(f"    🔄 尝试 baostock 获取...")
         bs_ok = False
+        fetch_end_str = latest_zt_str  # baostock 实际收口日期, 默认目标日, 探测后可回退
         try:
             with multiprocessing.Pool(1) as pool:
                 res = pool.apply_async(_check_bs_login)
@@ -1183,23 +1411,31 @@ def update_price_cache(classified_df):
         if not bs_ok:
             print(f"    ⚠️ baostock 不可用")
         else:
-            # 快速检测 baostock 是否已更新目标日期的数据
-            has_target_data = False
+            # 探测 baostock 实际能覆盖到的最大日期。
+            # 关键修复: 不再因"最新日未更新"就跳过整段, 而是取回实际可用的
+            # 最大日期作为 end, 已能取到的中间缺口(如断更几天后的历史日)照常补全。
+            probe_max = ''
             try:
                 with multiprocessing.Pool(1) as pool:
-                    res = pool.apply_async(_check_bs_data_availability, ((start_date_str, latest_zt_str),))
-                    has_target_data = res.get(timeout=10)
+                    res = pool.apply_async(_probe_bs_max_date, ((start_date_str, latest_zt_str),))
+                    probe_max = res.get(timeout=10)
             except multiprocessing.context.TimeoutError:
                 print(f"    ⚠️ baostock 数据预检超时 (服务器无响应)")
-                has_target_data = False
             except Exception as e:
                 print(f"    ⚠️ baostock 数据预检异常: {e}")
-            
-            if not has_target_data:
-                print(f"    ⚠️ baostock 尚未更新 {latest_zt_str} 的价格数据，绕过全量获取")
+
+            if not probe_max:
+                print(f"    ⚠️ baostock 在 [{start_date_str}, {latest_zt_str}] 无任何可用数据, 绕过获取")
                 bs_ok = False
-            
+            else:
+                if probe_max < latest_zt_str:
+                    print(f"    ℹ️ baostock 最新仅到 {probe_max} (目标 {latest_zt_str} 尚未更新), 先补全至 {probe_max}")
+                # 用实际可取到的最大日期收口, 避免因最新日缺失而整段卡死
+                fetch_end_str = probe_max
+
             if bs_ok:
+                # 后续抓取统一用 fetch_end_str 作为 end
+                latest_zt_str = fetch_end_str
                 chunk_size = 200
                 chunks = [all_codes[i:i + chunk_size] for i in range(0, len(all_codes), chunk_size)]
                 cores = max(1, min(4, multiprocessing.cpu_count() - 1))
@@ -1485,8 +1721,8 @@ def generate_ai_summary(advance_decline, ml_strength, sub_strength, echelon, wc_
 # HTML 生成
 # ============================================================
 def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thresh,
-                  leaders, dates, dc_strength, ratings, sub_ratings,
-                  echelon, top30_data, advance_decline, nday_leaders=None, wc_data=None, sentiment_df=None, plates=None, classified_df=None, return_leaders=None):
+                  leaders, dates, ratings, sub_ratings,
+                  echelon, top30_data, advance_decline, nday_leaders=None, wc_data=None, sentiment_df=None, plates=None, classified_df=None, return_leaders=None, mainline_ladder=None):
     
     if len(dates) > 65:
         dates = dates[-65:]
@@ -1504,17 +1740,14 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     def fmt(d): return f"{d[:4]}/{d[4:6]}/{d[6:]}" if len(d) == 8 else d
     dates_fmt = [fmt(d) for d in dates]
     
-    ml_colors = {'人工智能':'#ff4444','大周期':'#ffcc00','商业航天':'#aa44ff',
-                 '半导体':'#44cc44','大消费':'#ff88cc','电网':'#4488ff'}
+    ml_colors = {'AI算力':'#ff4444','机器人':'#00cccc','AI应用':'#ff9944',
+                 '新能源电网':'#4488ff','军工航天':'#aa44ff','周期资源':'#ffcc00','医药':'#44cc44'}
     ma_colors = {'*5':'#4488ff','*10':'#ff4444','*20':'#cc44cc','*30':'#00cccc'}
-    dc_colors = {'有色':'#6688ff','化工':'#ee88cc','油气':'#ff9944','天然气':'#66cc66','煤炭':'#ccaa44','黑色':'#aaaaaa'}
 
     MATRIX_COLS = {ml: [] for ml in MAINLINE_NAMES}
     for sub, ml in CONCEPT_TO_SECTOR.values():
         if ml in MATRIX_COLS and sub not in MATRIX_COLS[ml]:
             MATRIX_COLS[ml].append(sub)
-    if 'PCB' not in MATRIX_COLS['人工智能']: MATRIX_COLS['人工智能'].insert(2, 'PCB')
-    if '燃气轮机' not in MATRIX_COLS['人工智能']: MATRIX_COLS['人工智能'].insert(3, '燃气轮机')
     for ml in MATRIX_COLS:
         MATRIX_COLS[ml].append('其它')
         
@@ -1616,10 +1849,17 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     echelon_html = ''
     if echelon:
         echelon_html = '<h2 class="section-title">🏆 涨停梯队属性梳理</h2>'
-        echelon_html += '<div class="echelon-desc">该表按每天连板高度分组，梳理最高高度以上的连板属性。主属性为占比>20%，次属性为占比<20%，主推高度为5</div>'
+        echelon_html += '<div class="echelon-desc">该表按当日连板高度分组（首板→最高板），梳理每档的涨停属性与核心成分股。主属性为占比最高的板块，次属性为占比次高的板块。</div>'
         echelon_html += '<table class="echelon-table"><tr><th>连板高度</th><th>数量</th><th>主属性</th><th>次属性</th><th>核心成分股</th></tr>'
         import re
-        for e in echelon:
+        # 显示顺序: 从低到高 (首板 -> 最高连板)。不改 echelon 原始顺序,
+        # 因 generate_ai_summary 靠 echelon[0] 取最高板龙头。
+        def _ech_key(e):
+            hh = e.get('height', '')
+            if '首板' in hh: return 0
+            m = re.search(r'(\d+)', hh)
+            return int(m.group(1)) if m else 0
+        for e in sorted(echelon, key=_ech_key):
             h = e['height']
             c = e['count']
             p = e['primary']
@@ -1690,6 +1930,51 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
             return matched
             
         echelon_html += render_matrix_table("分支", heights_order, ech_provider)
+
+    # ===== 主线天梯: 全市场强势股 × 强度分级 (S/B/C/D/E) =====
+    ladder_html = ''
+    if mainline_ladder and any(mainline_ladder.get(g) for g in mainline_ladder):
+        grade_order = ['S级', 'B级', 'C级', 'D级', 'E级']
+        # code->连板/涨停原因 tooltip (best-effort, 复用 plates 里的 reason)
+        ladder_reason_map = {}
+        if plates:
+            for _p in plates:
+                for _s in _p.get('stocks', []):
+                    _rt = str(_s.get('reason', '')).replace('"', '&quot;').replace('\n', ' ')
+                    _ct = str(_s.get('concept', '')).replace('"', '&quot;').replace('\n', ' ')
+                    if _rt:
+                        _tip = f"{_ct} | {_rt}"
+                        if len(_tip) > 300: _tip = _tip[:297] + '...'
+                        ladder_reason_map[_s['name']] = _tip
+
+        def ladder_provider(row, ml, sub):
+            matched = []
+            items = mainline_ladder.get(row, [])
+            for d in items:
+                d_ml = d.get('ml', '')
+                d_sub = d.get('sub', '')
+                d_name = d.get('name', '')
+                reason = ladder_reason_map.get(d_name, '')
+                title_attr = f' title="{reason}"' if reason else ''
+                style_attr = ' style="cursor:help;"' if reason else ''
+                if ml == '其它主线':
+                    if d_ml not in MAINLINE_NAMES:
+                        tag = f'<span class="ml-tag-other">({d_sub})</span>' if d_sub else ''
+                        matched.append(f'<div{title_attr}{style_attr}><b>{d_name}</b><br>{tag}</div>')
+                else:
+                    if d_ml == ml:
+                        if sub == '其它' and d_sub not in MATRIX_COLS[ml]:
+                            tag = f'<span class="ml-tag-other">({d_sub})</span>' if d_sub else ''
+                            matched.append(f'<div{title_attr}{style_attr}><b>{d_name}</b><br>{tag}</div>')
+                        elif d_sub == sub:
+                            matched.append(f'<div{title_attr}{style_attr}><b>{d_name}</b></div>')
+            return matched
+
+        ladder_html = '<h2 class="section-title">🪜 主线天梯 (全市场强势股 × 强度分级)</h2>'
+        ladder_html += ('<div class="echelon-desc">全市场个股按强度 score = 20日涨幅% + 连板数×20 分级：'
+                        'S级≥80 / B级≥50 / C级≥25 / D级≥12 / E级≥5，落入 (大主线×细分板块) 矩阵。'
+                        '悬停个股可见涨停原因（若有）。</div>')
+        ladder_html += render_matrix_table("级别", grade_order, ladder_provider)
 
     rating_html = ''
     for n in MAINLINE_NAMES:
@@ -1862,25 +2147,6 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
                 series:{json.dumps(s_series,ensure_ascii=False)}}});
             window.addEventListener('resize',function(){{c.resize();}});
         }})();</script>'''
-
-    # === 百分比归一化堆叠柱状图 (大周期细分) ===
-    dc_bar: list = []
-    dc_raw_data = {}
-    for s in DACHOUQI_SUBS:
-        if s in dc_strength.columns:
-            dc_raw_data[s] = [round(v, 1) for v in dc_strength[s].tolist()]
-    dc_day_totals = []
-    for i in range(len(dates)):
-        total = sum(dc_raw_data.get(s, [0]*len(dates))[i] for s in DACHOUQI_SUBS)
-        # pyrefly: ignore [bad-argument-type]
-        dc_day_totals.append(max(total, 0.01))
-    for s in DACHOUQI_SUBS:
-        if s in dc_raw_data:
-            pct_data = [round(dc_raw_data[s][i] / dc_day_totals[i] * 100, 1) for i in range(len(dates))]
-            dc_bar.append({'name': s, 'type': 'bar', 'stack': 't',
-                'data': pct_data,
-                'itemStyle': {'color': dc_colors.get(s, '#888')},
-                '_raw': dc_raw_data[s]})
 
     top30_html = ''
     if top30_data:
@@ -2643,6 +2909,8 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
 
     {lianban_height_html}
 
+    {ladder_html}
+
     {echelon_html}
 
 {mainline_table_html}
@@ -2796,8 +3064,16 @@ def main():
     f_data = fupan_api.get_data(f_date)
 
     if cls_today:
-        echelon = build_echelon_table(cls_today)
+        # 当天涨停记录 (含连板数) 作为梯队高度真源; CLS continuous_limit_up 恒空
+        zt_today = classified[classified['日期'] == latest_date][['代码', '名称', '连板数']].copy() \
+            if not classified.empty else None
+        echelon = build_echelon_table(cls_today, zt_today)
         wc_data = generate_wordclouds(cls_today.get('plate_stock', []), CACHE_DIR)
+
+    # 主线天梯: 全市场强势股按强度分级 (S/B/C/D/E) × 主线矩阵
+    zt_for_ladder = classified[classified['日期'] == latest_date][['代码', '名称', '连板数']].copy() \
+        if not classified.empty else None
+    mainline_ladder = build_mainline_ladder(price_df, classified, zt_for_ladder)
     
     if f_data and f_data.get('reason'):
         plates_data = f_data['reason'].get('plates', [])
@@ -2827,6 +3103,26 @@ def main():
                     print(f"  ✅ akshare 实时: 涨{up_count} 跌{down_count}")
         except Exception as e:
             print(f"  ⚠️ akshare 实时数据获取失败: {e}")
+
+    # === 最新日 A/D 权威校准 ===
+    # advance_decline 用于当天页面显示 (情绪指数/AI摘要/择时), 来源为 FuPan szjs/xdjs,
+    # 但 FuPan 盘后可能返回陈旧当日快照 (如 1531/3530)。唯一真源是价格缓存 A/D。
+    # 若价格缓存已覆盖最新交易日 (= 当天已收盘、有权威收盘家数), 用它覆盖;
+    # 仅盘中 (价格缓存尚无当天数据) 才保留 FuPan/akshare 的实时值。
+    try:
+        from limit_ratio_factor import MarketSentimentFactor
+        _ad_auth = MarketSentimentFactor()._load_ad_cache() or {}
+        _lk = str(latest_date).replace('-', '')
+        _rec = _ad_auth.get(_lk)
+        if _rec and _rec.get('up', 0) > 0:
+            _old_up = advance_decline.get('up', 0)
+            _old_dn = advance_decline.get('down', 0)
+            if _rec['up'] != _old_up or _rec['down'] != _old_dn:
+                print(f"  🔧 最新日 A/D 校准: FuPan {_old_up}/{_old_dn} -> 价格缓存 {_rec['up']}/{_rec['down']}")
+            advance_decline['up'] = _rec['up']
+            advance_decline['down'] = _rec['down']
+    except Exception as e:
+        print(f"  ⚠️ 最新日 A/D 校准跳过: {e}")
 
     zt_max_height = 0
     if echelon:
@@ -2875,11 +3171,6 @@ def main():
         if s not in sub_strength.columns:
             sub_strength[s] = 0
 
-    dc_cols = [c for c in DACHOUQI_SUBS if c in sub_strength.columns]
-    dc_strength = sub_strength[dc_cols].copy() if dc_cols else pd.DataFrame(index=sub_strength.index)
-    for s in DACHOUQI_SUBS:
-        if s not in dc_strength.columns: dc_strength[s] = 0
-
     ml_ma = calc_ma(ml_strength)
     sub_ma = calc_ma(sub_strength)
     
@@ -2914,16 +3205,8 @@ def main():
         if not returns_df.empty:
             returns_df['name'] = returns_df['code'].map(lambda c: industry_map.get(c, {}).get('name', ''))
             returns_df['industry'] = returns_df['code'].map(lambda c: industry_map.get(c, {}).get('industry', ''))
-            INDUSTRY_TO_ML = {
-                'B09有色金属矿采选业': '大周期', 'C32有色金属冶炼和压延加工业': '大周期',
-                'C26化学原料和化学制品制造业': '大周期', 'B07石油和天然气开采业': '大周期',
-                'I65软件和信息技术服务业': '人工智能', 'I64互联网和相关服务': '人工智能',
-                'C39计算机、通信和其他电子设备制造业': '半导体',
-                'C37铁路、船舶、航空航天和其他运输设备制造业': '商业航天',
-                'C38电气机械和器材制造业': '电网', 'D44电力、热力生产和供应业': '电网',
-                'C14食品制造业': '大消费', 'C15酒、饮料和精制茶制造业': '大消费',
-            }
-            returns_df['mainline'] = returns_df['industry'].map(lambda i: INDUSTRY_TO_ML.get(i, ''))
+            # 主线直接从 INDUSTRY_TO_SECTOR 派生, 避免主线名维护成第三处真源
+            returns_df['mainline'] = returns_df['industry'].map(lambda i: INDUSTRY_TO_SECTOR.get(i, ('', ''))[1])
             def get_subsector(ind):
                 for k, v in INDUSTRY_TO_SECTOR.items():
                     if k == ind: return v[0]
@@ -3000,32 +3283,65 @@ def main():
                 sentiment_df.at[latest_row_idx, 'zt'] = advance_decline.get('zt', 0)
                 sentiment_df.at[latest_row_idx, 'dt'] = advance_decline.get('dt', 0)
 
-        # 检查是否还有缺失 (up=0 且 down=0 的天)
         sentiment_df['up'] = pd.to_numeric(sentiment_df['up'], errors='coerce').fillna(0)
         sentiment_df['down'] = pd.to_numeric(sentiment_df['down'], errors='coerce').fillna(0)
-        missing_mask = (sentiment_df['up'] == 0) & (sentiment_df['down'] == 0)
-        missing_dates = sentiment_df[missing_mask]['日期'].tolist()
-        
-        if missing_dates:
-            # 补全所有缺失的天 (不再限制30天, 确保数据完整)
-            print(f"  📥 补全 {len(missing_dates)} 天的涨跌数据 (LongHu API 逐日抓取)...")
-            filled_count = 0
-            for d_str in missing_dates:
-                d_str_val = str(d_str)
-                d_api = f"{d_str_val[:4]}-{d_str_val[4:6]}-{d_str_val[6:]}" if '-' not in d_str_val else d_str_val
-                res = fetch_longhu_sentiment(d_api)
-                if res and res['up'] > 0:  # 确保API返回了有效数据
-                    idx = sentiment_df[sentiment_df['日期'] == d_str].index[0]
-                    sentiment_df.at[idx, 'up'] = res['up']
-                    sentiment_df.at[idx, 'down'] = res['down']
-                    if 'zt' in sentiment_df.columns:
-                        sentiment_df.at[idx, 'zt'] = res['zt']
-                        sentiment_df.at[idx, 'dt'] = res['dt']
-                    filled_count += 1
-                time.sleep(0.15)  # API限速
-            print(f"  ✅ 成功补全 {filled_count}/{len(missing_dates)} 天")
-        else:
-            print(f"  ✅ 涨跌数据完整, 无需补全 (共 {len(sentiment_df)} 天)")
+
+        # === 最近 30 交易日: 用价格缓存 A/D 做"全量对账" ===
+        # 唯一真源: 价格缓存算出的全市场涨跌家数 (MarketSentimentFactor._load_ad_cache)。
+        # 为什么是全量对账而非仅补 0:
+        #   1) 缺口 (断更几天后 up=down=0 的空行) 需要填入真实家数;
+        #   2) LongHu 历史接口经实测对任意 Day 均返回"当前最新快照", 曾把陈旧值
+        #      (如 1531/3530) 写进历史日, 形成隔天污染, 连续重复检测抓不住。
+        #   对账会用价格 A/D 覆盖窗口内每一天, 既补缺口又纠正这类污染。
+        #   对本就正确的行是幂等的 (analyze_lianban 的 up/down 同样源自该 A/D)。
+        # 窗口外的老历史保持不动, 避免每次运行全量扫描/重算。
+        RECENT_FILL_WINDOW = 30
+        all_sorted_dates = sorted(sentiment_df['日期'].astype(str).unique())
+        recent_window_set = set(all_sorted_dates[-RECENT_FILL_WINDOW:])
+
+        ad_map = {}
+        try:
+            from limit_ratio_factor import MarketSentimentFactor
+            _msf_fill = MarketSentimentFactor()
+            ad_map = _msf_fill._load_ad_cache() or {}
+        except Exception as e:
+            print(f"  ⚠️ 价格缓存 A/D 加载失败, 本轮无法对账: {e}")
+
+        reconciled = 0   # 用真源覆盖 (含纠正污染)
+        uncovered = 0    # 价格缓存尚未覆盖该交易日
+        # 最新一天的处理: 价格缓存一旦覆盖该交易日 = 当天已收盘、有权威 A/D,
+        # 就用 A/D 覆盖 (advance_decline 底层同为 LongHu, 收盘后仍可能是陈旧快照);
+        # 仅当价格缓存尚未覆盖最新日 (盘中/当天数据未出) 时, 才保留 advance_decline 的实时值。
+        latest_key = str(latest_date).replace('-', '')
+        for d_str in all_sorted_dates:
+            if d_str not in recent_window_set:
+                continue
+            d_key = d_str.replace('-', '')
+            res = ad_map.get(d_key)
+            if d_str == latest_key and not (res and res.get('up', 0) > 0):
+                # 价格缓存还没有最新日的数据, 保留盘中 advance_decline 实时值
+                continue
+            idx_list = sentiment_df.index[sentiment_df['日期'] == d_str]
+            if len(idx_list) == 0:
+                continue
+            idx = idx_list[0]
+            # up/down 列已在上方 coerce 为数值; pyrefly 对 .at[] 返回类型有误报
+            # pyrefly: ignore [bad-argument-type]
+            cur_up = float(sentiment_df.at[idx, 'up'])
+            # pyrefly: ignore [bad-argument-type]
+            cur_dn = float(sentiment_df.at[idx, 'down'])
+            if res and res.get('up', 0) > 0:
+                new_up, new_dn = res['up'], res['down']
+                if new_up != cur_up or new_dn != cur_dn:
+                    sentiment_df.at[idx, 'up'] = new_up
+                    sentiment_df.at[idx, 'down'] = new_dn
+                    reconciled += 1
+                # zt/dt 来自涨停缓存, 已由 analyze_lianban 填好, 此处不覆盖
+            elif cur_up == 0 and cur_dn == 0:
+                uncovered += 1
+
+        print(f"  ✅ 最近 {RECENT_FILL_WINDOW} 交易日 A/D 对账完成: 更新 {reconciled} 天"
+              + (f", {uncovered} 天价格缓存尚未覆盖 (待下次运行补齐)" if uncovered else ", 数据完整"))
         
         # === 最终数据完整性校验: 再次检查是否有连续重复值 ===
         _check_up = sentiment_df['up'].astype(str) + '_' + sentiment_df['down'].astype(str)
@@ -3072,11 +3388,12 @@ def main():
         ml_ma=ml_ma, sub_ma=sub_returns, 
         ml_thresh=calc_threshold(len(dates)), 
         sub_thresh=calc_threshold(len(dates), 10.0, 20.0),
-        leaders=leaders, dates=dates, dc_strength=dc_strength,
+        leaders=leaders, dates=dates,
         ratings=ratings, sub_ratings=sub_ratings,
         echelon=echelon, top30_data=top30_data, advance_decline=advance_decline,
         nday_leaders=nday_leaders, wc_data=wc_data, sentiment_df=sentiment_df,
-        plates=plates_data, classified_df=classified, return_leaders=return_leaders
+        plates=plates_data, classified_df=classified, return_leaders=return_leaders,
+        mainline_ladder=mainline_ladder
     )
 
     # 7. 自动化生成选股池与交易预案
