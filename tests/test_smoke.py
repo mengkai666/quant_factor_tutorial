@@ -10,19 +10,28 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(_ROOT, 'src'))
 
 
-def test_cache_paths_point_to_data_dir():
-    """主程序的缓存/输出路径应指向 data/ 与 output/, 而非 src/。"""
+def test_paths_module_single_source():
+    """paths.py 是路径单一真源: data/ 与 output/ 解析正确。"""
+    import paths
+    assert paths.DATA_DIR.rstrip('/\\').endswith('data')
+    assert paths.OUTPUT_DIR.rstrip('/\\').endswith('output')
+    # 缓存文件在 data/ 下
+    assert os.path.dirname(paths.ZT_CACHE_FILE).rstrip('/\\').endswith('data')
+    assert os.path.dirname(paths.PRICE_CACHE).rstrip('/\\').endswith('data')
+    assert os.path.dirname(paths.CLS_PLATE_CACHE).rstrip('/\\').endswith('data')
+    # 输出 HTML 在 output/ 下
+    assert os.path.dirname(paths.OUTPUT_HTML).rstrip('/\\').endswith('output')
+
+
+def test_main_reexports_paths_from_module():
+    """主程序从 paths.py 取路径, 仍暴露缓存/输出常量且指向 data/ 与 output/。"""
     import importlib.util
     spec = importlib.util.spec_from_file_location(
         'mztrack', os.path.join(_ROOT, 'src', '主线强度追踪.py'))
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
-    assert m.DATA_DIR.endswith(os.path.join('', 'data')) or m.DATA_DIR.rstrip('/\\').endswith('data')
-    assert m.OUTPUT_DIR.rstrip('/\\').endswith('output')
-    # 缓存文件路径必须在 data/ 下
     assert os.path.dirname(m.ZT_CACHE_FILE).rstrip('/\\').endswith('data')
     assert os.path.dirname(m.PRICE_CACHE).rstrip('/\\').endswith('data')
-    # 输出 HTML 必须在 output/ 下
     assert os.path.dirname(m.OUTPUT_HTML).rstrip('/\\').endswith('output')
 
 

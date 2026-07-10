@@ -13,7 +13,7 @@ def generate_focus_pool(ml_strength, echelon, top30_data, sentiment_df, output_p
     if sentiment_df is not None and not sentiment_df.empty:
         try:
             curr_mood = sentiment_df['ad_mood'].dropna().values[-1]
-        except: pass
+        except (KeyError, IndexError): pass
         
     # 获取当前最强主线
     core_ml = "未知"
@@ -22,7 +22,7 @@ def generate_focus_pool(ml_strength, echelon, top30_data, sentiment_df, output_p
             sorted_ml = sorted(ml_strength.iloc[-1].to_dict().items(), key=lambda x: x[1], reverse=True)
             if sorted_ml:
                 core_ml = sorted_ml[0][0]
-        except: pass
+        except (KeyError, IndexError): pass
 
     # === 策略一：主升接力池 (寻找当前主线的首板或2连板) ===
     if echelon:

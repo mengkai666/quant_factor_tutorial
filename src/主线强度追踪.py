@@ -41,23 +41,13 @@ if IS_GITHUB_ACTIONS:
     print("[环境] 检测到 GitHub Actions 运行环境")
 
 # === 配置 ===
-# 项目结构: src/ (代码) + data/ (缓存) + output/ (报告)。
-# 打包(frozen)时数据/输出与 exe 同级; 开发时从 src/ 回退到仓库根, 再进 data/ 与 output/。
-if getattr(sys, 'frozen', False):
-    BASE_DIR = os.path.dirname(sys.executable)
-else:
-    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.path.join(BASE_DIR, 'data')
-OUTPUT_DIR = os.path.join(BASE_DIR, 'output')
-os.makedirs(DATA_DIR, exist_ok=True)
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+# 所有路径集中在 paths.py (单一真源)。动目录结构时只改那一个文件。
+from paths import (
+    DATA_DIR,
+    ZT_CACHE_FILE, PRICE_CACHE, INDUSTRY_CACHE,
+    SENTIMENT_CACHE, CLS_PLATE_CACHE, OUTPUT_HTML,
+)
 CACHE_DIR = DATA_DIR  # 向后兼容: 旧代码引用 CACHE_DIR 的地方仍指向数据目录
-ZT_CACHE_FILE = os.path.join(DATA_DIR, '涨停历史缓存.csv')
-PRICE_CACHE = os.path.join(DATA_DIR, 'price_history_cache.csv')
-INDUSTRY_CACHE = os.path.join(DATA_DIR, 'industry_cache.csv')
-SENTIMENT_CACHE = os.path.join(DATA_DIR, 'sentiment_history_cache.csv')
-CLS_PLATE_CACHE = os.path.join(DATA_DIR, 'cls_plate_cache.csv')
-OUTPUT_HTML = os.path.join(OUTPUT_DIR, '主线强度追踪.html')
 
 # === 缓存大小限制 ===
 # GitHub Actions 环境下使用更严格的限制，避免仓库/缓存膨胀
@@ -301,7 +291,8 @@ def fetch_cls_top20():
         if resp.status_code == 200:
             data = resp.json()
             return [item["stock"]["name"] for item in data.get("data", [])[:20]]
-    except: pass
+    except Exception as e:
+        print(f'  ⚠️ 龙头名抓取失败(忽略): {e}')
     return []
 
 def fetch_eastmoney_top20():
@@ -326,7 +317,8 @@ def fetch_eastmoney_top20():
                 d2 = r2.json()
                 data_dict = d2.get('data') or {}
                 return [s['f14'] for s in data_dict.get('diff', [])]
-    except: pass
+    except Exception as e:
+        print(f'  ⚠️ 东财成分抓取失败(忽略): {e}')
     return []
 
 def fetch_ths_top20():
@@ -338,7 +330,8 @@ def fetch_ths_top20():
         if resp.status_code == 200:
             data = resp.json()
             return [item["name"] for item in data.get("data", {}).get("stock_list", [])[:20]]
-    except: pass
+    except Exception as e:
+        print(f'  ⚠️ 板块成分抓取失败(忽略): {e}')
     return []
 
 _longhu_last_response = {}  # 用于检测 LongHu API 是否返回陈旧数据
@@ -414,7 +407,8 @@ def fetch_longhu_sentiment(day=None):
             try:
                 dt_df = ak.stock_zt_pool_dtgc_em(date=date_str)
                 dt_count = len(dt_df) if dt_df is not None and not dt_df.empty else 0
-            except: pass
+            except Exception as e:
+                print(f'  ⚠️ akshare 跌停池获取失败(忽略): {e}')
             
             if result is None:
                 result = {"date": date_str, "up": 0, "down": 0, "zt": zt_count, "dt": dt_count, "flat": 0, "zbl": 0, "plates": []}
@@ -439,7 +433,7 @@ def _optimize_fupan_plates(raw_list):
             time_raw = s[6] if len(s) > 6 else 0
             try:
                 time_str = datetime.fromtimestamp(time_raw).strftime('%H:%M')
-            except:
+            except (ValueError, OSError, OverflowError, TypeError):
                 time_str = "--:--"
             
             mv_str = f"{float(s[15])/100000000:.2f}亿" if len(s) > 15 and s[15] else "0.00亿"
@@ -599,7 +593,8 @@ def load_and_classify_zt(n_days=60):
             for _, row in cache_df.iterrows():
                 key = (row['date'], row['code'])
                 cached_plates[key] = {'sub': row.get('sub',''), 'mainline': row.get('mainline','')}
-        except: pass
+        except Exception as e:
+            print(f'  ⚠️ CLS 板块缓存加载失败: {e}')
     
     stock_plate_map = {}
     # 检查每天是否在缓存中有任意记录（而不仅检查第一只股票）
@@ -1090,7 +1085,8 @@ def calc_subsector_returns(classified_df, price_df, dates, periods=[5, 10, 20, 3
                 # 行业回退映射
                 sub, ml = INDUSTRY_TO_SECTOR.get(ind, (None, None))
                 if sub: global_code_to_sector[code] = sub
-        except: pass
+        except Exception as e:
+            print(f'  ⚠️ 行业缓存加载失败: {e}')
 
     # (B) 从涨停分类加载映射 (覆盖行业映射，更精准)
     if not classified_df.empty:
@@ -1494,7 +1490,8 @@ def update_price_cache(classified_df):
             idf = pd.read_csv(INDUSTRY_CACHE, dtype=str)
             if not idf.empty and 'code' in idf.columns:
                 all_codes = idf['code'].unique().tolist()
-        except: pass
+        except Exception as e:
+            print(f'  ⚠️ 行业缓存读取失败, 用涨停股列表兜底: {e}')
     if not all_codes:
         all_codes = ['sh600000']
     
@@ -1834,7 +1831,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
         for k in ech_map.keys():
             if k != '首板':
                 try: max_h = max(max_h, int(k.replace('连板', '')))
-                except: pass
+                except (ValueError, TypeError): pass
         heights_order = [f'{i}连板' for i in range(max_h, 1, -1)] + ['首板']
         
         def ech_provider(row, ml, sub):
@@ -3070,7 +3067,7 @@ def main():
                 try:
                     h = int(h_str.replace('连板', ''))  # type: ignore
                     if h > zt_max_height: zt_max_height = h
-                except: pass
+                except (ValueError, TypeError): pass
             elif h_str == '首板' and zt_max_height == 0:
                 zt_max_height = 1
     advance_decline['zt_max_height'] = zt_max_height
@@ -3084,7 +3081,7 @@ def main():
             zt_prev = prev_row.get(zt_col, 0)
             try:
                 zt_prev = int(float(zt_prev)) if pd.notnull(zt_prev) else 0
-            except:
+            except (ValueError, TypeError):
                 zt_prev = 0
             advance_decline['zt_prev'] = zt_prev if zt_prev > 0 else '---'
         # 昨日最高板
@@ -3092,7 +3089,7 @@ def main():
             lb_prev = prev_row.get('连板高度', 0)
             try:
                 lb_prev = int(float(lb_prev)) if pd.notnull(lb_prev) else 0
-            except:
+            except (ValueError, TypeError):
                 lb_prev = 0
             advance_decline['zt_max_height_prev'] = lb_prev if lb_prev > 0 else '---'
 
@@ -3160,8 +3157,10 @@ def main():
     # === 涨跌数据补全 (V4: 数据完整性校验 + 全量补全) ===
     sent_cache_df = pd.DataFrame()
     if os.path.exists(SENTIMENT_CACHE):
-        try: sent_cache_df = pd.read_csv(SENTIMENT_CACHE, dtype={'日期': str})
-        except: pass
+        try:
+            sent_cache_df = pd.read_csv(SENTIMENT_CACHE, dtype={'日期': str})
+        except Exception as e:
+            print(f'  ⚠️ 情绪缓存加载失败: {e}')
     
     # 检测并清理缓存中的"重复值污染" (连续多天数据完全相同 = 脏数据)
     # 降低阈值: 连续2天涨跌家数完全相同在A股中极为罕见，视为污染

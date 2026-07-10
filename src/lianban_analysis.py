@@ -154,8 +154,8 @@ def _fetch_multi_channel(date_str):
 # ============================================================
 # 本地CSV缓存管理
 # ============================================================
-# 缓存统一在仓库根的 data/ 目录 (src/ 的上一级)
-CACHE_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', '涨停历史缓存.csv')
+# 缓存路径统一由 paths.py 定义 (单一真源)
+from paths import ZT_CACHE_FILE as CACHE_FILE
 IS_GITHUB_ACTIONS = os.environ.get('GITHUB_ACTIONS') == 'true'
 CACHE_MAX_SIZE_MB = 10 if IS_GITHUB_ACTIONS else 100  # CI: 10MB, 本地: 100MB
 
@@ -268,9 +268,11 @@ def fetch_zt_pool_data(n_trading_days=120):
                     df_dt = ak.stock_zt_pool_dtgc_em(date=d)
                     if df_dt is not None and not df_dt.empty:
                         dt_data[d] = df_dt  # type: ignore
-                except: pass
+                except Exception as e:
+                    print(f"    [debug] 跌停池抓取失败 {d}: {e}")
                 time.sleep(0.3)
-    except: pass
+    except Exception as e:
+        print(f"    [debug] 跌停池批量抓取异常: {e}")
 
     if new_dates_fetched > 0:
         _save_cache(zt_data, dt_data)
@@ -852,7 +854,7 @@ def main():
     if len(sys.argv) > 1:
         try:
             n_days = int(sys.argv[1])
-        except: pass
+        except (ValueError, IndexError): pass
 
     # 1. 获取数据
     zt_data, dt_data = fetch_zt_pool_data(n_days)
