@@ -21,6 +21,7 @@ import os, sys, json, time, hashlib, requests, socket  # type: ignore
 from timing_signal import generate_timing_signal
 from screener import generate_focus_pool
 import smtplib
+import webbrowser
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
@@ -1332,12 +1333,11 @@ def _fetch_tencent_close(all_codes, trade_date_str, retry=3):
 
     注意: 腾讯接口只返回"当前/最新"收盘价, 仅适用于补当天。历史缺口仍需 baostock。
     """
-    import requests as _req
     rows = []
-    session = _req.Session()
+    session = requests.Session()
     # 关键: 绕过系统代理 (本机 Clash 白名单不含行情域名, 走代理会被拒)
     session.trust_env = False
-    session.proxies = {'http': None, 'https': None}
+    session.proxies = {'http': None, 'https': None}  # type: ignore
 
     batch = 800  # 单次 URL 拼接的股票数, 800 只实测稳定
     for i in range(0, len(all_codes), batch):
@@ -1386,10 +1386,9 @@ def _fetch_tencent_ad(all_codes, retry=2):
     返回 (up_count, down_count); 失败返回 (0, 0)。
     字段索引 32 = 涨跌幅(%)。替代被本机 Clash 代理墙掉的东财 stock_zh_a_spot_em。
     """
-    import requests as _req
-    session = _req.Session()
+    session = requests.Session()
     session.trust_env = False
-    session.proxies = {'http': None, 'https': None}
+    session.proxies = {'http': None, 'https': None}  # type: ignore
     up = down = 0
     batch = 800
     for i in range(0, len(all_codes), batch):
@@ -3426,6 +3425,15 @@ def main():
                     print(f"  [错误] 附件文件不存在: {OUTPUT_HTML}，未发送邮件。")
         except Exception as e:
             print(f"  [错误] 邮件发送失败: {e}")
+
+    # 自动打开生成的 HTML 报告
+    try:
+        if os.path.exists(OUTPUT_HTML):
+            abs_path = os.path.abspath(OUTPUT_HTML)
+            print(f"\n🌐 正在浏览器中打开报告: {abs_path}")
+            webbrowser.open(f"file://{abs_path}")
+    except Exception as e:
+        print(f"  [警告] 自动打开浏览器失败: {e}")
 
 
 if __name__ == '__main__':
