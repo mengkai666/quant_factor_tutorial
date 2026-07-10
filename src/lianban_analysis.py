@@ -154,7 +154,8 @@ def _fetch_multi_channel(date_str):
 # ============================================================
 # 本地CSV缓存管理
 # ============================================================
-CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '涨停历史缓存.csv')
+# 缓存统一在仓库根的 data/ 目录 (src/ 的上一级)
+CACHE_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', '涨停历史缓存.csv')
 IS_GITHUB_ACTIONS = os.environ.get('GITHUB_ACTIONS') == 'true'
 CACHE_MAX_SIZE_MB = 10 if IS_GITHUB_ACTIONS else 100  # CI: 10MB, 本地: 100MB
 

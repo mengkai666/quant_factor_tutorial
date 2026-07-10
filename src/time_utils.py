@@ -10,7 +10,9 @@ def get_latest_date():
     if _cached_latest_date is not None:
         return _cached_latest_date
         
-    cache_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '涨停历史缓存.csv')
+    # src/ 的上一级是仓库根, 缓存统一在 data/ 目录
+    _base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cache_file = os.path.join(_base, 'data', '涨停历史缓存.csv')
     try:
         if os.path.exists(cache_file):
             # 优化：只读取必要的列或只读取一部分数据

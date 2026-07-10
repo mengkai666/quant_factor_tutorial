@@ -25,8 +25,10 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # 缓存文件路径
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-ZT_CACHE_FILE = os.path.join(SCRIPT_DIR, '涨停历史缓存.csv')
-PRICE_CACHE_FILE = os.path.join(SCRIPT_DIR, 'price_history_cache.csv')
+# 缓存统一在仓库根的 data/ 目录 (src/ 的上一级)
+DATA_DIR = os.path.join(os.path.dirname(SCRIPT_DIR), 'data')
+ZT_CACHE_FILE = os.path.join(DATA_DIR, '涨停历史缓存.csv')
+PRICE_CACHE_FILE = os.path.join(DATA_DIR, 'price_history_cache.csv')
 
 
 class MarketSentimentFactor:

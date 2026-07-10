@@ -34,8 +34,8 @@ jobs:
       id: data-cache
       with:
         path: |
-          price_history_cache.csv
-          industry_cache.csv
+          data/price_history_cache.csv
+          data/industry_cache.csv
         key: market-data-cache-${{ github.run_number }}
         restore-keys: |
           market-data-cache-
@@ -58,7 +58,7 @@ jobs:
         EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
         EMAIL_RECEIVERS: ${{ secrets.EMAIL_RECEIVERS }}
       run: |
-        python 主线强度追踪.py
+        python src/主线强度追踪.py
         
     - name: 提交并推送更新的缓存数据
       # 只提交小体积的种子缓存 (涨停历史、板块、情绪)
@@ -66,7 +66,7 @@ jobs:
       run: |
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
-        # 只 add 小体积缓存文件和 JSON 报告，不 add 大体积 CSV 和 HTML
-        git add 涨停历史缓存.csv cls_plate_cache.csv sentiment_history_cache.csv data_quality_report.json 2>/dev/null || true
+        # 只 add 小体积缓存文件 (data/ 下), 不 add 大体积 CSV 和 HTML
+        git add data/涨停历史缓存.csv data/cls_plate_cache.csv data/sentiment_history_cache.csv 2>/dev/null || true
         # 如果文件有变更，则自动 Commit 和 Push
         git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-update market data caches [skip ci]" && git push)

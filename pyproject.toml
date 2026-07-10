@@ -1,0 +1,25 @@
+[project]
+name = "quant-factor-tutorial"
+version = "0.2.0"
+description = "A股主线强度追踪量化投研终端 — 每日跑批生成 HTML 报告与邮件"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas",
+    "numpy",
+    "requests",
+    "baostock",
+    "akshare",
+    "wordcloud",
+]
+
+[project.urls]
+Repository = "https://github.com/mengkai666/quant_factor_tutorial"
+
+[tool.setuptools]
+# 源码在 src/, 数据在 data/, 输出在 output/ (非包结构, 脚本式运行)
+py-modules = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

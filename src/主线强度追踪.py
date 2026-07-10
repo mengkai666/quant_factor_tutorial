@@ -40,16 +40,23 @@ if IS_GITHUB_ACTIONS:
     print("[环境] 检测到 GitHub Actions 运行环境")
 
 # === 配置 ===
+# 项目结构: src/ (代码) + data/ (缓存) + output/ (报告)。
+# 打包(frozen)时数据/输出与 exe 同级; 开发时从 src/ 回退到仓库根, 再进 data/ 与 output/。
 if getattr(sys, 'frozen', False):
-    CACHE_DIR = os.path.dirname(sys.executable)
+    BASE_DIR = os.path.dirname(sys.executable)
 else:
-    CACHE_DIR = os.path.dirname(os.path.abspath(__file__))
-ZT_CACHE_FILE = os.path.join(CACHE_DIR, '涨停历史缓存.csv')
-PRICE_CACHE = os.path.join(CACHE_DIR, 'price_history_cache.csv')
-INDUSTRY_CACHE = os.path.join(CACHE_DIR, 'industry_cache.csv')
-SENTIMENT_CACHE = os.path.join(CACHE_DIR, 'sentiment_history_cache.csv')
-CLS_PLATE_CACHE = os.path.join(CACHE_DIR, 'cls_plate_cache.csv')
-OUTPUT_HTML = os.path.join(CACHE_DIR, '主线强度追踪.html')
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.path.join(BASE_DIR, 'data')
+OUTPUT_DIR = os.path.join(BASE_DIR, 'output')
+os.makedirs(DATA_DIR, exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+CACHE_DIR = DATA_DIR  # 向后兼容: 旧代码引用 CACHE_DIR 的地方仍指向数据目录
+ZT_CACHE_FILE = os.path.join(DATA_DIR, '涨停历史缓存.csv')
+PRICE_CACHE = os.path.join(DATA_DIR, 'price_history_cache.csv')
+INDUSTRY_CACHE = os.path.join(DATA_DIR, 'industry_cache.csv')
+SENTIMENT_CACHE = os.path.join(DATA_DIR, 'sentiment_history_cache.csv')
+CLS_PLATE_CACHE = os.path.join(DATA_DIR, 'cls_plate_cache.csv')
+OUTPUT_HTML = os.path.join(OUTPUT_DIR, '主线强度追踪.html')
 
 # === 缓存大小限制 ===
 # GitHub Actions 环境下使用更严格的限制，避免仓库/缓存膨胀
@@ -1237,120 +1244,6 @@ def load_price_cache():
             return df
     return pd.DataFrame()
 
-def _fetch_em_daily_close(trade_date_str, all_codes, retry=3):
-    """用东方财富批量API获取某日所有股票的收盘价 (一次请求获取全市场)
-    trade_date_str: 'YYYY-MM-DD' 格式
-    all_codes: 需要的股票代码列表 (如 ['sh600000', 'sz000001'])
-    """
-    import requests as _req  # type: ignore
-    
-    # 东方财富全市场日线数据 API — 按天批量获取
-    # 方案: 直接用 akshare 的 stock_zh_a_spot_em 获取全市场快照，再filter
-    for attempt in range(retry):
-        try:
-            # pyrefly: ignore [missing-import]
-            import akshare as ak
-            # 尝试获取全A股实时行情 (包含收盘价) — 一次请求获取4000+只
-            spot_df = ak.stock_zh_a_spot_em()
-            if spot_df is not None and not spot_df.empty:
-                rows = []
-                # 构建代码映射
-                code_set = set(c[2:] for c in all_codes)  # 去掉sh/sz前缀
-                prefix_map = {}
-                for c in all_codes:
-                    prefix_map[c[2:]] = c  # '600000' -> 'sh600000'
-                
-                for _, r in spot_df.iterrows():
-                    code_6 = str(r.get('代码', ''))
-                    if code_6 in code_set:
-                        close_val = r.get('最新价', None)
-                        if close_val is not None and float(close_val) > 0:
-                            rows.append({
-                                'date': trade_date_str,
-                                'code': prefix_map.get(code_6, code_6),
-                                'close': float(close_val)
-                            })
-                return rows
-        except Exception as e:
-            if attempt < retry - 1:
-                time.sleep(1)
-            continue
-    return []
-
-def _fetch_em_hist_batch(codes_batch, start_date, end_date, retry=2):
-    """用东方财富接口批量获取一组股票的历史日线收盘价"""
-    import requests as _req  # type: ignore
-    
-    rows = []
-    session = _req.Session()
-    # 注意: 不要设置 trust_env=False, 用户网络可能需要代理
-    
-    for code_str in codes_batch:
-        symbol = code_str[2:]
-        # 确定 secid: sh→1, sz→0
-        prefix = code_str[:2]
-        secid = f"1.{symbol}" if prefix == 'sh' else f"0.{symbol}"
-        
-        url = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
-        params = {
-            "fields1": "f1,f2,f3,f4,f5,f6",
-            "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f116",
-            "ut": "7eea3edcaed734bea9cbfc24409ed989",
-            "klt": "101",  # 日线
-            "fqt": "1",    # 前复权
-            "secid": secid,
-            "beg": start_date.replace('-', ''),
-            "end": end_date.replace('-', ''),
-        }
-        
-        for attempt in range(retry):
-            try:
-                resp = session.get(url, params=params, timeout=8,
-                                   headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0"})
-                if resp.status_code == 200:
-                    data = resp.json()
-                    klines = data.get("data", {}).get("klines", [])
-                    for kl in klines:
-                        parts = kl.split(",")
-                        if len(parts) >= 3:
-                            rows.append({
-                                'date': parts[0],  # YYYY-MM-DD
-                                'code': code_str,
-                                'close': float(parts[2])
-                            })
-                    break
-            except Exception:
-                if attempt < retry - 1:
-                    time.sleep(0.5)
-    
-    session.close()
-    return rows
-
-def _fetch_sina_single(args):
-    """用新浪API获取单只股票的收盘价 (做为备用数据源)"""
-    code_str, start, end = args
-    try:
-        # pyrefly: ignore [missing-import]
-        import akshare as ak
-        start_fmt = start.replace('-', '')
-        end_fmt = end.replace('-', '')
-        # Sina接口需要带 sh/sz 前缀，如 sh600000
-        df = ak.stock_zh_a_daily(symbol=code_str, start_date=start_fmt, end_date=end_fmt, adjust='qfq')
-        if df is not None and not df.empty:
-            rows = []
-            for _, r in df.iterrows():
-                # Sina 返回的 date 可能是 datetime.date
-                d_str = str(r['date']).split(' ')[0]
-                rows.append({
-                    'date': d_str,
-                    'code': code_str,
-                    'close': float(r['close'])
-                })
-            return rows
-    except Exception:
-        pass
-    return []
-
 def _check_bs_login():
     """测试 baostock 登录连通性 (供多进程超时调用)"""
 
@@ -1486,6 +1379,49 @@ def _fetch_tencent_close(all_codes, trade_date_str, retry=3):
             # 单批失败不致命, 继续后续批次 (可能网络抖动)
             continue
     return rows
+
+
+def _fetch_tencent_ad(all_codes, retry=2):
+    """用腾讯行情批量算全市场涨跌家数 (绕过系统代理, 本机+CI 都通)。
+    返回 (up_count, down_count); 失败返回 (0, 0)。
+    字段索引 32 = 涨跌幅(%)。替代被本机 Clash 代理墙掉的东财 stock_zh_a_spot_em。
+    """
+    import requests as _req
+    session = _req.Session()
+    session.trust_env = False
+    session.proxies = {'http': None, 'https': None}
+    up = down = 0
+    batch = 800
+    for i in range(0, len(all_codes), batch):
+        chunk = all_codes[i:i + batch]
+        url = f'https://qt.gtimg.cn/q={",".join(chunk)}'
+        for attempt in range(retry):
+            try:
+                resp = session.get(url, timeout=10)
+                resp.encoding = 'gbk'
+                for line in resp.text.split(';'):
+                    line = line.strip()
+                    if not line.startswith('v_'):
+                        continue
+                    eq = line.find('="')
+                    if eq < 0:
+                        continue
+                    parts = line[eq + 2:].rstrip('"').split('~')
+                    if len(parts) > 32 and parts[32]:
+                        try:
+                            pct = float(parts[32])
+                            if pct > 0:
+                                up += 1
+                            elif pct < 0:
+                                down += 1
+                        except ValueError:
+                            pass
+                break
+            except Exception:
+                if attempt < retry - 1:
+                    time.sleep(0.5)
+                continue
+    return up, down
 
 
 def _fetch_bs_chunk(args):
@@ -1656,37 +1592,7 @@ def update_price_cache(classified_df):
     except Exception as e:
         print(f"    ⚠️ baostock 异常: {e}")
 
-    # === 策略2: 新浪 API (已根据用户要求停止运行，保留代码备查) ===
-    if False and not new_rows:
-        print(f"    🔄 baostock 无数据, 尝试 新浪 API (Sina) 作为备用...")
-        try:
-            from concurrent.futures import ThreadPoolExecutor, as_completed
-            max_workers = 30
-            print(f"    🚀 新浪 API + {max_workers} 线程并发获取中...")
-            
-            args_list = [(code, start_date_str, latest_zt_str) for code in all_codes]
-            done_count = 0
-            
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                future_map = {executor.submit(_fetch_sina_single, a): a[0] for a in args_list}
-                for future in as_completed(future_map, timeout=GLOBAL_TIMEOUT):
-                    try:
-                        result = future.result(timeout=20)
-                        if result:
-                            new_rows.extend(result)
-                    except Exception:
-                        pass
-                    done_count += 1
-                    if done_count % 500 == 0 or done_count == len(all_codes):
-                        elapsed = time.time() - t0
-                        print(f"    已完成 {done_count}/{len(all_codes)} ({elapsed:.1f}s)")
-            if new_rows:
-                print(f"    ✅ 新浪 API 成功获取 {len(new_rows)} 条记录")
-        except TimeoutError:
-            print(f"    ⚠️ 新浪API获取超时 ({GLOBAL_TIMEOUT}s)")
-        except Exception as e:
-            print(f"    ⚠️ 新浪API获取异常: {e}")
-    
+    # (历史备用源: 腾讯快速路径 + baostock 已覆盖, 新浪/东财兜底已移除)
     elapsed = time.time() - t0
     if new_rows:
         new_df = pd.DataFrame(new_rows)
@@ -1745,177 +1651,6 @@ def calc_nday_returns(price_df, periods=[5, 10, 20, 60]):
             
     return res_df.reset_index(drop=True)
 
-
-# ============================================================
-# AI 总结生成
-# ============================================================
-def generate_ai_summary(advance_decline, ml_strength, sub_strength, echelon, wc_data, sentiment_df, return_leaders=None):
-    try:
-        # --- 基础数据与排行 ---
-        up = advance_decline.get('up', 0)
-        down = advance_decline.get('down', 0)
-        ad_ratio = up / max(down, 1)
-        zt_max = advance_decline.get('zt_max_height', 0)
-        
-        top_ml_list = []
-        if ml_strength is not None and not ml_strength.empty:
-            sorted_ml = sorted(ml_strength.iloc[-1].to_dict().items(), key=lambda x: x[1], reverse=True)
-            top_ml_list = [k for k, v in sorted_ml if v > 1.5]
-            
-        top_sub_list = []
-        if sub_strength is not None and not sub_strength.empty:
-            sorted_sub = sorted(sub_strength.iloc[-1].to_dict().items(), key=lambda x: x[1], reverse=True)
-            top_sub_list = [k for k, v in sorted_sub if v > 0.5]
-
-        core_ml = top_ml_list[0] if len(top_ml_list) > 0 else "当前无明确主线"
-        core_ml2 = top_ml_list[1] if len(top_ml_list) > 1 else "结构性轮动分支"
-        core_sub1 = top_sub_list[0] if len(top_sub_list) > 0 else "活跃细分"
-        core_sub2 = top_sub_list[1] if len(top_sub_list) > 1 else "边缘试错分支"
-        
-        core_subs = "、".join(top_sub_list[:3]) if top_sub_list else "暂无细分聚集"
-        ext_subs = top_sub_list[2:7] if len(top_sub_list) > 2 else []
-        
-        # 获取龙头
-        dragon_stock = "核心标的"
-        if echelon and '连板' in echelon[0].get('height', ''):
-            dragon_stock = ' '.join(echelon[0].get('stocks', [])[:3])
-
-        # --- 节点、风格、核心方向定调 ---
-        if ad_ratio > 1.5 and zt_max >= 5:
-            node_desc = "情绪与指数共振走强，市场做多意愿高涨，进入主升确认期。"
-            style_desc = f"核心主线({core_ml})加速发酵 + 强连板情绪接力"
-            title_desc = "情绪共振高潮，主线加速逼空"
-        elif ad_ratio > 1.0 and zt_max >= 3:
-            node_desc = "多头逐步占据主动，资金围绕核心方向稳步推升，情绪温和回暖。"
-            style_desc = f"趋势主升 + {core_ml}方向卡位 + 赚钱效应扩散"
-            title_desc = "趋势推升，主线结构性发散"
-        elif ad_ratio < 0.5 and zt_max < 3:
-            node_desc = "情绪与指数双杀，市场进入冰点或退潮期，资金极度萎缩与避险。"
-            style_desc = "缩量防守 + 高位补跌 + 低位试错"
-            title_desc = "情绪冰点退潮，市场防御抱团"
-        elif ad_ratio < 0.8:
-            node_desc = "高位连板亏钱效应显现，资金在老周期退潮与新周期试错中摇摆，呈现高低切。"
-            style_desc = "缩量轮动 + 产业逻辑硬切 + 容量中军抱团"
-            title_desc = "震荡高低切，防守与轮动并存"
-        else:
-            node_desc = "资金在多空分歧中博弈，无绝对主导力量，呈现出明显的存量博弈和结构性特征。"
-            style_desc = f"泛结构性轮动 + {core_ml}与低位试错并存"
-            title_desc = "存量博弈震荡，结构轮动为主"
-            
-        core_direction = f"以 {core_ml} （{core_subs}） 为核心绝对主线，辅以 {core_ml2} 方向轮动防御。"
-
-        def get_sub_stocks(sub_name):
-            stocks = []
-            if return_leaders:
-                latest_date = max(return_leaders.keys())
-                if latest_date and sub_name in return_leaders[latest_date]:
-                    stocks.append(return_leaders[latest_date][sub_name]['name'])
-            
-            unique_stocks = []
-            for s in stocks:
-                if s not in unique_stocks: unique_stocks.append(s)
-                
-            if not unique_stocks and echelon:
-                for e in echelon:
-                    primary = str(e.get('primary', ''))
-                    secondary = str(e.get('secondary', ''))
-                    if sub_name in primary or sub_name in secondary:
-                        unique_stocks.extend(e.get('stocks', [])[:1])
-                        if len(unique_stocks) >= 2: break
-            
-            res_str = []
-            for s in unique_stocks[:2]:
-                h_str = ""
-                if echelon:
-                    for e in echelon:
-                        if s in e.get('stocks', []):
-                            h_str = e.get('height', '')
-                            break
-                if not h_str: h_str = "容量趋势"
-                
-                if '连板' in h_str:
-                    desc = f"{sub_name}核心，{h_str}身位，资金博弈高弹性接力"
-                elif '首板' in h_str:
-                    desc = f"{sub_name}新质挖掘，底部承接扎实"
-                else:
-                    desc = f"{sub_name}大容量中军，沿核心均线温和推升，盘口承接极强"
-                res_str.append(f"{s} ({desc})")
-                
-            return " <br>&nbsp;&nbsp;&nbsp;&nbsp;* ".join(res_str) if res_str else f"核心标的 ({sub_name}方向活跃，筹码沉淀)"
-
-        # --- 一、 核心基本盘 (绝对主线与底座) ---
-        core_html = f'''
-        <div style="font-size: 13px; color: #8b949e; margin-bottom: 15px;">当前市场资金围绕强逻辑与大容量核心展开深度博弈，以下为绝对主力运作方向：</div>
-        <ul style="list-style-type: none; padding-left: 0; line-height: 2.2; font-size: 14px; margin-bottom: 0;">
-            <li><b style="color: #ffcc66;">核心领军分支 ({core_sub1}):</b> <span style="color: #58a6ff;">* {get_sub_stocks(core_sub1)}</span> 围绕 <b style="color: #ff7b72;">{core_sub1}</b> 等前排核心方向，资金沿趋势持续推升，盘口承接极强，是当前赚钱效应锚点。代表弹性龙：{dragon_stock}。</li>
-            <li><b style="color: #ffcc66;">主线容量中军 ({core_ml}方向):</b> <span style="color: #58a6ff;">* {get_sub_stocks(core_ml2)}</span> 以 <b style="color: #ff7b72;">{core_ml} / {core_ml2}</b> 为代表的大容量板块，承载高位避险与增量长线资金，底部爆量反转或沿均线温和吸筹。</li>
-            <li><b style="color: #ffcc66;">侧翼延展与弹性接力 ({core_sub2}):</b> <span style="color: #58a6ff;">* {get_sub_stocks(core_sub2)}</span> 作为主线大容量分歧时的游资接力弹性标的，受资金轮动点火做局部修复。</li>
-        </ul>
-        '''
-        
-        # --- 二、 额外拓展的核心分支 (全景补图) ---
-        ext_html = ""
-        if ext_subs:
-            ext_html = f'<div style="font-size: 13px; color: #8b949e; margin-bottom: 15px;">除了上述基石，盘面资金还在以下增量逻辑方向进行了猛攻，这些方向构成了题材轮动的完整拼图：</div><ul style="list-style-type: none; padding-left: 0; line-height: 2.4; font-size: 14px;">'
-            for idx, sub in enumerate(ext_subs):
-                if idx % 3 == 0:
-                    desc = "受事件或政策催化爆发，游资接力与短线情绪修复的核心所在。"
-                elif idx % 3 == 1:
-                    desc = "作为主线剧烈分歧时的避险防守阵地，资金沿均线温和吸筹或低位试错。"
-                else:
-                    desc = "趋势容量品种抱团，叠加业绩与产业逻辑双重共振，持续性较好。"
-                sub_stocks = get_sub_stocks(sub)
-                ext_html += f"<li><b>{idx+1}. <span style='color: #58a6ff;'>{sub}</span></b> —— 逻辑：{desc} <br><span style='color:#8b949e;'>代表标的：<span style='color:#ff7b72;'>{sub_stocks}</span></span></li>"
-            ext_html += "</ul>"
-        else:
-            ext_html = '<div style="font-size: 13px; color: #8b949e;">盘面资金极度集中于核心基石，暂无明显的额外拓展强分支。</div>'
-
-        # --- 三、 盘面推演与系统化交易应对 ---
-        plan_html = f'''
-        <div style="font-size: 13px; color: #8b949e; margin-bottom: 15px;">综合以上全景，价格往往被量能和情绪裹挟，必须建立符合当前 <span style="color:#ff7b72;">{core_ml}</span> 周期阶段的机械化执行预案：</div>
-        <ul style="list-style-type: none; padding-left: 0; line-height: 2.2; font-size: 14px; margin-bottom: 0;">
-            <li><span style="background: #21262d; padding: 2px 6px; border-radius: 4px; color: #8b949e; font-size: 12px; margin-right: 8px;">对于绝对核心</span>
-                <b>({core_sub1} / 领涨龙头):</b> 当前处于资金抱团共识最强阶段。操作上坚决摒弃主观抄底摸顶的念头。只要量价结构不出现<span style="color:#ff7b72;">“高位爆量滞涨”</span>或<span style="color:#ff7b72;">“放量跌破防守均线”</span>的客观破位信号，就必须死死咬住底仓，让利润在趋势中自然生长。
-            </li>
-            <li style="margin-top: 10px;"><span style="background: #21262d; padding: 2px 6px; border-radius: 4px; color: #8b949e; font-size: 12px; margin-right: 8px;">对于大容量中军</span>
-                <b>({core_ml} 容量标的):</b> 这类票的特征是“进三退二”，不会连续逼空。操作上<span style="color:#ff7b72;">切忌在加速高潮日去追高</span>，应利用盘中分歧回踩核心均线时，进行右侧分批建仓。它们是账户应对高波动的定海神针。
-            </li>
-            <li style="margin-top: 10px;"><span style="background: #21262d; padding: 2px 6px; border-radius: 4px; color: #f85149; font-size: 12px; margin-right: 8px;">对于边缘轮动与防守支线</span>
-                <b>({core_sub2} 等):</b> 严格定义为“轮动套利”或“底仓防守”。如果绝对主线持续吸血，防守线将面临抛压风险。执行上，必须预先设置极其严格的止损/止盈防线，一旦触发，<span style="color:#ff7b72;">系统必须机械化斩仓，绝不拖泥带水！</span>
-            </li>
-        </ul>
-        '''
-
-        html = f'''
-        <div style="background: #0d1117; border: 1px solid #30363d; border-radius: 12px; padding: 25px; margin-bottom: 30px; color: #c9d1d9; font-family: sans-serif; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
-            <h2 style="color: #ff4444; font-size: 20px; border-bottom: 2px solid #30363d; padding-bottom: 10px; margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
-                <span style="font-size: 24px;">🎯</span> 盘面深度复盘 ({title_desc})
-            </h2>
-            
-            <div style="background: rgba(22, 27, 34, 0.5); padding: 15px 20px; border-radius: 8px; border-left: 4px solid #58a6ff; margin-bottom: 25px;">
-                <div style="margin-bottom: 8px;"><span style="color: #8b949e; display: inline-block; width: 80px; font-weight: bold;">节点:</span> <span style="color: #e6edf3;">{node_desc}</span></div>
-                <div style="margin-bottom: 8px;"><span style="color: #8b949e; display: inline-block; width: 80px; font-weight: bold;">风格:</span> <span style="color: #e6edf3;">{style_desc}</span></div>
-                <div><span style="color: #8b949e; display: inline-block; width: 80px; font-weight: bold;">核心方向:</span> <b style="color: #ffcc66;">{core_direction}</b></div>
-            </div>
-
-            <h3 style="color: #58a6ff; font-size: 16px; margin-top: 25px; margin-bottom: 15px; border-bottom: 1px dashed #30363d; padding-bottom: 8px;">一、 核心基本盘 (绝对主线与底座)</h3>
-            {core_html}
-
-            <h3 style="color: #58a6ff; font-size: 16px; margin-top: 30px; margin-bottom: 15px; border-bottom: 1px dashed #30363d; padding-bottom: 8px;">二、 额外拓展的核心分支 (全景补图)</h3>
-            {ext_html}
-
-            <div style="background: rgba(248, 81, 73, 0.05); border: 1px solid rgba(248, 81, 73, 0.2); padding: 20px; margin-top: 35px; border-radius: 8px;">
-                <h3 style="color: #f85149; font-size: 16px; margin-top: 0; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
-                    <span style="font-size: 18px;">🛡️</span> 三、 盘面推演与系统化交易应对
-                </h3>
-                {plan_html}
-            </div>
-        </div>
-        '''
-        return html
-    except Exception as e:
-        print(f"  [警告] AI 总结生成失败: {e}")
-        return ""
 
 # ============================================================
 # HTML 生成
@@ -2052,8 +1787,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
         echelon_html += '<div class="echelon-desc">该表按当日连板高度分组（首板→最高板），梳理每档的涨停属性与核心成分股。主属性为占比最高的板块，次属性为占比次高的板块。</div>'
         echelon_html += '<table class="echelon-table"><tr><th>连板高度</th><th>数量</th><th>主属性</th><th>次属性</th><th>核心成分股</th></tr>'
         import re
-        # 显示顺序: 从低到高 (首板 -> 最高连板)。不改 echelon 原始顺序,
-        # 因 generate_ai_summary 靠 echelon[0] 取最高板龙头。
+        # 显示顺序: 从低到高 (首板 -> 最高连板)。仅本地排序, 不改 echelon 原始顺序。
         def _ech_key(e):
             hh = e.get('height', '')
             if '首板' in hh: return 0
@@ -2885,7 +2619,6 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
             '❄️ 情绪冰点 (Panic/Frozen)'
         )
 
-    ai_summary_html = generate_ai_summary(advance_decline, ml_strength, sub_strength, echelon, wc_data, sentiment_df, return_leaders)
 
     # 数据驱动的反弹分类复盘 (每日自动更新)
     rebound_html = generate_rebound_analysis(advance_decline, sentiment_df, echelon)
@@ -3106,7 +2839,6 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
 
     {rebound_html}
 
-    {ai_summary_html}
 
 {sentiment_charts_html}
 
@@ -3292,22 +3024,24 @@ def main():
             'zt_max_height': 0 
         }
     
-    # 如果 LongHu API 数据缺失或可疑, 尝试从 akshare 获取实时涨跌家数
+    # 如果 FuPan 涨跌家数缺失, 用腾讯批量接口实时算 (绕过代理, 替代被墙的东财 spot)
     if advance_decline.get('up', 0) == 0 or (
         advance_decline.get('up', 0) == advance_decline.get('down', 0) == 0):
         try:
-            import akshare as ak
-            print("  📊 尝试从 akshare 获取实时涨跌家数...")
-            spot = ak.stock_zh_a_spot_em()
-            if spot is not None and not spot.empty:
-                up_count = len(spot[spot['涨跌幅'] > 0])
-                down_count = len(spot[spot['涨跌幅'] < 0])
+            _all_codes = []
+            if os.path.exists(INDUSTRY_CACHE):
+                _idf = pd.read_csv(INDUSTRY_CACHE, dtype=str)
+                _all_codes = [c for c in _idf['code'].dropna().unique().tolist()
+                              if c.startswith('sh') or c.startswith('sz')]
+            if _all_codes:
+                print("  📊 从腾讯批量接口实时算涨跌家数...")
+                up_count, down_count = _fetch_tencent_ad(_all_codes)
                 if up_count > 0:
                     advance_decline['up'] = up_count
                     advance_decline['down'] = down_count
-                    print(f"  ✅ akshare 实时: 涨{up_count} 跌{down_count}")
+                    print(f"  ✅ 腾讯实时: 涨{up_count} 跌{down_count}")
         except Exception as e:
-            print(f"  ⚠️ akshare 实时数据获取失败: {e}")
+            print(f"  ⚠️ 腾讯实时涨跌家数获取失败: {e}")
 
     # === 最新日 A/D 权威校准 ===
     # advance_decline 用于当天页面显示 (情绪指数/AI摘要/择时), 来源为 FuPan szjs/xdjs,

@@ -25,10 +25,10 @@ pip install -r requirements.txt
 ### 本地运行
 
 ```bash
-python 主线强度追踪.py
+python src/主线强度追踪.py
 ```
 
-运行后查看 `主线强度追踪.html` 报告。
+运行后查看 `output/主线强度追踪.html` 报告。
 
 ### 启用邮件推送
 
@@ -40,7 +40,7 @@ export EMAIL_ENABLE=1
 export EMAIL_SENDER="your@qq.com"
 export EMAIL_PASSWORD="your_auth_code"
 export EMAIL_RECEIVERS="receiver1@qq.com,receiver2@qq.com"
-python 主线强度追踪.py
+python src/主线强度追踪.py
 ```
 
 ```powershell
@@ -49,7 +49,7 @@ $env:EMAIL_ENABLE="1"
 $env:EMAIL_SENDER="your@qq.com"
 $env:EMAIL_PASSWORD="your_auth_code"
 $env:EMAIL_RECEIVERS="receiver1@qq.com,receiver2@qq.com"
-python 主线强度追踪.py
+python src/主线强度追踪.py
 ```
 
 ## 📁 项目结构
@@ -58,30 +58,35 @@ python 主线强度追踪.py
 quant_factor_tutorial/
 ├── .github/workflows/
 │   └── daily_run.yml              # GitHub Actions 每日跑批
-├── 主线强度追踪.py                # 🎯 核心主程序
-├── lianban_analysis.py            # 连板高度分析模块
-├── fupan_report.py                # 复盘报告 API
-├── FuPan_ZhangTingYuanYin.py      # 复盘涨停原因 (独立版)
-├── limit_ratio_factor.py          # 市场情绪因子
-├── timing_signal.py               # 量化择时信号
-├── screener.py                    # 股票池筛选
-├── time_utils.py                  # 时间工具
-├── tradingview_generator.py       # TradingView 图表生成
+├── src/                           # 📦 源码
+│   ├── 主线强度追踪.py            # 🎯 核心主程序 (入口)
+│   ├── lianban_analysis.py        # 连板高度分析模块
+│   ├── fupan_report.py            # 复盘报告 API
+│   ├── limit_ratio_factor.py      # 市场情绪因子 (A/D 真源)
+│   ├── timing_signal.py           # 量化择时信号
+│   ├── screener.py                # 股票池筛选
+│   ├── time_utils.py              # 时间工具
+│   └── tradingview_generator.py   # TradingView 图表生成 (独立工具)
+├── data/                          # 💾 缓存数据
+│   ├── 涨停历史缓存.csv           # [种子缓存] 涨停数据 (<1MB)
+│   ├── cls_plate_cache.csv        # [种子缓存] 板块分类 (<1MB)
+│   ├── sentiment_history_cache.csv# [种子缓存] 情绪历史 (<1MB)
+│   ├── price_history_cache.csv    # [运行时生成] 全市场价格 (~18MB, 不入库)
+│   └── industry_cache.csv         # [运行时生成] 行业映射 (不入库)
+├── output/                        # 📤 生成产物 (不入库)
+│   ├── 主线强度追踪.html          # 主报告
+│   └── focus_pool.csv             # 核心股票池
+├── tests/                         # 🧪 冒烟测试
+│   └── test_smoke.py
+├── docs/                          # 📖 文档
+├── pyproject.toml                 # 项目元数据
 ├── requirements.txt               # Python 依赖
-├── .gitignore                     # Git 忽略规则
-│
-├── 涨停历史缓存.csv               # [种子缓存] 涨停数据 (<1MB)
-├── cls_plate_cache.csv            # [种子缓存] 板块分类 (<1MB)
-├── sentiment_history_cache.csv    # [种子缓存] 情绪历史 (<1MB)
-│
-└── docs/                          # 文档
-    ├── index.md
-    └── howto/
-        └── run-mainline-tracker.md
+└── .gitignore
 ```
 
-> **大文件说明**: `price_history_cache.csv` (~18MB) 和 `industry_cache.csv` 不在 Git 仓库中，
+> **大文件说明**: `data/price_history_cache.csv` (~18MB) 和 `data/industry_cache.csv` 不在 Git 仓库中，
 > 在 GitHub Actions 中通过 `actions/cache` 管理，本地运行时自动生成。
+> `output/` 下的报告产物也不入库。
 
 ## ⚙️ GitHub Actions 自动化
 
