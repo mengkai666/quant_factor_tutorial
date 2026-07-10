@@ -831,6 +831,206 @@ def build_mainline_ladder(price_df, classified, zt_today=None, ret_window=20):
 
 
 # ============================================================
+# 反弹分类复盘 (数据驱动, 每日自动生成)
+# ============================================================
+# 判断阈值 (可调)。市场定性用涨跌家数比 up/down:
+REBOUND_STRONG_AD = 1.5    # up/down > 1.5 = 普涨反弹
+REBOUND_MILD_AD = 1.05     # 1.05~1.5 = 温和反弹
+REBOUND_WEAK_AD = 0.85     # 0.85~1.05 = 分歧整理; <0.85 = 普跌
+ACTIVE_ML_MIN_DAYS = 3     # 近 N 日涨停数持续居前才算"主动主线"
+ACTIVE_ML_RECENT = 5       # 观察窗口 (交易日)
+
+
+def generate_rebound_analysis(advance_decline, sentiment_df, echelon):
+    """数据驱动的反弹分类复盘: 市场定性 + 主动/跟随主线 + 高度断层预警。
+
+    完全基于缓存数据计算, 每日结论不同, 无需大模型 API。
+    分类框架: 主动反弹(可追) / 跟随反弹(减亏离场) / 高度断层(风险)。
+    """
+    try:
+        up = float(advance_decline.get('up', 0) or 0)
+        down = float(advance_decline.get('down', 0) or 0)
+        ad = up / max(down, 1)
+
+        # 1. 市场定性
+        if ad > REBOUND_STRONG_AD:
+            market_char = '普涨反弹'
+            char_desc = f'涨跌家数 {int(up)}涨/{int(down)}跌, 多头明显占优, 属全面反弹。'
+            char_clr = '#f85149'
+        elif ad > REBOUND_MILD_AD:
+            market_char = '温和反弹'
+            char_desc = f'涨跌家数 {int(up)}涨/{int(down)}跌, 涨多于跌但力度有限, 结构性反弹。'
+            char_clr = '#ffa657'
+        elif ad > REBOUND_WEAK_AD:
+            market_char = '分歧整理'
+            char_desc = f'涨跌家数 {int(up)}涨/{int(down)}跌, 多空胶着, 无明确方向。'
+            char_clr = '#d29922'
+        else:
+            market_char = '普跌弱势'
+            char_desc = f'涨跌家数 {int(up)}涨/{int(down)}跌, 跌多于涨, 非反弹日, 资金避险。'
+            char_clr = '#58a6ff'
+
+        # 2. 情绪趋势 (近 4 日 up 走向)
+        trend_desc = ''
+        if sentiment_df is not None and not sentiment_df.empty and 'up' in sentiment_df.columns:
+            ups = pd.to_numeric(sentiment_df['up'], errors='coerce').fillna(0).tolist()[-4:]
+            if len(ups) >= 3:
+                if ups[-1] > ups[-2] > ups[-3]:
+                    trend_desc = '情绪连续回暖 (up 值连升), 赚钱效应扩散中。'
+                elif ups[-1] < ups[-2] < ups[-3]:
+                    trend_desc = '情绪连续走弱 (up 值连降), 亏钱效应蔓延, 谨慎。'
+                elif ups[-1] > ups[-2]:
+                    trend_desc = '情绪较昨日修复, 但未成趋势, 属弱反抽。'
+                else:
+                    trend_desc = '情绪较昨日回落, 反弹持续性存疑。'
+
+        # 3. 高度断层检测 (echelon 连板梯队)
+        heights = []
+        for e in (echelon or []):
+            h = e.get('height', '')
+            if '首板' in h:
+                heights.append(1)
+            else:
+                import re as _re
+                m = _re.search(r'(\d+)', h)
+                if m:
+                    heights.append(int(m.group(1)))
+        heights = sorted(set(heights), reverse=True)
+        gap_warn = ''
+        if heights:
+            max_h = heights[0]
+            # 从最高板往下数, 是否存在断层 (中间某高度无票)
+            present = set(heights)
+            missing = [h for h in range(1, max_h) if h not in present]
+            if max_h >= 5 and len(missing) >= 2:
+                gap_warn = (f'⚠️ 高度断层: 最高 {max_h}板孤悬, 中间缺 '
+                            + '/'.join(f'{h}板' for h in missing[:4])
+                            + ', 龙头无梯队承接, 属退潮期孤高, 高位追高风险大。')
+            elif max_h <= 2:
+                gap_warn = f'梯队低矮 (最高{max_h}板), 投机情绪清淡, 缺乏高度效应。'
+            else:
+                gap_warn = f'梯队相对连续 (最高{max_h}板), 存在承接。'
+
+        # 4. 主动主线 vs 跟随盘: 近 N 日各主线涨停持续度
+        active_html, follow_html = _analyze_active_mainlines()
+
+        return _render_rebound_html(market_char, char_desc, char_clr,
+                                    trend_desc, gap_warn, active_html, follow_html)
+    except Exception as e:
+        print(f"  [警告] 反弹分类复盘生成失败: {e}")
+        return ''
+
+
+def _analyze_active_mainlines():
+    """近 ACTIVE_ML_RECENT 交易日各主线涨停持续度 → 主动主线 / 跟风盘。
+
+    主动主线: 近 N 日中有 >= ACTIVE_ML_MIN_DAYS 天涨停数居前, 且当日仍有涨停 (持续吸金)。
+    跟风盘: 当日有涨停但近期不持续的主线 (含"其它"分散首板)。
+    返回 (active_html, follow_html)。
+    """
+    try:
+        if not (os.path.exists(ZT_CACHE_FILE) and os.path.exists(CLS_PLATE_CACHE)):
+            return '', ''
+        z = pd.read_csv(ZT_CACHE_FILE, dtype=str)
+        z = z[z['类型'] == 'ZT'].copy()
+        cls = pd.read_csv(CLS_PLATE_CACHE, dtype=str)
+
+        recent_days = sorted(z['日期'].unique())[-ACTIVE_ML_RECENT:]
+        if not recent_days:
+            return '', ''
+        latest = recent_days[-1]
+
+        # 每天用当天的 cls 分类, 统计各主线涨停数
+        day_ml_counts = {}   # day -> {ml: count}
+        for d in recent_days:
+            cday = cls[cls['date'] == d]
+            ml_map = dict(zip(cday['code'], cday['mainline']))
+            day = z[z['日期'] == d]
+            counts = {}
+            for code in day['代码']:
+                ml = ml_map.get(code, '其它')
+                if ml in MAINLINE_NAMES:
+                    counts[ml] = counts.get(ml, 0) + 1
+            day_ml_counts[d] = counts
+
+        # 每天涨停数最多的前3主线记为"居前"
+        lead_days = {ml: 0 for ml in MAINLINE_NAMES}
+        for d, counts in day_ml_counts.items():
+            top3 = sorted(counts.items(), key=lambda x: -x[1])[:3]
+            for ml, c in top3:
+                if c > 0:
+                    lead_days[ml] += 1
+
+        today_counts = day_ml_counts.get(latest, {})
+        active, follow = [], []
+        for ml in MAINLINE_NAMES:
+            today_c = today_counts.get(ml, 0)
+            if today_c == 0:
+                continue
+            if lead_days[ml] >= ACTIVE_ML_MIN_DAYS:
+                active.append((ml, today_c, lead_days[ml]))
+            else:
+                follow.append((ml, today_c))
+        active.sort(key=lambda x: -x[1])
+        follow.sort(key=lambda x: -x[1])
+
+        active_html = ''
+        if active:
+            items = ''.join(
+                f'<li style="margin:4px 0;"><b style="color:#f85149;">{ml}</b> '
+                f'(今日涨停 {c}只, 近{ACTIVE_ML_RECENT}日 {ld}天居前) '
+                f'<span style="color:#8b949e;">— 资金持续主动流入, 反弹持续性好, 可追。</span></li>'
+                for ml, c, ld in active)
+            active_html = (f'<div style="margin-top:12px;"><span style="color:#f85149;font-weight:bold;">'
+                           f'✅ 主动反弹主线 (可追):</span><ul style="margin:6px 0;padding-left:20px;">{items}</ul></div>')
+        else:
+            active_html = ('<div style="margin-top:12px;color:#8b949e;font-size:13px;">'
+                           '暂无持续吸金的主动主线, 反弹缺乏领涨核心。</div>')
+
+        follow_html = ''
+        if follow:
+            names = '、'.join(f'{ml}({c})' for ml, c in follow)
+            follow_html = (f'<div style="margin-top:8px;"><span style="color:#d29922;font-weight:bold;">'
+                           f'⚠️ 跟随反弹 (减亏离场):</span> <span style="color:#e6edf3;">{names}</span> '
+                           f'<span style="color:#8b949e;font-size:13px;">— 当日有涨停但近期不持续, 无梯队支撑, 反弹即减亏离场。</span></div>')
+        return active_html, follow_html
+    except Exception as e:
+        print(f"  [警告] 主动主线分析失败: {e}")
+        return '', ''
+
+
+def _render_rebound_html(market_char, char_desc, char_clr,
+                         trend_desc, gap_warn, active_html='', follow_html=''):
+    """渲染反弹分类复盘 HTML 卡片 (深色主题, 对齐报告风格)。"""
+    gap_clr = '#f85149' if gap_warn.startswith('⚠️') else '#8b949e'
+    trend_block = (f'<div style="margin-top:8px;color:#e6edf3;font-size:14px;">'
+                   f'<span style="color:#8b949e;">情绪趋势:</span> {trend_desc}</div>'
+                   if trend_desc else '')
+    gap_block = (f'<div style="margin-top:8px;font-size:14px;color:{gap_clr};">'
+                 f'<span style="color:#8b949e;">梯队结构:</span> {gap_warn}</div>'
+                 if gap_warn else '')
+    return f'''
+    <div style="background:#0d1117;border:1px solid #30363d;border-left:4px solid {char_clr};
+                border-radius:12px;padding:22px;margin-bottom:30px;color:#c9d1d9;">
+        <h2 style="color:{char_clr};font-size:19px;margin:0 0 14px;display:flex;align-items:center;gap:10px;">
+            🧭 反弹分类复盘 · 市场定性: {market_char}
+        </h2>
+        <div style="color:#e6edf3;font-size:14px;line-height:1.7;">
+            <div><span style="color:#8b949e;">当日定性:</span> {char_desc}</div>
+            {trend_block}
+            {gap_block}
+        </div>
+        {active_html}
+        {follow_html}
+        <div style="margin-top:14px;padding-top:12px;border-top:1px dashed #30363d;
+                    font-size:12px;color:#8b949e;">
+            分类逻辑: 主动反弹(资金主动选择、持续吸金→可追) / 跟随反弹(无梯队支撑→减亏离场) /
+            高度断层(龙头孤悬→回避追高)。数据驱动, 每日自动更新。
+        </div>
+    </div>'''
+
+
+# ============================================================
 # 强度计算 (逐日百分比归一化)
 # ============================================================
 def calc_daily_strength(df, group_col):
@@ -2687,6 +2887,9 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
 
     ai_summary_html = generate_ai_summary(advance_decline, ml_strength, sub_strength, echelon, wc_data, sentiment_df, return_leaders)
 
+    # 数据驱动的反弹分类复盘 (每日自动更新)
+    rebound_html = generate_rebound_analysis(advance_decline, sentiment_df, echelon)
+
     # 动态生成量化择时模块
     timing_res = generate_timing_signal(sentiment_df, advance_decline)
     timing_html = f'''
@@ -2900,6 +3103,8 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
 
     <div class="rating-bar">{rating_html}</div>
     {ad_html}
+
+    {rebound_html}
 
     {ai_summary_html}
 
