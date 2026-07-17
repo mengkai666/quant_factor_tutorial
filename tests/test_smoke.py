@@ -68,3 +68,45 @@ def test_time_utils_cache_path_in_data():
         time_utils.get_latest_date()
     except Exception:
         pass  # 无数据时返回 None 或异常均可, 这里只验证不因路径崩溃
+
+
+def test_ai_rebound_disabled_returns_none(monkeypatch):
+    """无 API key 时 AI 研判必须静默返回 None (保证主程序 fallback 回规则模板)。"""
+    import ai_rebound
+    monkeypatch.setattr(ai_rebound, 'ANTHROPIC_API_KEY', '')
+    assert ai_rebound.ai_enabled() is False
+    assert ai_rebound.generate_ai_rebound({'market_char': '普涨反弹'}) is None
+
+
+def test_ai_rebound_parse_json_strips_codeblock():
+    """_parse_json 能剥离 ```json 代码块包裹, 并容忍前后杂字。"""
+    import ai_rebound
+    obj = ai_rebound._parse_json('```json\n{"market_summary": "多头占优"}\n```')
+    assert obj == {'market_summary': '多头占优'}
+    # 前后有杂字时截取第一个 { 到最后一个 }
+    obj2 = ai_rebound._parse_json('好的:\n{"operation": "半仓"}\n以上。')
+    assert obj2 == {'operation': '半仓'}
+    # 不可解析时返回 None
+    assert ai_rebound._parse_json('这不是 JSON') is None
+
+
+def test_ai_rebound_render_produces_html():
+    """渲染函数产出含硬数据与 AI 文字的 HTML 卡片。"""
+    import ai_rebound
+    facts = {'market_char': '温和反弹', 'char_desc': '涨跌家数 2000涨/1500跌'}
+    ai = {'market_summary': '结构性反弹', 'evolution': '关注 AI 算力接力',
+          'operation': '半仓参与'}
+    html = ai_rebound.render_ai_rebound_html(ai, facts, '#ffa657')
+    assert '反弹分类复盘' in html
+    assert '涨跌家数 2000涨/1500跌' in html  # 硬数据来自 facts
+    assert '关注 AI 算力接力' in html         # AI 进化研判
+    assert '半仓参与' in html                  # 操作建议
+
+
+def test_ai_rebound_render_escapes_html():
+    """AI 返回文本中的尖括号被转义, 防止破坏卡片结构。"""
+    import ai_rebound
+    html = ai_rebound.render_ai_rebound_html(
+        {'evolution': '风险 <script>alert(1)</script>'}, {}, '#f85149')
+    assert '<script>' not in html
+    assert '&lt;script&gt;' in html

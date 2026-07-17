@@ -21,6 +21,8 @@ industry_cache.csv
 data_quality_report.json
 focus_pool.csv
 连板高度分析.xlsx
+# 站点发布产物 (本地累积, CI 部署到 gh-pages 分支, 不入 master)
+output/site/
 
 # === IDE / 编辑器 ===
 .vscode/
@@ -62,3 +64,8 @@ pyrefly.toml
 # === 运行日志 ===
 *.log
 run_*.log
+
+# === 本地密钥 (API key 等, 绝不入库) ===
+.env
+.env.*
+!.env.example

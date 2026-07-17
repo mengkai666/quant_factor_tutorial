@@ -19,6 +19,7 @@ import pandas as pd
 import numpy as np
 import os, sys, json, time, hashlib, requests, socket  # type: ignore
 from timing_signal import generate_timing_signal
+from market_stance import classify_market_stance, render_stance_html
 from screener import generate_focus_pool
 import smtplib
 import webbrowser
@@ -46,6 +47,7 @@ from paths import (
     DATA_DIR,
     ZT_CACHE_FILE, PRICE_CACHE, INDUSTRY_CACHE,
     SENTIMENT_CACHE, CLS_PLATE_CACHE, OUTPUT_HTML,
+    SITE_DIR,
 )
 CACHE_DIR = DATA_DIR  # 向后兼容: 旧代码引用 CACHE_DIR 的地方仍指向数据目录
 
@@ -735,6 +737,53 @@ LADDER_GRADES = [
 ]
 LADDER_MIN_SCORE = 5  # 低于此分不入梯队
 
+# 涨停记录定义板块归属的有效窗口 (交易日)。涨停是"某天因某题材涨停"的一次性
+# 快照, 超过此窗口的旧涨停不再定义个股当前所属板块, 避免旧涨停把无关票钉进主线池。
+ZT_MEMBERSHIP_DAYS = 10
+
+
+def rescue_others_with_em(classified):
+    """源头补救: 把 classified 中 大主线=='其它' 的涨停股用东财概念重新归位。
+
+    CLS 当天约 60% 的涨停股被打成"其它"(归不进主线), 但其中大部分有真实题材
+    (医药/化工/新能源等)。若不补救, 这些涨停的强度会被错误计入"其它", 而非真实
+    主线 —— 污染 calc_daily_strength / 评级 / 天梯 / 词云 全链。
+
+    概念归属是稳定的公司属性 (一家医药公司三个月前涨停也还是医药), 因此对 unique
+    "其它" code 归因一次, 再回填到该 code 的全部历史行, 强度时间序列保持连续。
+    走东财按日缓存, 补救结果进缓存后天梯/细分多数命中, 不重复抓。
+
+    任何异常静默返回原 df, 保证主流程不受影响。
+    """
+    if classified is None or classified.empty:
+        return classified
+    try:
+        from em_stock_plates import attribute_codes
+        mask = classified['大主线'] == '其它'
+        others = classified.loc[mask, '代码'].dropna().unique().tolist()
+        if not others:
+            return classified
+        trade_date = str(classified['日期'].max())
+        print(f"  🔧 源头补救: {len(others)} 只'其它'涨停股尝试东财概念归位...")
+        em_map = attribute_codes(
+            others, classify_by_tags, classify_by_plate_name,
+            MAINLINE_NAMES, trade_date=trade_date,
+        )
+        if not em_map:
+            print("  ℹ️ 无可补救的'其它'涨停股")
+            return classified
+        # 回填: 该 code 的全部历史行统一改写 细分板块/大主线
+        sub_ser = classified['代码'].map(lambda c: em_map.get(c, (None, None))[0])
+        ml_ser = classified['代码'].map(lambda c: em_map.get(c, (None, None))[1])
+        fill = mask & sub_ser.notna()
+        classified.loc[fill, '细分板块'] = sub_ser[fill]
+        classified.loc[fill, '大主线'] = ml_ser[fill]
+        print(f"  ✅ 源头补救: {len(em_map)} 只涨停股归位到真实主线 "
+              f"(影响 {int(fill.sum())} 行历史记录)")
+    except Exception as e:
+        print(f"  ⚠️ 源头补救跳过 (保持原分类): {e}")
+    return classified
+
 
 def build_mainline_ladder(price_df, classified, zt_today=None, ret_window=20):
     """构建主线天梯: 全市场强势股按强度分 S/B/C/D/E 级, 并归入 (大主线×细分板块) 矩阵。
@@ -764,10 +813,13 @@ def build_mainline_ladder(price_df, classified, zt_today=None, ret_window=20):
             except (ValueError, KeyError, TypeError):
                 pass
 
-    # 3. 分支归属映射 (三级优先级)
+    # 3. 分支归属映射 (四级优先级)
+    #   (A) CLS 概念缓存 > (C) 涨停分类 > (B) 东财概念投票 > (D) 行业回退
+    #   precise_codes 记录 CLS/涨停 已精准归因的股, 东财只补这之外的候选股 (省接口)。
     code_to_sub_ml = {}   # code -> (sub, ml)
     code_to_name = {}
-    # (C) 行业回退 (最低优先级, 先填)
+    precise_codes = set()  # 已由 CLS/涨停 精准归因, 无需东财补
+    # (D) 行业回退 (最低优先级, 先填)
     if os.path.exists(INDUSTRY_CACHE):
         try:
             idf = pd.read_csv(INDUSTRY_CACHE, dtype=str)
@@ -779,7 +831,7 @@ def build_mainline_ladder(price_df, classified, zt_today=None, ret_window=20):
                     code_to_sub_ml[code] = (sub, ml)
         except Exception:
             pass
-    # (B) 涨停分类 (覆盖行业)
+    # (C) 涨停分类 (覆盖行业)
     if classified is not None and not classified.empty:
         cc = classified.drop_duplicates('代码')
         for _, row in cc.iterrows():
@@ -788,6 +840,7 @@ def build_mainline_ladder(price_df, classified, zt_today=None, ret_window=20):
             sub, ml = row.get('细分板块', ''), row.get('大主线', '')
             if sub and sub != '其它' and ml in MAINLINE_NAMES:
                 code_to_sub_ml[code] = (sub, ml)
+                precise_codes.add(code)
     # (A) CLS 概念缓存 (最高优先级)
     if os.path.exists(CLS_PLATE_CACHE):
         try:
@@ -800,8 +853,30 @@ def build_mainline_ladder(price_df, classified, zt_today=None, ret_window=20):
                 sub, ml = row.get('sub', ''), row.get('mainline', '')
                 if sub and sub != '其它' and ml in MAINLINE_NAMES:
                     code_to_sub_ml[code] = (sub, ml)
+                    precise_codes.add(code)
         except Exception:
             pass
+
+    # (B) 东财个股概念投票 (覆盖行业回退, 但不覆盖 CLS/涨停)
+    #   仅对达到入梯门槛且未被 CLS/涨停 精准归因的候选股抓取, 避免全市场无谓请求。
+    #   任何异常静默回落到行业映射 (D), 保证主流程不受影响。
+    try:
+        from em_stock_plates import attribute_codes
+        candidates = []
+        for code, r20 in ret.items():
+            score = float(r20) + lianban.get(code, 0) * 20
+            if score >= LADDER_MIN_SCORE and code not in precise_codes:
+                candidates.append(code)
+        if candidates:
+            trade_date = str(p_df.index[-1]).replace('-', '')[:8]
+            em_map = attribute_codes(
+                candidates, classify_by_tags, classify_by_plate_name,
+                MAINLINE_NAMES, trade_date=trade_date,
+            )
+            for code, sub_ml in em_map.items():
+                code_to_sub_ml[code] = sub_ml  # 覆盖行业回退
+    except Exception as e:
+        print(f"  ⚠️ 东财个股板块归因跳过 (回落行业映射): {e}")
 
     # 4. 打分 + 分级
     ladder = {g[0]: [] for g in LADDER_GRADES}
@@ -915,7 +990,34 @@ def generate_rebound_analysis(advance_decline, sentiment_df, echelon):
                 gap_warn = f'梯队相对连续 (最高{max_h}板), 存在承接。'
 
         # 4. 主动主线 vs 跟随盘: 近 N 日各主线涨停持续度
-        active_html, follow_html = _analyze_active_mainlines()
+        active_html, follow_html, active, follow = _analyze_active_mainlines()
+
+        # 5. 组装结构化事实 (供 AI 研判 / 规则渲染共用)
+        facts = {
+            'market_char': market_char,
+            'char_desc': char_desc,
+            'ad': {'up': int(up), 'down': int(down), 'ratio': round(ad, 2)},
+            'trend_desc': trend_desc,
+            'gap_warn': gap_warn,
+            'heights': heights,
+            'active': [
+                {'mainline': ml, 'today_zt': c, 'lead_days': ld,
+                 'recent_window': ACTIVE_ML_RECENT}
+                for ml, c, ld in active
+            ],
+            'follow': [
+                {'mainline': ml, 'today_zt': c} for ml, c in follow
+            ],
+        }
+
+        # 6. 优先走 AI 研判 (判断+按模板填充+自行进化); 失败静默回落规则模板
+        try:
+            from ai_rebound import generate_ai_rebound, render_ai_rebound_html
+            ai = generate_ai_rebound(facts)
+            if ai:
+                return render_ai_rebound_html(ai, facts, char_clr)
+        except Exception as e:
+            print(f"  [提示] AI 研判不可用, 回落规则模板: {e}")
 
         return _render_rebound_html(market_char, char_desc, char_clr,
                                     trend_desc, gap_warn, active_html, follow_html)
@@ -929,18 +1031,20 @@ def _analyze_active_mainlines():
 
     主动主线: 近 N 日中有 >= ACTIVE_ML_MIN_DAYS 天涨停数居前, 且当日仍有涨停 (持续吸金)。
     跟风盘: 当日有涨停但近期不持续的主线 (含"其它"分散首板)。
-    返回 (active_html, follow_html)。
+    返回 (active_html, follow_html, active, follow)。
+    active: [(主线, 今日涨停数, 近N日居前天数), ...]; follow: [(主线, 今日涨停数), ...]。
+    结构化的 active/follow 供 AI 研判使用, 两段 html 供规则 fallback 使用。
     """
     try:
         if not (os.path.exists(ZT_CACHE_FILE) and os.path.exists(CLS_PLATE_CACHE)):
-            return '', ''
+            return '', '', [], []
         z = pd.read_csv(ZT_CACHE_FILE, dtype=str)
         z = z[z['类型'] == 'ZT'].copy()
         cls = pd.read_csv(CLS_PLATE_CACHE, dtype=str)
 
         recent_days = sorted(z['日期'].unique())[-ACTIVE_ML_RECENT:]
         if not recent_days:
-            return '', ''
+            return '', '', [], []
         latest = recent_days[-1]
 
         # 每天用当天的 cls 分类, 统计各主线涨停数
@@ -996,10 +1100,10 @@ def _analyze_active_mainlines():
             follow_html = (f'<div style="margin-top:8px;"><span style="color:#d29922;font-weight:bold;">'
                            f'⚠️ 跟随反弹 (减亏离场):</span> <span style="color:#e6edf3;">{names}</span> '
                            f'<span style="color:#8b949e;font-size:13px;">— 当日有涨停但近期不持续, 无梯队支撑, 反弹即减亏离场。</span></div>')
-        return active_html, follow_html
+        return active_html, follow_html, active, follow
     except Exception as e:
         print(f"  [警告] 主动主线分析失败: {e}")
-        return '', ''
+        return '', '', [], []
 
 
 def _render_rebound_html(market_char, char_desc, char_clr,
@@ -1068,14 +1172,16 @@ def calc_subsector_returns(classified_df, price_df, dates, periods=[5, 10, 20, 3
     计算细分板块的Top N平均累计涨幅 (增强补全版)
     """
     if price_df.empty:
-        return {}, {}
+        return {}, {}, {}, {}
 
     # 1. 准备全量股票-板块映射 (数据补全的核心)
-    # 优先级: cls_plate_cache (概念) > classified_df (涨停记录) > INDUSTRY_TO_SECTOR (行业回退)
+    # 优先级: 东财概念归因 (概念级) > 涨停记录 > INDUSTRY_TO_SECTOR (行业回退, 只用于凑板块池, 不选领涨)
     global_code_to_sector = {}
     global_code_to_name = {}
-    
-    # (A) 从行业缓存加载全量基础映射
+    precise_codes = set()  # 概念精准归因 (涨停/东财) 的 code, 只有这些能当领涨股
+    industry_sector = {}   # 证监会行业推出的板块归属, 用于判定"核心成员 vs 概念沾边"
+
+    # (A) 从行业缓存加载全量基础映射 (最低优先级, 仅用于板块内涨幅统计, 不产生领涨股)
     if os.path.exists(INDUSTRY_CACHE):
         try:
             idf = pd.read_csv(INDUSTRY_CACHE, dtype=str)
@@ -1084,17 +1190,40 @@ def calc_subsector_returns(classified_df, price_df, dates, periods=[5, 10, 20, 3
                 global_code_to_name[code] = name
                 # 行业回退映射
                 sub, ml = INDUSTRY_TO_SECTOR.get(ind, (None, None))
-                if sub: global_code_to_sector[code] = sub
+                if sub:
+                    global_code_to_sector[code] = sub
+                    industry_sector[code] = sub  # 主业所在板块 (证监会行业)
         except Exception as e:
             print(f'  ⚠️ 行业缓存加载失败: {e}')
 
-    # (B) 从涨停分类加载映射 (覆盖行业映射，更精准)
+    # (B) 从涨停分类加载映射 (覆盖行业映射，更精准, 且可作领涨股)
+    #   注意: 涨停记录是"某天因某题材涨停"的一次性快照, 不等于个股当前所属主线。
+    #   仅取近 N 个交易日的涨停定义板块归属, 避免一月前的旧涨停 (如张小泉6/16蹭AI涨停)
+    #   把无关票永久钉进主线池 —— 名字映射仍用全量 (不影响)。
     if not classified_df.empty:
-        c_map = classified_df.drop_duplicates('代码').set_index('代码')
+        # 名字映射用全量, 板块归属只用近 N 日
+        for code, nm in classified_df.drop_duplicates('代码').set_index('代码')['名称'].items():
+            global_code_to_name[code] = nm
+        recent_dates = sorted(classified_df['日期'].unique())[-ZT_MEMBERSHIP_DAYS:]
+        recent_zt = classified_df[classified_df['日期'].isin(recent_dates)]
+        # 同一 code 近期多次涨停取最近一次的题材
+        c_map = recent_zt.sort_values('日期').drop_duplicates('代码', keep='last').set_index('代码')
         for code, row in c_map.iterrows():
             if row['细分板块'] and row['细分板块'] != '其它':
                 global_code_to_sector[code] = row['细分板块']
-            global_code_to_name[code] = row['名称']
+                precise_codes.add(code)
+
+    # (C) 东财个股概念归因 (概念级精准, 覆盖行业回退, 可作领涨股)
+    #   根治行业回退串板: 如"传媒"行业整体误入 AI应用 导致张小泉/罗曼股份被标成领涨。
+    try:
+        from em_stock_plates import load_all_attributions
+        em_attr = load_all_attributions()
+        for code, (sub, _ml) in em_attr.items():
+            if sub and sub != '其它':
+                global_code_to_sector[code] = sub
+                precise_codes.add(code)
+    except Exception as e:
+        print(f'  ⚠️ 东财概念归因加载跳过 (细分板块领涨仅用涨停记录): {e}')
 
     # (C) 建立最终板块-代码列表
     sector_to_codes = {}
@@ -1108,7 +1237,7 @@ def calc_subsector_returns(classified_df, price_df, dates, periods=[5, 10, 20, 3
     
     dt_dates = [f"{d[:4]}-{d[4:6]}-{d[6:]}" for d in dates]
     dt_dates = [d for d in dt_dates if d in p_df.index]
-    if not dt_dates: return {}, {}
+    if not dt_dates: return {}, {}, {}, {}
     
     p_df = p_df.loc[dt_dates].sort_index()
     
@@ -1144,15 +1273,112 @@ def calc_subsector_returns(classified_df, price_df, dates, periods=[5, 10, 20, 3
                 avg_val = top_n.mean() if not top_n.empty else 0
                 result[sector][f'*{p}'][i] = round(float(avg_val), 2)
             
-            if not day_rets.empty:
-                top_code = day_rets.index[0]
-                top_val = day_rets.iloc[0]
-                s_name = global_code_to_name.get(top_code, top_code).strip()  # type: ignore
+            # 领涨股只从概念精准归因的票里选 (涨停/东财), 排除纯行业回退的沾边票,
+            # 根治"张小泉/罗曼股份被标成 AI应用领涨"的串板问题。
+            # 再叠两道过滤: (1) 排除 ST/退市票 (强势板块展示里 ST 是噪音);
+            #               (2) 要求正收益 (负收益说明该板块当日无强势票, 不硬塞领涨)。
+            for cand_code in [c for c in day_rets.index if c in precise_codes]:
+                cand_name = global_code_to_name.get(cand_code, cand_code).strip()  # type: ignore
+                if 'ST' in cand_name.upper() or '退' in cand_name:
+                    continue
+                cand_val = day_rets[cand_code]
+                if cand_val <= 0:
+                    break  # day_rets 已降序, 到这已无正收益票
                 leaders.setdefault(d_str, {})[sector] = {
-                    'name': s_name, 'ret': round(top_val, 2)
+                    'name': cand_name, 'ret': round(float(cand_val), 2)
                 }
-                
-    return result, leaders
+                break
+
+    # === 板块领涨榜 + Top6 个股轨迹 (内核: 线=个股, 窗口=排名维度) ===
+    #   目标: 追踪"一段时间里哪几只强势股在轮流领涨" (6月领涨→回调→7月接力),
+    #   而非每日单冠军 MAX 线 (旧 get_nday_leaders 的做法, 一只妖股即绑架整条线)。
+    #   - 主图 sector_tracks: 每板块取整段窗口累计涨幅 Top6 个股, 各画一条完整累计曲线,
+    #     共振板块指数的票高亮。仅 precise_codes 概念归因 + 非 ST, 继承反串板成果。
+    #   - 榜单 leaderboard: 按 3/5/10/20/30 日窗口分别排 Top3, 前端可切换窗口。
+    #   - 标签: 🔴共振(与板块指数日涨跌 corr>=0.5) / ⚡领先(启动日早于板块指数);
+    #     核心/关联: 证监会行业也归本板块=核心, 仅概念/涨停沾边(如并购重组蹭概念)=关联。
+    leaderboard = {}
+    sector_tracks = {}
+    POP = 3.0            # 单日跳涨阈值 (%), 判定"启动日"
+    RANK_WINDOWS = [3, 5, 10, 20, 30]
+    TOP_N_TRACKS = 6    # 主图最多画几条个股线
+    TOP_N_RANK = 3      # 每个窗口榜单取前几
+    daily_chg = p_df.pct_change() * 100  # 逐日涨跌幅 (%)
+    n_rows = len(p_df)
+    for sector, codes in sector_to_codes.items():
+        # 候选: 概念精准归因 + 非 ST + 在价格矩阵内
+        cand = [c for c in codes if c in precise_codes and c in cum_ret_df.columns
+                and 'ST' not in global_code_to_name.get(c, '').upper()
+                and '退' not in global_code_to_name.get(c, '')]
+        if not cand:
+            continue
+        # 板块指数 = 全体概念成员等权累计涨幅曲线 (代表板块整体节奏)
+        idx_members = [c for c in codes if c in precise_codes and c in cum_ret_df.columns]
+        sector_idx = cum_ret_df[idx_members].mean(axis=1) if idx_members else cum_ret_df[cand].mean(axis=1)
+        idx_chg = sector_idx.diff()
+        idx_pop = np.where(idx_chg.values > POP)[0]
+        idx_start = int(idx_pop[0]) if len(idx_pop) else n_rows
+
+        # 每只候选票的稳定属性 (共振/领先/核心-关联), 全窗口计算一次, 各处复用
+        meta = {}
+        for code in cand:
+            tags = []
+            try:
+                corr = daily_chg[code].corr(idx_chg)
+            except Exception:
+                corr = 0.0
+            if pd.notna(corr) and corr >= 0.5:
+                tags.append('共振')
+            code_pop = np.where(daily_chg[code].values > POP)[0]
+            code_start = int(code_pop[0]) if len(code_pop) else n_rows
+            if code_start < idx_start:
+                tags.append('领先')
+            meta[code] = {
+                'name': global_code_to_name.get(code, code).strip(),
+                'tags': tags,
+                'kind': '核心' if industry_sector.get(code) == sector else '关联',
+            }
+
+        # --- 图榜联动 (方案C): 每个窗口各按"该窗口滚动涨幅"选 Top6, 图与榜同源 ---
+        #   选票口径 = 近 w 日滚动涨幅 (与榜单数字一致); 曲线仍画完整显示窗口的累计涨幅
+        #   (从显示窗口首日基准算起), 这样既能看到"该窗口谁最强", 又能看到它完整的
+        #   起涨→回调→再起轨迹。点前端标签时, 图上 6 条线和榜单 Top3 一起换。
+        win_tracks = {}   # {w: [Top6 轨迹(含完整曲线)]}
+        win_rank = {}     # {w: [Top3 榜单行]}
+        last_px = p_df.iloc[-1]
+        for w in RANK_WINDOWS:
+            prev = max(n_rows - 1 - w, 0)
+            if prev == n_rows - 1:
+                continue  # 数据不足一个窗口
+            base_px = p_df.iloc[prev].replace(0, np.nan)
+            wret = (last_px / base_px - 1) * 100
+            wret = wret[cand].dropna().sort_values(ascending=False)
+            wret = wret[wret > 0]  # 只上该窗口净涨的
+            if wret.empty:
+                continue
+            tracks = []
+            for code in wret.head(TOP_N_TRACKS).index:
+                m = meta[code]
+                tracks.append({
+                    'name': m['name'],
+                    'curve': {ds: round(float(v), 1)
+                              for ds, v in zip(all_dates_str, cum_ret_df[code].values)},
+                    'resonance': '共振' in m['tags'],
+                    'lead': '领先' in m['tags'],
+                    'kind': m['kind'],
+                    'ret': round(float(wret[code]), 1),  # 该窗口滚动涨幅
+                })
+            win_tracks[w] = tracks
+            # 榜单 Top3 = 该窗口 Top6 的前 3 (同源)
+            win_rank[w] = [{'name': t['name'], 'ret': t['ret'],
+                            'tags': meta[c]['tags'], 'kind': t['kind']}
+                           for t, c in zip(tracks[:TOP_N_RANK], wret.head(TOP_N_RANK).index)]
+        if win_tracks:
+            sector_tracks[sector] = win_tracks
+        if win_rank:
+            leaderboard[sector] = win_rank
+
+    return result, leaders, leaderboard, sector_tracks
 
 def get_leaders(df, group_col='细分板块'):
     leaders = {}
@@ -1209,15 +1435,50 @@ def get_nday_leaders(classified_df, price_df, group_col='细分板块'):
     print(f"    [性能] get_nday_leaders 完成 (耗时: {time.time()-t0:.2f}s)")
     return result
 
-def rate_mainline(series, threshold=100):
-    """基于均值的强度评级 (迁移 11111.py 逻辑)"""
+def rate_mainline(series):
+    """大主线强度评级 (基于归一化百分比)。
+
+    喂入的 series 是 calc_daily_strength 归一化后的百分比: 每日 7 大主线+其它
+    加总=100, 单条主线的值即"该主线吃掉全市场涨停强度的百分之几"。取近 10 日均值。
+
+    旧阈值 (S>300/A>150/B>100) 是 11111.py 未归一化时代的遗留, 归一化后单条主线
+    几乎不可能 >100, 导致大主线评级长期全塌 D/N (实测第一主线 AI算力 37% 仅评 D)。
+    现按归一化语义重设: 一条主线要独占 30%+ 市场强度才算 S, 12%+ 算主流 B。
+    """
     avg = series.mean() if len(series) > 0 else 0
-    if avg > threshold * 3: return 'S'
-    elif avg > threshold * 1.5: return 'A'
-    elif avg > threshold: return 'B'
-    elif avg > threshold * 0.7: return 'C'
-    elif avg > threshold * 0.3: return 'D'
-    else: return 'N'
+    if avg > 30: return 'S'      # 独占级: 单主线吃掉 30%+ 全市场强度
+    elif avg > 20: return 'A'    # 绝对主流
+    elif avg > 12: return 'B'    # 主流热点
+    elif avg > 6: return 'C'     # 活跃参与
+    elif avg > 2: return 'D'     # 零星
+    else: return 'N'             # 冷却/潜伏
+
+def calc_mainline_trend(series):
+    """大主线趋势方向 = 近5日均份额 − 前5日均份额 (单位: 百分点)。
+
+    rate_mainline 只测「份额水平」(存量), 是静态快照, 无法区分"高位松动的老龙头"
+    和"低位启动的新主线"。此函数补上「趋势方向」(增量): 正=资金在流入该主线,
+    负=在流出。两者组合才能既看存量又看动能, 避免"份额小就误标退潮"的错配。
+
+    返回 (arrow, label, delta):
+      arrow/label — ↑升温 / ↓退潮 / →走平 (阈值 ±1.0 个百分点, 过滤噪声波动)
+      delta — 原始差值, 供 tooltip 或调试。
+    数据不足 10 日时用全窗口对半分; 不足 2 点直接走平。
+    """
+    vals = list(series) if series is not None else []
+    if len(vals) < 2:
+        return ('→', '走平', 0.0)
+    win = vals[-10:]
+    half = len(win) // 2
+    prev = sum(win[:half]) / half if half else 0.0
+    recent = sum(win[half:]) / (len(win) - half)
+    delta = recent - prev
+    if delta > 1.0:
+        return ('↑', '升温', round(delta, 1))
+    elif delta < -1.0:
+        return ('↓', '退潮', round(delta, 1))
+    return ('→', '走平', round(delta, 1))
+
 
 def rate_sub(series):
     """基于逐日百分比的细分板块评级"""
@@ -1653,7 +1914,7 @@ def calc_nday_returns(price_df, periods=[5, 10, 20, 60]):
 # ============================================================
 def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thresh,
                   leaders, dates, ratings, sub_ratings,
-                  echelon, top30_data, advance_decline, nday_leaders=None, wc_data=None, sentiment_df=None, plates=None, classified_df=None, return_leaders=None, mainline_ladder=None):
+                  echelon, top30_data, advance_decline, nday_leaders=None, wc_data=None, sentiment_df=None, plates=None, classified_df=None, return_leaders=None, mainline_ladder=None, sub_leaderboard=None, sub_tracks=None):
     
     if len(dates) > 65:
         dates = dates[-65:]
@@ -1906,10 +2167,15 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
                         '悬停个股可见涨停原因（若有）。</div>')
         ladder_html += render_matrix_table("级别", grade_order, ladder_provider)
 
+    # 趋势 (增量): 与份额评级 (存量) 组合, 避免"份额小就误标退潮"。基于完整 ml_strength 时间序列算。
+    trends = {n: calc_mainline_trend(ml_strength[n]) for n in MAINLINE_NAMES if n in ml_strength.columns}
+
     rating_html = ''
     for n in MAINLINE_NAMES:
         r = ratings.get(n, 'N')
-        rating_html += f'<span class="rating-item rating-{r}">{n}: {r}级</span>\n'
+        arrow, tlabel, _ = trends.get(n, ('→', '走平', 0.0))
+        tcls = 'trend-up' if arrow == '↑' else ('trend-down' if arrow == '↓' else 'trend-flat')
+        rating_html += f'<span class="rating-item rating-{r}">{n}: {r}级 <span class="trend-tag {tcls}">{arrow}{tlabel}</span></span>\n'
 
     ad_html = ''
     if advance_decline:
@@ -1925,14 +2191,16 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
             <span style="background:rgba(210,153,34,0.1);color:var(--accent-yellow);border:1px solid var(--accent-yellow);padding:8px 20px;border-radius:12px;font-weight:bold;font-size:15px;backdrop-filter:blur(5px);">涨跌比 {up}:{down} ({ad_ratio})</span>
         </div>'''
 
+    # 评级测的是「份额水平」(该主线占全市场涨停强度的百分比), 文字必须同维度描述份额,
+    # 不能用"转强/转弱/退潮"这类趋势词 —— 趋势由 calc_mainline_trend 单独算, 拼在后面。
     R_INT = {
-        'S': '极强 (主升浪确立/建议重配领头)',
-        'A': '转强 (进攻信号明显/持仓观望)',
-        'B+': '活跃 (多空均衡偏多/择机博弈)',
-        'B': '蓄势 (震荡格局/等待底部抬升)',
-        'C': '转弱 (资金持续撤离/注意仓位)',
-        'D': '极弱 (退潮冰点/建议轻仓防守)',
-        'N': '潜伏 (横盘整理/暂无明显信号)'
+        'S': '绝对核心 (独占全场强度)',
+        'A': '市场主流 (资金高度集中)',
+        'B+': '主流热点 (资金重点参与)',
+        'B': '重要分支 (资金稳定参与)',
+        'C': '活跃参与 (有一定资金关注)',
+        'D': '零星表现 (资金零散参与)',
+        'N': '冷门 (几乎无资金参与)'
     }
 
     mainline_table_html = ''
@@ -1943,14 +2211,19 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
             colspan = max(len(subs), 1)
             r = ratings.get(ml, 'N')
             desc = R_INT.get(r, '')
-            mainline_table_html += f'<th colspan="{colspan}" class="ml-header rating-{r}">{ml} ({r}级)<br><span class="rating-desc">{desc}</span></th>'
+            arrow, tlabel, _ = trends.get(ml, ('→', '走平', 0.0))
+            tcls = 'trend-up' if arrow == '↑' else ('trend-down' if arrow == '↓' else 'trend-flat')
+            mainline_table_html += (f'<th colspan="{colspan}" class="ml-header rating-{r}">{ml} ({r}级) '
+                                    f'<span class="trend-tag {tcls}">{arrow}{tlabel}</span>'
+                                    f'<br><span class="rating-desc">{desc}</span></th>')
         mainline_table_html += '</tr><tr><th>分支</th>'
         for ml in MAINLINE_NAMES:
             subs = [(s, r) for s, (r, m) in sub_ratings.items() if m == ml]
             if not subs:
                 mainline_table_html += '<td>-</td>'
             for s, r in subs:
-                mainline_table_html += f'<td class="sub-cell rating-{r}">{s}<br><small>{r}级</small></td>'
+                label = '—' if r == 'NA' else f'{r}级'
+                mainline_table_html += f'<td class="sub-cell rating-{r}">{s}<br><small>{label}</small></td>'
         mainline_table_html += '</tr></table></div>'
 
     hot_sectors_html = ''
@@ -2006,70 +2279,179 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
                 '_raw': ml_raw_data[n]})
 
     sub_charts_html = ''
-    mk_to_period = {'*5': 5, '*10': 10, '*20': 20, '*30': 30}
-    
-    # 收集所有有数据的板块
+    # 榜单窗口切换的全局 JS (定义一次)
+    sub_charts_html += '''
+        <script>
+        window.SUB_CHARTS = window.SUB_CHARTS || {};        // {cid: echarts实例}
+        window.SUB_CHART_DATA = window.SUB_CHART_DATA || {}; // {cid: {w: {series, legend}}}
+        function lbSwitch(cid,w,btn){
+          // 1. 榜单 Top3 显隐切换
+          [3,5,10,20,30].forEach(function(x){
+            var el=document.getElementById('lb_'+cid+'_'+x);
+            if(el) el.style.display=(x==w)?'flex':'none';
+          });
+          var bar=btn.parentNode;
+          var tabs=bar.getElementsByClassName('lb-tab');
+          for(var i=0;i<tabs.length;i++){tabs[i].classList.remove('active');}
+          btn.classList.add('active');
+          // 2. 主图 Top6 曲线联动重画 (图榜同源)
+          var chart=window.SUB_CHARTS[cid], wd=window.SUB_CHART_DATA[cid];
+          if(chart&&wd&&wd[w]){
+            chart.setOption({legend:{data:wd[w].legend},series:wd[w].series},
+                            {replaceMerge:['series']});
+          }
+        }
+        </script>'''
+
+    # 个股轨迹线配色 (最多 6 条)
+    track_colors = ['#ff5b5b', '#ffb84d', '#f5e04d', '#5ad65a', '#4dc3ff', '#c77dff']
+
+    # 收集所有有数据的板块: 优先 sub_tracks (新内核), 回退 nday_leaders / sub_ma
     all_sectors_with_data = set()
+    if sub_tracks:
+        all_sectors_with_data.update(sub_tracks.keys())
     if nday_leaders:
         for period_data in nday_leaders.values():
             if not isinstance(period_data, dict): continue
             for date_data in period_data.values():
                 if isinstance(date_data, dict):
                     all_sectors_with_data.update(date_data.keys())
-    # 也包含sub_ma中的板块 (fallback)
     if isinstance(sub_ma, dict):
         all_sectors_with_data.update(sub_ma.keys())
-    
+
+    # 阈值线 (窗口无关, 每个窗口的 series 都追加): 10日=100%, 30日=200%
+    thresh_series = []
+    for tn, td in sub_thresh.items():
+        clr = '#ffaa44' if '10' in tn else '#4466aa'
+        thresh_series.append({'name': tn, 'type': 'line', 'smooth': False, 'data': td,
+            'lineStyle': {'width': 1.5, 'type': 'dashed', 'color': clr},
+            'itemStyle': {'color': clr}, 'symbol': 'none'})
+
+    def _tracks_to_series(tks):
+        """把某窗口的 Top6 轨迹转成 (series, legend)。共振高亮, 领先加⚡, 关联加·关联。"""
+        series, legend = [], []
+        for ti, tk in enumerate(tks):
+            clr = track_colors[ti % len(track_colors)]
+            reso, lead = tk.get('resonance'), tk.get('lead')
+            is_rel = tk.get('kind') == '关联'
+            nm = ('⚡' if lead else '') + tk['name'] + ('·关联' if is_rel else '')
+            legend.append(nm)
+            curve = tk.get('curve', {})
+            series.append({
+                'name': nm, 'type': 'line', 'smooth': True,
+                'data': [curve.get(d) for d in dates], 'connectNulls': True,
+                'lineStyle': {'width': 3 if reso else 1.5, 'color': clr,
+                              'opacity': 1.0 if reso else 0.55,
+                              'type': 'solid' if reso else 'dashed'},
+                'itemStyle': {'color': clr},
+                'symbol': 'circle', 'symbolSize': 4 if reso else 0,
+                'emphasis': {'focus': 'series'},
+                # 峰值处打名字: 冲高又回落的线, 末端已在低位, 名字标在最高点才是"领涨"最直观的位置
+                'markPoint': {
+                    'symbol': 'circle', 'symbolSize': 6,
+                    'itemStyle': {'color': clr},
+                    'data': [{'type': 'max'}],
+                    'label': {'show': True, 'formatter': nm, 'fontSize': 10,
+                              'color': clr, 'position': 'top', 'distance': 4,
+                              'fontWeight': 'bold' if reso else 'normal'},
+                },
+                # 末端保留一个淡标签, 用于识别线尾是哪只 (峰值名字才是主看点)
+                'endLabel': {'show': True, 'formatter': nm, 'fontSize': 9,
+                             'color': clr, 'distance': 4, 'opacity': 0.6},
+            })
+        return series, legend
+
+    def _row_html(r):
+        tag_html = ''
+        for t in r.get('tags', []):
+            tcls = 'lb-tag-reso' if t == '共振' else 'lb-tag-lead'
+            tico = '🔴' if t == '共振' else '⚡'
+            tag_html += f'<span class="lb-tag {tcls}">{tico}{t}</span>'
+        kind = r.get('kind', '核心')
+        kcls = 'lb-kind-core' if kind == '核心' else 'lb-kind-rel'
+        return (f'<span class="lb-name">{r["name"]}</span>'
+                f'<span class="lb-ret">+{r["ret"]}%</span>'
+                f'<span class="lb-kind {kcls}">{kind}</span>{tag_html}')
+
     for idx, sector in enumerate(sorted(all_sectors_with_data)):
         chart_id = f'sub_{idx}'
-        s_series: list = []
-        
-        if nday_leaders:
-            # 使用实际N日涨幅数据
-            for mk in ['*5', '*10', '*20', '*30']:
-                period = mk_to_period[mk]
-                label_positions = {'*5': 'top', '*10': 'right', '*20': 'bottom', '*30': 'left'}
-                label_pos = label_positions.get(mk, 'top')
-                
-                rich = []
-                for d in dates:
-                    leader_info = nday_leaders.get(period, {}).get(d, {}).get(sector) if isinstance(nday_leaders, dict) and period in nday_leaders and isinstance(nday_leaders[period], dict) and d in nday_leaders[period] and isinstance(nday_leaders[period][d], dict) else None
-                    if leader_info:
-                        pt = {'value': round(leader_info['ret'], 1)}
-                        pt['label'] = {'show': True, 'formatter': leader_info['name'],
-                            'fontSize': 9, 'color': ma_colors[mk], 'position': label_pos}
-                    else:
-                        pt = {'value': 0}
-                    rich.append(pt)
-                s_series.append({'name': f'{sector}{mk}', 'type': 'line', 'smooth': True,
-                    'data': rich, 'lineStyle': {'width': 2, 'color': ma_colors[mk]},
-                    'itemStyle': {'color': ma_colors[mk]}, 'symbol': 'circle', 'symbolSize': 5})
+        sr = sub_ratings.get(sector, ('N', ''))[0] if sector in sub_ratings else 'N'
+        sr_title = '无数据' if sr == 'NA' else f'{sr}级'
+
+        win_tracks = (sub_tracks or {}).get(sector, {}) if isinstance(sub_tracks, dict) else {}
+        win_rank = (sub_leaderboard or {}).get(sector, {})
+
+        if win_tracks and win_rank:
+            # === 图榜联动 (方案C): 点窗口标签, 图上 Top6 曲线 + 榜单 Top3 一起换 ===
+            avail = [w for w in [3, 5, 10, 20, 30] if w in win_tracks and w in win_rank]
+            default_w = 10 if 10 in avail else avail[0]
+            medals = ['①', '②', '③']
+
+            # 每窗口预生成 {series, legend}, 存入 JS 供切换时 setOption
+            win_opt = {}
+            for w in avail:
+                series, legend = _tracks_to_series(win_tracks[w])
+                win_opt[w] = {'series': series + thresh_series, 'legend': legend}
+
+            # 榜单标签 + 各窗口榜单行
+            tabs = ''
+            for w in avail:
+                acls = ' active' if w == default_w else ''
+                tabs += f'<button class="lb-tab{acls}" onclick="lbSwitch(\'{chart_id}\',{w},this)">{w}日</button>'
+            wins = ''
+            for w in avail:
+                disp = 'flex' if w == default_w else 'none'
+                items = ''
+                for rank, r in enumerate(win_rank[w]):
+                    items += (f'<span class="lb-item"><span class="lb-rank">'
+                              f'{medals[rank] if rank < 3 else ""}</span>{_row_html(r)}</span>')
+                wins += f'<div id="lb_{chart_id}_{w}" class="lb-win" style="display:{disp}">{items}</div>'
+            lb_html = (f'<div class="lb-bar"><span class="lb-title">🏅 区间领涨</span>'
+                       f'<span class="lb-tabs">{tabs}</span>'
+                       f'<span class="lb-help" title="区间领涨=对应窗口(近N交易日)滚动涨幅前3的概念成员股; '
+                       f'图上曲线是该窗口 Top6 的完整走势 (从显示区间首日算累计涨幅)。'
+                       f'🔴共振=个股走势与板块指数同步(带动板块); ⚡领先=启动早于板块指数(提前爆发); '
+                       f'核心=证监会行业也归此板块, 关联=仅概念沾边(如并购重组)。">?</span></div>'
+                       f'{wins}')
+
+            init = win_opt[default_w]
+            sub_charts_html += f'''
+        {lb_html}
+        <div class="chart-container" id="{chart_id}" style="height:500px;"></div>
+        <script>(function(){{
+            window.SUB_CHART_DATA=window.SUB_CHART_DATA||{{}};
+            window.SUB_CHARTS=window.SUB_CHARTS||{{}};
+            window.SUB_CHART_DATA['{chart_id}']={json.dumps(win_opt, ensure_ascii=False)};
+            var c=echarts.init(document.getElementById('{chart_id}'),'dark');
+            window.SUB_CHARTS['{chart_id}']=c;
+            c.setOption({{title:{{text:'{sector} 强势个股轨迹 ({sr_title})',left:'center',textStyle:{{color:'#e0e0e0',fontSize:16}}}},
+                tooltip:{{trigger:'axis',order:'valueDesc',valueFormatter:function(v){{return v==null?'-':v+'%';}}}},
+                legend:{{data:{json.dumps(init['legend'], ensure_ascii=False)},top:30,textStyle:{{fontSize:11}},type:'scroll'}},
+                grid:{{left:60,right:90,top:80,bottom:50}},
+                xAxis:{{type:'category',data:{json.dumps(dates_fmt)},axisLabel:{{rotate:45,fontSize:10}}}},
+                yAxis:{{type:'value',name:'涨幅(%)',axisLabel:{{formatter:'{{value}}%'}}}},
+                dataZoom:[{{type:'inside'}},{{type:'slider',bottom:5,height:20}}],
+                series:{json.dumps(init['series'], ensure_ascii=False)}}});
+            window.addEventListener('resize',function(){{c.resize();}});
+        }})();</script>'''
         else:
-            # 回退: 用旧的强度MA数据
+            # 回退: 无 sub_tracks 数据时, 用旧强度 MA 数据画 4 条窗口线
+            s_series, legend_names = [], []
             for mk in ['*5', '*10', '*20', '*30']:
-                # pyrefly: ignore [unsupported-operation]
-                if sector in sub_ma and mk in sub_ma[sector]:
-                    # pyrefly: ignore [unsupported-operation]
+                if isinstance(sub_ma, dict) and sector in sub_ma and mk in sub_ma[sector]:
                     data = sub_ma[sector][mk]
-                    s_series.append({'name': f'{sector}{mk}', 'type': 'line', 'smooth': True,
+                    nm = f'{sector}{mk}'
+                    legend_names.append(nm)
+                    s_series.append({'name': nm, 'type': 'line', 'smooth': True,
                         'data': data, 'lineStyle': {'width': 2, 'color': ma_colors[mk]},
                         'itemStyle': {'color': ma_colors[mk]}, 'symbol': 'circle', 'symbolSize': 5})
-        
-        # 固定水平阈值线 (10日=100%, 30日=200%)
-        for tn, td in sub_thresh.items():
-            clr = '#ffaa44' if '10' in tn else '#4466aa'
-            s_series.append({'name': tn, 'type': 'line', 'smooth': False,
-                'data': td,
-                'lineStyle': {'width': 1.5, 'type': 'dashed', 'color': clr},
-                'itemStyle': {'color': clr}, 'symbol': 'none'})  # type: ignore
-        
-        sr = sub_ratings.get(sector, ('N', ''))[0] if sector in sub_ratings else 'N'
-        sub_charts_html += f'''
+            s_series += thresh_series
+            sub_charts_html += f'''
         <div class="chart-container" id="{chart_id}" style="height:500px;"></div>
         <script>(function(){{
             var c=echarts.init(document.getElementById('{chart_id}'),'dark');
-            c.setOption({{title:{{text:'{sector} 涨幅统计 ({sr}级)',left:'center',textStyle:{{color:'#e0e0e0',fontSize:16}}}},
-                tooltip:{{trigger:'axis'}},legend:{{data:{json.dumps([s['name'] for s in s_series],ensure_ascii=False)},top:30,textStyle:{{fontSize:11}}}},
+            c.setOption({{title:{{text:'{sector} 涨幅统计 ({sr_title})',left:'center',textStyle:{{color:'#e0e0e0',fontSize:16}}}},
+                tooltip:{{trigger:'axis'}},legend:{{data:{json.dumps(legend_names, ensure_ascii=False)},top:30,textStyle:{{fontSize:11}}}},
                 grid:{{left:60,right:30,top:80,bottom:50}},
                 xAxis:{{type:'category',data:{json.dumps(dates_fmt)},axisLabel:{{rotate:45,fontSize:10}}}},
                 yAxis:{{type:'value',name:'涨幅(%)',axisLabel:{{formatter:'{{value}}%'}}}},
@@ -2619,6 +3001,10 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     # 数据驱动的反弹分类复盘 (每日自动更新)
     rebound_html = generate_rebound_analysis(advance_decline, sentiment_df, echelon)
 
+    # 择时档位判断 + 转向扳机清单 (进攻/防御/观望, 纯规则可回溯)
+    stance = classify_market_stance(advance_decline, sentiment_df, echelon)
+    stance_html = render_stance_html(stance)
+
     # 动态生成量化择时模块
     timing_res = generate_timing_signal(sentiment_df, advance_decline)
     timing_html = f'''
@@ -2696,10 +3082,36 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     
     .rating-bar {{ display: flex; justify-content: center; gap: 8px; margin-bottom: 25px; flex-wrap: wrap; }}
     .rating-item {{ padding: 6px 14px; border-radius: 6px; font-size: 13px; font-weight: 600; text-transform: uppercase; }}
+    .trend-tag {{ font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 4px; margin-left: 4px; text-transform: none; }}
+    .trend-up {{ color: #ff5b5b; background: rgba(255,91,91,0.15); }}
+    .trend-down {{ color: #4a9eff; background: rgba(74,158,255,0.15); }}
+    .trend-flat {{ color: #9aa0a6; background: rgba(154,160,166,0.12); }}
+    .lb-wrap {{ display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 -6px; padding: 8px 12px; background: rgba(255,255,255,0.02); border-radius: 8px; align-items: center; }}
+    .lb-title {{ font-size: 12px; color: var(--text-secondary); font-weight: 600; margin-right: 4px; }}
+    .lb-item {{ display: inline-flex; align-items: center; gap: 4px; font-size: 13px; padding: 3px 8px; border-radius: 6px; background: rgba(255,255,255,0.04); border: 1px solid var(--border-color); }}
+    .lb-rank {{ color: var(--text-secondary); font-size: 11px; font-weight: 700; }}
+    .lb-name {{ font-weight: 600; }}
+    .lb-ret {{ color: #ff5b5b; font-weight: 700; font-size: 12px; }}
+    .lb-tag {{ font-size: 10px; font-weight: 700; padding: 0 5px; border-radius: 3px; }}
+    .lb-reso {{ color: #ff5b5b; background: rgba(255,91,91,0.15); }}
+    .lb-lead {{ color: #ffb020; background: rgba(255,176,32,0.15); }}
+    .lb-tag-reso {{ color: #ff5b5b; background: rgba(255,91,91,0.15); }}
+    .lb-tag-lead {{ color: #ffb020; background: rgba(255,176,32,0.15); }}
+    .lb-kind {{ font-size: 10px; font-weight: 700; padding: 0 5px; border-radius: 3px; }}
+    .lb-kind-core {{ color: #4ad07f; background: rgba(74,208,127,0.12); }}
+    .lb-kind-rel {{ color: #9aa0a6; background: rgba(154,160,166,0.12); }}
+    .lb-tabs {{ display: inline-flex; gap: 3px; margin-right: 6px; }}
+    .lb-tab {{ font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 5px; cursor: pointer;
+               background: rgba(255,255,255,0.04); color: var(--text-secondary);
+               border: 1px solid var(--border-color); transition: all .15s; }}
+    .lb-tab:hover {{ background: rgba(255,255,255,0.1); }}
+    .lb-tab.active {{ background: #ff5b5b; color: #fff; border-color: #ff5b5b; }}
+    .lb-win {{ display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0 -4px; padding: 0 12px; }}
     .rating-S {{ background: #ff4444; color: #fff; }} .rating-A {{ background: #ff8800; color: #fff; }}
     .rating-B\\+, .rating-B {{ background: #44aa44; color: #fff; }}
     .rating-C {{ background: #cccc00; color: #333; }} .rating-D {{ background: #666; color: #ddd; }}
     .rating-E, .rating-N {{ background: #333; color: #888; }}
+    .rating-NA {{ background: #1a1a1a; color: #555; }}
 
     .ml-table-wrap {{ overflow-x: auto; margin: 10px 0 20px; }}
     .ml-data-table {{ width: 100%; border-collapse: collapse; font-size: 12px; }}
@@ -2809,6 +3221,8 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     </div>
 
     {timing_html}
+
+    {stance_html}
 
     <div class="summary-grid">
         <div class="summary-card">
@@ -2983,6 +3397,11 @@ def main():
             dates = sorted(classified['日期'].unique())
             latest_date = dates[-1]
 
+    # 2.5 源头东财补救: CLS 把 62% 涨停股打成"其它"(46/74), 其中大量有真实题材
+    #   (医药/化工/新能源等)。在此对全窗口"其它"涨停股用东财概念归因回填, 使强度
+    #   计算/评级/天梯/词云全链一致受益 —— 否则这些涨停强度被错计入"其它"。
+    classified = rescue_others_with_em(classified)
+
     # 3. 构建盘面详情与词云
     print(f"\n[{datetime.now().strftime('%H:%M:%S')}] [3/7] 构建盘面详情与词云...")
     echelon = []
@@ -3113,15 +3532,20 @@ def main():
     
     # 计算细分板块累计涨幅 (高保真版)
     print(f"  📈 计算细分板块累计涨幅与领涨股...")
-    sub_returns, return_leaders = calc_subsector_returns(classified, price_df, dates)
-    
+    sub_returns, return_leaders, sub_leaderboard, sub_tracks = calc_subsector_returns(classified, price_df, dates)
+
     nday_leaders = get_nday_leaders(classified, price_df, '细分板块') if not price_df.empty else {}
 
     ratings = {n: rate_mainline(ml_strength[n].tail(10)) for n in MAINLINE_NAMES if n in ml_strength.columns}
     sub_ratings = {}
     for col in sub_strength.columns:
-        r = rate_sub(sub_strength[col])
-        sub_ratings[col] = (r, '') 
+        # 全窗口总强度为 0 = 近 60 日从无涨停股归入 → 标 NA (无从评级),
+        # 与"评过、退潮"的 E 级区分。渲染层 NA 显示灰色"—"。
+        if float(sub_strength[col].sum()) <= 0:
+            r = 'NA'
+        else:
+            r = rate_sub(sub_strength[col])
+        sub_ratings[col] = (r, '')
         for tag, (sub, ml) in CONCEPT_TO_SECTOR.items():
             if sub == col: sub_ratings[col] = (r, ml); break
 
@@ -3330,12 +3754,40 @@ def main():
         echelon=echelon, top30_data=top30_data, advance_decline=advance_decline,
         nday_leaders=nday_leaders, wc_data=wc_data, sentiment_df=sentiment_df,
         plates=plates_data, classified_df=classified, return_leaders=return_leaders,
-        mainline_ladder=mainline_ladder
+        mainline_ladder=mainline_ladder, sub_leaderboard=sub_leaderboard,
+        sub_tracks=sub_tracks
     )
 
     # 7. 自动化生成选股池与交易预案
     focus_pool_path = os.path.join(os.path.dirname(OUTPUT_HTML), "focus_pool.csv")
     generate_focus_pool(ml_strength, echelon, top30_data, sentiment_df, focus_pool_path)
+
+    # 7.5 站点发布: 归档当日报告 + 重建首页 (产品化: 首屏先给结论 + 可翻历史)
+    try:
+        from publish_site import publish
+        # 首屏结论 = 择时档位 (纯规则, main 已有全部入参, 与报告内 3005 行同口径)
+        try:
+            from market_stance import classify_market_stance
+            _stance = classify_market_stance(advance_decline, sentiment_df, echelon)
+        except Exception:
+            _stance = {}
+        # 实时数据可信度: 核心输入 (涨跌家数 + 情绪序列) 是否到位, 供首屏徽标显示
+        _ad_ok = bool(advance_decline) and (
+            float(advance_decline.get('up', 0) or 0) + float(advance_decline.get('down', 0) or 0) > 0)
+        _sent_ok = sentiment_df is not None and not sentiment_df.empty
+        _data_ok = _ad_ok and _sent_ok
+        _notes = []
+        if not _ad_ok:
+            _notes.append('涨跌家数缺失')
+        if not _sent_ok:
+            _notes.append('情绪序列缺失')
+        _summary = dict(_stance or {})
+        _summary['data_ok'] = _data_ok
+        if _notes:
+            _summary['data_note'] = '、'.join(_notes)
+        publish(OUTPUT_HTML, SITE_DIR, summary=_summary)
+    except Exception as e:
+        print(f"  [警告] 站点发布失败 (不影响主流程): {e}")
 
     print(f"\n{'='*60}")
     print(f"  ✅ V3 同步版已完成!")
