@@ -9,12 +9,35 @@ on:
 jobs:
   run-tracker:
     runs-on: ubuntu-latest
-    
+    # 部署到 gh-pages 分支需要写权限
+    permissions:
+      contents: write
+
     steps:
     - name: 检出代码
       uses: actions/checkout@v4
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: 检出 gh-pages 历史报告 (若分支已存在)
+      uses: actions/checkout@v4
+      continue-on-error: true  # 首次运行时 gh-pages 尚不存在, 忽略失败
+      with:
+        ref: gh-pages
+        path: _gh_pages_history
+
+    - name: 恢复历史报告到 output/site/ (让首页能扫到全部历史)
+      run: |
+        mkdir -p output/site
+        if [ -d _gh_pages_history ]; then
+          # 复制历史归档 (reports/ 及既有 index/latest), 排除 git 元数据
+          cp -r _gh_pages_history/. output/site/ 2>/dev/null || true
+          rm -rf output/site/.git
+          echo "已恢复历史报告:"
+          ls -1 output/site/reports/ 2>/dev/null | wc -l
+        else
+          echo "无历史报告 (首次运行)"
+        fi
       
     - name: 设置 Python 3.10
       uses: actions/setup-python@v5
@@ -57,6 +80,10 @@ jobs:
         EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
         EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
         EMAIL_RECEIVERS: ${{ secrets.EMAIL_RECEIVERS }}
+        # AI 反弹研判 (Claude API): 未配 secret 时脚本自动回落规则模板, 不会报错
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        # 第三方中转地址 (留空则用官方 api.anthropic.com)
+        ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
       run: |
         python src/主线强度追踪.py
         
@@ -70,3 +97,16 @@ jobs:
         git add data/涨停历史缓存.csv data/cls_plate_cache.csv data/sentiment_history_cache.csv 2>/dev/null || true
         # 如果文件有变更，则自动 Commit 和 Push
         git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-update market data caches [skip ci]" && git push)
+
+    - name: 部署报告站点到 GitHub Pages
+      # 把 output/site/ (当日报告 + 历史归档 + 首页) 推到 gh-pages 分支
+      # 首页地址: https://<用户名>.github.io/<仓库名>/
+      uses: peaceiris/actions-gh-pages@v4
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./output/site
+        publish_branch: gh-pages
+        # 历史报告已在跑批前恢复进 output/site/, 这里全量发布即可
+        # (force_orphan 保持 gh-pages 干净, 只留站点内容不留历史 commit)
+        force_orphan: true
+        commit_message: "Deploy report site [skip ci]"

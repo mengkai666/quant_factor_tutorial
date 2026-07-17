@@ -31,6 +31,10 @@ PRICE_CACHE = os.path.join(DATA_DIR, 'price_history_cache.csv')
 INDUSTRY_CACHE = os.path.join(DATA_DIR, 'industry_cache.csv')
 SENTIMENT_CACHE = os.path.join(DATA_DIR, 'sentiment_history_cache.csv')
 CLS_PLATE_CACHE = os.path.join(DATA_DIR, 'cls_plate_cache.csv')
+EM_PLATE_CACHE = os.path.join(DATA_DIR, 'em_stock_plate_cache.csv')  # 东财个股所属概念板块归因缓存
 
 # === 输出产物 (output/) ===
 OUTPUT_HTML = os.path.join(OUTPUT_DIR, '主线强度追踪.html')
+
+# === 站点发布 (归档历史报告 + 首页; 本地累积在 output/site/, CI 部署到 gh-pages) ===
+SITE_DIR = os.path.join(OUTPUT_DIR, 'site')
