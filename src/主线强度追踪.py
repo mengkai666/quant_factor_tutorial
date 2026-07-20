@@ -22,7 +22,6 @@ from timing_signal import generate_timing_signal
 from market_stance import classify_market_stance, render_stance_html
 from screener import generate_focus_pool
 import smtplib
-import webbrowser
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
@@ -47,7 +46,7 @@ from paths import (
     DATA_DIR,
     ZT_CACHE_FILE, PRICE_CACHE, INDUSTRY_CACHE,
     SENTIMENT_CACHE, CLS_PLATE_CACHE, OUTPUT_HTML,
-    SITE_DIR,
+    SITE_DIR, SITE_URL,
 )
 CACHE_DIR = DATA_DIR  # 向后兼容: 旧代码引用 CACHE_DIR 的地方仍指向数据目录
 
@@ -917,6 +916,22 @@ REBOUND_MILD_AD = 1.05     # 1.05~1.5 = 温和反弹
 REBOUND_WEAK_AD = 0.85     # 0.85~1.05 = 分歧整理; <0.85 = 普跌
 ACTIVE_ML_MIN_DAYS = 3     # 近 N 日涨停数持续居前才算"主动主线"
 ACTIVE_ML_RECENT = 5       # 观察窗口 (交易日)
+
+# 市场宽度体检: 一份合法的全市场 A/D, up+down 应接近全市场规模 (5000+)。
+# 任何来源 (FuPan/腾讯实时/价格缓存) 只要 up+down 低于此阈值, 即判定为残缺快照,
+# 强制重算; 重算后仍不达标则标"数据未就位", 绝不把残缺家数发布出去。
+# 阈值取 4000: 既能拦住 ~1688 这类只覆盖 1/3 市场的残缺值,
+# 又不会误伤 513涨/4580跌 (合计5093) 这类合法的极端普跌日。
+MIN_MARKET_BREADTH = 4000
+
+
+def is_ad_incomplete(up, down):
+    """市场宽度体检: up+down 低于全市场规模阈值 = 残缺快照, 不可作权威值发布。
+    三道来源 (FuPan/腾讯重算/价格缓存) 与显示层共用此判据, 单一真源避免口径漂移。"""
+    try:
+        return (float(up or 0) + float(down or 0)) < MIN_MARKET_BREADTH
+    except (ValueError, TypeError):
+        return True
 
 
 def generate_rebound_analysis(advance_decline, sentiment_df, echelon):
@@ -1909,12 +1924,253 @@ def calc_nday_returns(price_df, periods=[5, 10, 20, 60]):
     return res_df.reset_index(drop=True)
 
 
-# ============================================================
-# HTML 生成
-# ============================================================
+def build_sector_heatmap(classified_df, price_df, echelon):
+    """板块热力矩阵: 多周期涨幅 + 动量方向 + 连板/领涨/中军角色。
+
+    返回 HTML 字符串, 直接嵌入报告。
+    数据源: price_df (全市场价格), classified_df (涨停分类), echelon (连板梯队)。
+    """
+    if price_df.empty:
+        return ''
+
+    PERIODS = [5, 10, 20, 30]
+
+    # === 1. 板块-个股映射 (复用 calc_subsector_returns 同逻辑) ===
+    code_to_sector = {}
+    code_to_name = {}
+    code_to_ml = {}  # 大主线
+
+    if os.path.exists(INDUSTRY_CACHE):
+        try:
+            idf = pd.read_csv(INDUSTRY_CACHE, dtype=str)
+            for _, row in idf.iterrows():
+                code, name, ind = row['code'], row['name'], row.get('industry', '')
+                code_to_name[code] = name
+                sub, ml = INDUSTRY_TO_SECTOR.get(ind, (None, None))
+                if sub:
+                    code_to_sector[code] = sub
+                    code_to_ml[code] = ml
+        except Exception:
+            pass
+
+    if not classified_df.empty:
+        for code, nm in classified_df.drop_duplicates('代码').set_index('代码')['名称'].items():
+            code_to_name[code] = nm
+        recent_dates = sorted(classified_df['日期'].unique())[-ZT_MEMBERSHIP_DAYS:]
+        recent_zt = classified_df[classified_df['日期'].isin(recent_dates)]
+        c_map = recent_zt.sort_values('日期').drop_duplicates('代码', keep='last').set_index('代码')
+        for code, row in c_map.iterrows():
+            if row['细分板块'] and row['细分板块'] != '其它':
+                code_to_sector[code] = row['细分板块']
+                code_to_ml[code] = row.get('大主线', '')
+
+    try:
+        from em_stock_plates import load_all_attributions
+        em_attr = load_all_attributions()
+        for code, (sub, ml) in em_attr.items():
+            if sub and sub != '其它':
+                code_to_sector[code] = sub
+                code_to_ml[code] = ml or ''
+    except Exception:
+        pass
+
+    sector_to_codes = {}
+    for code, sector in code_to_sector.items():
+        sector_to_codes.setdefault(sector, []).append(code)
+
+    # === 2. 价格矩阵 + 各周期涨幅 ===
+    p_df = price_df.pivot(index='date', columns='code', values='close').ffill().bfill()
+    n_rows = len(p_df)
+    if n_rows < 6:
+        return ''
+    latest = p_df.iloc[-1]
+
+    # === 3. 连板股按板块归集 ===
+    sector_lianban = {}
+    for e in (echelon or []):
+        codes_list = e.get('codes', [])
+        for stock in codes_list:
+            code = stock.get('code', '')
+            name = stock.get('name', code)
+            lb = stock.get('lianban', 0)
+            sec = code_to_sector.get(code)
+            if sec and lb >= 1:
+                sector_lianban.setdefault(sec, []).append((name, lb))
+    for sec in sector_lianban:
+        sector_lianban[sec].sort(key=lambda x: -x[1])
+
+    # === 4. 每板块: 多周期涨幅 + 动量 + 领涨 + 中军 ===
+    rows = []
+    for sector, codes in sector_to_codes.items():
+        valid = [c for c in codes if c in p_df.columns and latest.get(c, 0) > 0]
+        if len(valid) < 3:
+            continue
+
+        period_avg = {}
+        for per in PERIODS:
+            idx = max(n_rows - 1 - per, 0)
+            if idx >= n_rows - 1:
+                continue
+            base = p_df.iloc[idx][valid].replace(0, np.nan)
+            cur = latest[valid]
+            rets = ((cur / base) - 1) * 100
+            rets = rets.dropna()
+            period_avg[per] = round(float(rets.mean()), 2) if not rets.empty else 0.0
+
+        if not period_avg:
+            continue
+
+        # 动量: 5日涨幅 vs 前5日涨幅
+        momentum = ''
+        r5 = period_avg.get(5, 0)
+        r10 = period_avg.get(10, 0)
+        r20 = period_avg.get(20, 0)
+        prev5 = r10 - r5  # 前5日涨幅 ≈ 10日总 - 近5日
+        if r5 > 3 and r20 < 0:
+            momentum = '★新起'
+        elif r5 > prev5 + 1:
+            momentum = '▲加速'
+        elif r5 < prev5 - 1:
+            momentum = '▼减速'
+        else:
+            momentum = '— 持平'
+
+        # 领涨 Top5 (5日涨幅)
+        idx5 = max(n_rows - 1 - 5, 0)
+        base5 = p_df.iloc[idx5][valid].replace(0, np.nan)
+        rets5 = ((latest[valid] / base5) - 1) * 100
+        rets5 = rets5.dropna().sort_values(ascending=False)
+        top_gainers = []
+        for c in rets5.head(5).index:
+            nm = (code_to_name.get(c) or c).strip()
+            if 'ST' in nm.upper() or '退' in nm:
+                continue
+            top_gainers.append((nm, round(float(rets5[c]), 1)))
+
+        # 趋势中军 Top3 (20日涨幅靠前 + 近5日没涨停的稳定票)
+        zt_codes_5d = set()
+        if not classified_df.empty:
+            recent5 = sorted(classified_df['日期'].unique())[-5:]
+            zt_codes_5d = set(classified_df[classified_df['日期'].isin(recent5)]['代码'].unique())
+        idx20 = max(n_rows - 1 - 20, 0)
+        base20 = p_df.iloc[idx20][valid].replace(0, np.nan)
+        rets20 = ((latest[valid] / base20) - 1) * 100
+        rets20 = rets20.dropna().sort_values(ascending=False)
+        mid_caps = []
+        for c in rets20.index:
+            if c in zt_codes_5d:
+                continue
+            nm = (code_to_name.get(c) or c).strip()
+            if 'ST' in nm.upper() or '退' in nm:
+                continue
+            mid_caps.append((nm, round(float(rets20[c]), 1)))
+            if len(mid_caps) >= 3:
+                break
+
+        lianban = sector_lianban.get(sector, [])[:5]
+        mainline = code_to_ml.get(codes[0], '')
+
+        rows.append({
+            'sector': sector, 'mainline': mainline, 'momentum': momentum,
+            'periods': period_avg, 'n_stocks': len(valid),
+            'lianban': lianban, 'top_gainers': top_gainers, 'mid_caps': mid_caps,
+        })
+
+    if not rows:
+        return '', []
+
+    rows.sort(key=lambda r: r['periods'].get(5, 0), reverse=True)
+    top_sectors = [r['sector'] for r in rows]
+
+    # === 5. 渲染 HTML ===
+    def _clr(val):
+        if val >= 8: return '#ff4444'
+        if val >= 4: return '#ff7b72'
+        if val >= 1: return '#ffa657'
+        if val >= -1: return '#8b949e'
+        if val >= -4: return '#79c0ff'
+        return '#58a6ff'
+
+    def _mom_clr(m):
+        if '新起' in m: return '#f0e040'
+        if '加速' in m: return '#ff5b5b'
+        if '减速' in m: return '#58a6ff'
+        return '#8b949e'
+
+    def _bg(val):
+        if val >= 8: return 'rgba(255,68,68,.12)'
+        if val >= 4: return 'rgba(255,123,114,.08)'
+        if val >= 1: return 'rgba(255,166,87,.05)'
+        if val >= -1: return 'transparent'
+        if val >= -4: return 'rgba(121,192,255,.05)'
+        return 'rgba(88,166,255,.08)'
+
+    html_rows = ''
+    for i, r in enumerate(rows):
+        per_cells = ''
+        for p in PERIODS:
+            val = r['periods'].get(p, 0)
+            per_cells += f'<td style="text-align:center;padding:10px 8px;color:{_clr(val)};background:{_bg(val)};font-weight:700;font-size:15px;">{val:+.1f}%</td>'
+
+        mom = r['momentum']
+        mom_cell = f'<td style="text-align:center;padding:10px;color:{_mom_clr(mom)};font-weight:700;font-size:14px;white-space:nowrap;">{mom}</td>'
+
+        # 角色展开行
+        lb_tags = ''.join(
+            f'<span style="display:inline-block;background:#ff5b5b20;color:#ff5b5b;border:1px solid #ff5b5b40;border-radius:6px;padding:2px 8px;margin:2px;font-size:12px;font-weight:700;">{nm}({lb}板)</span>'
+            for nm, lb in r['lianban']
+        ) or '<span style="color:#6e7681;font-size:12px;">无</span>'
+
+        gain_tags = ''.join(
+            f'<span style="display:inline-block;background:#ffa65720;color:#ffa657;border:1px solid #ffa65740;border-radius:6px;padding:2px 8px;margin:2px;font-size:12px;">{nm} <b>{ret:+.1f}%</b></span>'
+            for nm, ret in r['top_gainers']
+        ) or '<span style="color:#6e7681;font-size:12px;">—</span>'
+
+        mid_tags = ''.join(
+            f'<span style="display:inline-block;background:#3fb95020;color:#3fb950;border:1px solid #3fb95040;border-radius:6px;padding:2px 8px;margin:2px;font-size:12px;">{nm} <b>{ret:+.1f}%</b></span>'
+            for nm, ret in r['mid_caps']
+        ) or '<span style="color:#6e7681;font-size:12px;">—</span>'
+
+        detail_id = f'hm_detail_{i}'
+        border_top = 'border-top:1px solid #21262d;' if i > 0 else ''
+        ml_badge = f'<span style="color:#6e7681;font-size:11px;margin-left:6px;">({r["mainline"]})</span>' if r['mainline'] else ''
+
+        html_rows += f'''
+        <tr style="{border_top}cursor:pointer;" onclick="var d=document.getElementById('{detail_id}');d.style.display=d.style.display==='none'?'table-row':'none';">
+          <td style="padding:10px 12px;font-weight:700;color:#e6edf3;white-space:nowrap;"><span style="font-size:15px;">{r["sector"]}</span>{ml_badge}<br><span style="color:#6e7681;font-size:11px;">{r["n_stocks"]}只</span></td>
+          {per_cells}
+          {mom_cell}
+        </tr>
+        <tr id="{detail_id}" style="display:none;background:#0d1117;">
+          <td colspan="6" style="padding:12px 16px;">
+            <div style="margin-bottom:8px;"><span style="color:#8b949e;font-size:12px;font-weight:700;">🔥 连板:</span> {lb_tags}</div>
+            <div style="margin-bottom:8px;"><span style="color:#8b949e;font-size:12px;font-weight:700;">📈 5日领涨:</span> {gain_tags}</div>
+            <div><span style="color:#8b949e;font-size:12px;font-weight:700;">🏛️ 趋势中军(20日):</span> {mid_tags}</div>
+          </td>
+        </tr>'''
+
+    return f'''
+    <div style="overflow-x:auto;margin-bottom:30px;">
+    <table style="width:100%;border-collapse:collapse;background:#161b22;border-radius:12px;overflow:hidden;border:1px solid #30363d;">
+      <thead>
+        <tr style="background:#0d1117;">
+          <th style="text-align:left;padding:12px;color:#8b949e;font-size:13px;font-weight:700;border-bottom:1px solid #30363d;">板块</th>
+          <th style="text-align:center;padding:12px;color:#8b949e;font-size:13px;font-weight:700;border-bottom:1px solid #30363d;">5日</th>
+          <th style="text-align:center;padding:12px;color:#8b949e;font-size:13px;font-weight:700;border-bottom:1px solid #30363d;">10日</th>
+          <th style="text-align:center;padding:12px;color:#8b949e;font-size:13px;font-weight:700;border-bottom:1px solid #30363d;">20日</th>
+          <th style="text-align:center;padding:12px;color:#8b949e;font-size:13px;font-weight:700;border-bottom:1px solid #30363d;">30日</th>
+          <th style="text-align:center;padding:12px;color:#8b949e;font-size:13px;font-weight:700;border-bottom:1px solid #30363d;">动量</th>
+        </tr>
+      </thead>
+      <tbody>
+        {html_rows}
+      </tbody>
+    </table>
+    <div style="color:#6e7681;font-size:12px;margin-top:8px;text-align:right;">点击板块行展开 连板/领涨/中军 详情 · 按5日涨幅排序 · ★新起=5日强但20日弱 · ▲加速=近5日>前5日</div>
+    </div>''', top_sectors
 def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thresh,
                   leaders, dates, ratings, sub_ratings,
-                  echelon, top30_data, advance_decline, nday_leaders=None, wc_data=None, sentiment_df=None, plates=None, classified_df=None, return_leaders=None, mainline_ladder=None, sub_leaderboard=None, sub_tracks=None):
+                  echelon, top30_data, advance_decline, nday_leaders=None, wc_data=None, sentiment_df=None, plates=None, classified_df=None, return_leaders=None, mainline_ladder=None, sub_leaderboard=None, sub_tracks=None, price_df=None):
     
     if len(dates) > 65:
         dates = dates[-65:]
@@ -2178,7 +2434,12 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
         rating_html += f'<span class="rating-item rating-{r}">{n}: {r}级 <span class="trend-tag {tcls}">{arrow}{tlabel}</span></span>\n'
 
     ad_html = ''
-    if advance_decline:
+    if advance_decline and advance_decline.get("ad_incomplete"):
+        # 全市场 A/D 未就位: 三道来源都没取到合格家数, 显式标注而非发布残缺数
+        ad_html = '''<div class="ad-stats">
+            <span style="background:rgba(210,153,34,0.12);color:var(--accent-yellow);border:1px solid var(--accent-yellow);padding:8px 20px;border-radius:12px;font-weight:bold;font-size:15px;">⚠️ 涨跌家数数据未就位 (全市场行情暂未拉全, 稍后自动补全)</span>
+        </div>'''
+    elif advance_decline:
         up = advance_decline.get("up",0)
         down = advance_decline.get("down",0)
         ad_ratio = round(up / max(down, 1), 2)
@@ -2278,6 +2539,12 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
                 'itemStyle': {'color': ml_colors.get(n, '#fff')},
                 '_raw': ml_raw_data[n]})
 
+    # === 热力矩阵 (替代细分板块折线图) ===
+    heatmap_html = ''
+    heatmap_top_sectors = []
+    if price_df is not None and not price_df.empty:
+        heatmap_html, heatmap_top_sectors = build_sector_heatmap(classified_df, price_df, echelon)
+
     sub_charts_html = ''
     # 榜单窗口切换的全局 JS (定义一次)
     sub_charts_html += '''
@@ -2373,7 +2640,14 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
                 f'<span class="lb-ret">+{r["ret"]}%</span>'
                 f'<span class="lb-kind {kcls}">{kind}</span>{tag_html}')
 
-    for idx, sector in enumerate(sorted(all_sectors_with_data)):
+    # 只给热力矩阵排名前10的板块画折线图 (其余在热力矩阵里已可点开看角色)
+    TOP_N_CHARTS = 10
+    if heatmap_top_sectors:
+        chart_sectors = [s for s in heatmap_top_sectors[:TOP_N_CHARTS] if s in all_sectors_with_data]
+    else:
+        chart_sectors = sorted(all_sectors_with_data)[:TOP_N_CHARTS]
+
+    for idx, sector in enumerate(chart_sectors):
         chart_id = f'sub_{idx}'
         sr = sub_ratings.get(sector, ('N', ''))[0] if sector in sub_ratings else 'N'
         sr_title = '无数据' if sr == 'NA' else f'{sr}级'
@@ -2546,7 +2820,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
             'itemStyle': {'color': '#3fb950', 'opacity': 0.8}  # type: ignore
         })  # type: ignore
         
-        # === 明日情绪预测 & 仓位建议 计算 ===
+        # === 情绪状态解读 & 仓位建议 (规则启发式, 非样本外验证的预测器) ===
         predict_direction = '震荡'
         predict_emoji = '⚖️'
         predict_range_lo = 40
@@ -2556,14 +2830,18 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
         position_pct = '5成'
         position_color = '#d29922'
         predict_reasons = []
-        
+
+        # 强制数值, 避免字符串/NaN 污染动量与区间
+        mood_vals = [float(v) if pd.notna(v) else 0.0 for v in mood_vals]
+        up_vals = [float(v) if pd.notna(v) else 0.0 for v in up_vals]
+
         if len(mood_vals) >= 3:
             latest_mood = mood_vals[-1]
             prev_mood = mood_vals[-2]
             prev2_mood = mood_vals[-3]
             mood_delta = latest_mood - prev_mood
             mood_trend = latest_mood - prev2_mood
-            
+
             # 因子1: 情绪动量
             if mood_delta > 5 and mood_trend > 8:
                 predict_direction = '偏多'
@@ -2579,36 +2857,47 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
                 predict_reasons.append('情绪波动收敛,多空分歧')
             else:
                 predict_reasons.append(f'情绪变化{mood_delta:+.0f},方向待确认')
-            
-            # 因子2: 绝对位置
+
+            # 因子2: 绝对位置 (冰点/高位文案与仓位方向对齐, 避免"空仓+催反弹"打架)
             if latest_mood > 75:
-                predict_reasons.append('情绪处于高位,注意过热回调')
                 if mood_delta < 0:
+                    predict_reasons.append('情绪高位回落,注意过热兑现')
                     predict_direction = '偏空'
                     predict_emoji = '📉'
                     predict_stars = max(predict_stars, 3)
+                else:
+                    predict_reasons.append('情绪处于高位,警惕过热')
             elif latest_mood < 25:
-                predict_reasons.append('情绪处于冰点,关注超跌反弹')
                 if mood_delta > 0:
+                    predict_reasons.append('情绪处于冰点且回升,可观察超跌反弹')
                     predict_direction = '偏多'
                     predict_emoji = '📈'
                     predict_stars = max(predict_stars, 3)
-            
-            # 因子3: 涨停数变化
+                else:
+                    # 冰点+仍在下行/走弱: 防守优先, 不主动喊反弹
+                    predict_reasons.append('情绪处于冰点,防守为主,仅观察反弹信号')
+
+            # 因子3: 上涨家数变化 (非涨停数)
             if len(up_vals) >= 2:
                 up_delta = up_vals[-1] - up_vals[-2]
                 if up_delta > 200:
                     predict_reasons.append(f'上涨家数大增{int(up_delta)},资金回暖')
-                    if predict_direction != '偏空': predict_direction = '偏多'; predict_emoji = '📈'
+                    if predict_direction != '偏空':
+                        predict_direction = '偏多'
+                        predict_emoji = '📈'
                 elif up_delta < -200:
                     predict_reasons.append(f'上涨家数骤降{int(up_delta)},资金退潮')
-                    if predict_direction != '偏多': predict_direction = '偏空'; predict_emoji = '📉'
-            
-            # 预测区间
-            base = latest_mood + mood_delta * 0.5
+                    if predict_direction != '偏多':
+                        predict_direction = '偏空'
+                        predict_emoji = '📉'
+
+            # 参考区间: 情绪分外推后夹到 [0,100], 且保证 hi >= lo (修 0--6 负区间 bug)
+            base = max(0.0, min(100.0, latest_mood + mood_delta * 0.5))
             predict_range_lo = max(0, int(base - 10))
             predict_range_hi = min(100, int(base + 10))
-            
+            if predict_range_hi < predict_range_lo:
+                predict_range_hi = predict_range_lo
+
             # 仓位建议
             if predict_direction == '偏多' and latest_mood > 50:
                 position_advice = '积极加仓'; position_pct = '7-8成'; position_color = '#ff7b72'
@@ -2620,24 +2909,24 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
                 position_advice = '减仓防守'; position_pct = '3-4成'; position_color = '#3fb950'
             else:
                 position_advice = '半仓观望'; position_pct = '5成'; position_color = '#d29922'
-            
+
             predict_stars = min(predict_stars, 5)
-        
+
         stars_html = '★' * predict_stars + '☆' * (5 - predict_stars)
-        reasons_html = '<br>'.join(f'• {r}' for r in predict_reasons[:4]) if predict_reasons else '• 数据不足,无法生成预测'
-        
+        reasons_html = '<br>'.join(f'• {r}' for r in predict_reasons[:4]) if predict_reasons else '• 数据不足,无法生成解读'
+
         sentiment_charts_html = f'''
         <h2 class="section-title">🔥 冰火之歌：短线情绪周期统计 <span class="help-icon" data-tip="0-100分制。反映市场短线投机活跃度，20分以下为极冷冰点，80分以上为极热高潮。">?</span></h2>
         <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:stretch;">
         <div class="chart-container" id="sentimentChart" style="height:350px;flex:1;min-width:600px;"></div>
         <div style="min-width:260px;max-width:320px;background:var(--card-bg);border:1px solid var(--border-color);border-radius:12px;padding:20px;backdrop-filter:var(--glass-blur);box-shadow:0 4px 24px rgba(0,0,0,0.3);display:flex;flex-direction:column;gap:12px;">
-            <div style="text-align:center;font-size:16px;font-weight:800;color:#58a6ff;border-bottom:1px solid var(--border-color);padding-bottom:10px;">🔮 明日情绪预测</div>
+            <div style="text-align:center;font-size:16px;font-weight:800;color:#58a6ff;border-bottom:1px solid var(--border-color);padding-bottom:10px;">📊 情绪状态解读</div>
             <div style="display:flex;justify-content:space-between;align-items:center;">
-                <span style="color:var(--text-secondary);font-size:12px;">预测方向</span>
+                <span style="color:var(--text-secondary);font-size:12px;">倾向方向</span>
                 <span style="font-size:20px;font-weight:800;color:{position_color};">{predict_emoji} {predict_direction}</span>
             </div>
             <div style="display:flex;justify-content:space-between;align-items:center;">
-                <span style="color:var(--text-secondary);font-size:12px;">预测区间</span>
+                <span style="color:var(--text-secondary);font-size:12px;">参考区间</span>
                 <span style="font-size:16px;font-weight:700;color:#e6edf3;">{predict_range_lo}-{predict_range_hi}%</span>
             </div>
             <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -3267,7 +3556,8 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
 <h2 class="section-title">📊 大主线强度走势 <span class="help-icon" data-tip="展示核心主线板块的相对强度变化趋势。强度越高代表板块在该时间点的赚钱效应越强。">?</span></h2>
 <div class="chart-container" id="mlChart" style="height:450px;"></div>
 
-<h2 class="section-title">📡 细分板块强度追踪 <span class="help-icon" data-tip="监控更细颗粒度的行业板块强度，用于寻找主线下的分支补涨逻辑。">?</span></h2>
+<h2 class="section-title">📡 细分板块热力矩阵 <span class="help-icon" data-tip="全市场价格驱动的板块涨幅矩阵。多周期涨幅+动量方向，点击展开连板/领涨/中军角色。">?</span></h2>
+{heatmap_html}
 {sub_charts_html}
 
 <h2 class="section-title">📈 N日涨幅排行榜 Top30 <span class="help-icon" data-tip="统计个股在5/10/20/60日内的累计涨幅，不仅展示当前热门，更能发现中期趋势走强的‘超预期’品种。">?</span></h2>
@@ -3439,9 +3729,13 @@ def main():
             'zt_max_height': 0 
         }
     
-    # 如果 FuPan 涨跌家数缺失, 用腾讯批量接口实时算 (绕过代理, 替代被墙的东财 spot)
-    if advance_decline.get('up', 0) == 0 or (
-        advance_decline.get('up', 0) == advance_decline.get('down', 0) == 0):
+    # 市场宽度体检: FuPan 家数缺失 (up=0) 或残缺 (up+down 明显小于全市场规模) 时,
+    # 用腾讯批量接口实时重算 (绕过代理, 替代被墙的东财 spot)。
+    # 关键: 不再只看 "是否为 0" —— 414涨/1274跌 这类非零但残缺的快照 (合计1688,
+    # 仅覆盖 ~1/3 市场) 过去会绕过 up==0 判断直接发布, 宽度体检能把它一并拦下。
+    _fu_up = advance_decline.get('up', 0) or 0
+    _fu_dn = advance_decline.get('down', 0) or 0
+    if is_ad_incomplete(_fu_up, _fu_dn):
         try:
             _all_codes = []
             if os.path.exists(INDUSTRY_CACHE):
@@ -3449,12 +3743,18 @@ def main():
                 _all_codes = [c for c in _idf['code'].dropna().unique().tolist()
                               if c.startswith('sh') or c.startswith('sz')]
             if _all_codes:
-                print("  📊 从腾讯批量接口实时算涨跌家数...")
+                if _fu_up > 0:
+                    print(f"  ⚠️ FuPan 家数残缺 (涨{_fu_up}/跌{_fu_dn}, 合计{_fu_up + _fu_dn} < {MIN_MARKET_BREADTH}), 腾讯批量重算...")
+                else:
+                    print("  📊 从腾讯批量接口实时算涨跌家数...")
                 up_count, down_count = _fetch_tencent_ad(_all_codes)
-                if up_count > 0:
+                # 重算结果同样要过宽度体检, 达标才采用 (避免残缺覆盖残缺)
+                if up_count > 0 and (up_count + down_count) >= MIN_MARKET_BREADTH:
                     advance_decline['up'] = up_count
                     advance_decline['down'] = down_count
-                    print(f"  ✅ 腾讯实时: 涨{up_count} 跌{down_count}")
+                    print(f"  ✅ 腾讯实时: 涨{up_count} 跌{down_count} (合计{up_count + down_count})")
+                elif up_count > 0:
+                    print(f"  ⚠️ 腾讯重算仍残缺 (涨{up_count}/跌{down_count}, 合计{up_count + down_count}), 暂不采用")
         except Exception as e:
             print(f"  ⚠️ 腾讯实时涨跌家数获取失败: {e}")
 
@@ -3477,6 +3777,18 @@ def main():
             advance_decline['down'] = _rec['down']
     except Exception as e:
         print(f"  ⚠️ 最新日 A/D 校准跳过: {e}")
+
+    # === 发布前最终宽度 guard ===
+    # 三道来源 (FuPan / 腾讯重算 / 价格缓存校准) 全部走完后, 家数若仍不达标,
+    # 说明这一天的全市场 A/D 确实没就位。此时打标 ad_incomplete, 由显示层标
+    # "数据未就位", 绝不把残缺家数当权威值发布 (根治 414/1274 这类泄漏)。
+    _final_up = advance_decline.get('up', 0) or 0
+    _final_dn = advance_decline.get('down', 0) or 0
+    if is_ad_incomplete(_final_up, _final_dn):
+        advance_decline['ad_incomplete'] = True
+        print(f"  🚫 A/D 家数未就位 (涨{_final_up}/跌{_final_dn}, 合计{_final_up + _final_dn} < {MIN_MARKET_BREADTH}), 页面标 '数据未就位', 不发布残缺值")
+    else:
+        advance_decline['ad_incomplete'] = False
 
     zt_max_height = 0
     if echelon:
@@ -3755,7 +4067,7 @@ def main():
         nday_leaders=nday_leaders, wc_data=wc_data, sentiment_df=sentiment_df,
         plates=plates_data, classified_df=classified, return_leaders=return_leaders,
         mainline_ladder=mainline_ladder, sub_leaderboard=sub_leaderboard,
-        sub_tracks=sub_tracks
+        sub_tracks=sub_tracks, price_df=price_df
     )
 
     # 7. 自动化生成选股池与交易预案
@@ -3791,7 +4103,8 @@ def main():
 
     print(f"\n{'='*60}")
     print(f"  ✅ V3 同步版已完成!")
-    print(f"  → 打开 {OUTPUT_HTML} 查看")
+    print(f"  → 本地报告: {OUTPUT_HTML}")
+    print(f"  → GitHub Pages: {SITE_URL}")
     print(f"{'='*60}")
 
     # 8. 自动发送邮件
@@ -3877,14 +4190,14 @@ def main():
         except Exception as e:
             print(f"  [错误] 邮件发送失败: {e}")
 
-    # 自动打开生成的 HTML 报告
+    # 自动打开 GitHub Pages 站点 (本地跑完后; CI 无桌面, 跳过)
+    # 注: 线上页面由 CI 部署后才更新; 本地刚生成的内容先看 output/site/ 或等 Actions 完成
     try:
-        if os.path.exists(OUTPUT_HTML):
-            abs_path = os.path.abspath(OUTPUT_HTML)
-            print(f"\n🌐 正在浏览器中打开报告: {abs_path}")
-            webbrowser.open(f"file://{abs_path}")
+        if not IS_GITHUB_ACTIONS:
+            from publish_site import open_site
+            open_site(SITE_URL)
     except Exception as e:
-        print(f"  [警告] 自动打开浏览器失败: {e}")
+        print(f"  [警告] 自动打开 GitHub Pages 失败: {e}")
 
 
 if __name__ == '__main__':

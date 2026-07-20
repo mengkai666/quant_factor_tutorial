@@ -266,3 +266,32 @@ def publish(output_html, site_dir, report_date=None, summary=None):
     print(f"  [publish] 已归档 {date_str} → {archived}")
     print(f"  [publish] 首页已重建 ({len(reports)} 期) → {index_path}")
     return archived, index_path
+
+
+def open_site(url=None):
+    """在系统默认浏览器中打开 GitHub Pages 站点。
+
+    本地跑批结束后调用; CI (无桌面) 不应调用。
+    url 缺省取 paths.SITE_URL; 可用环境变量 SITE_URL 覆盖。
+    返回 True 表示已发起打开, False 表示跳过/失败。
+    """
+    if url is None:
+        try:
+            from paths import SITE_URL as _default
+            url = _default
+        except Exception:
+            url = os.environ.get(
+                'SITE_URL',
+                'https://mengkai666.github.io/quant_factor_tutorial/',
+            )
+    if not url:
+        print('  [publish] SITE_URL 为空, 跳过打开站点')
+        return False
+    try:
+        import webbrowser
+        print(f'  🌐 正在浏览器中打开 GitHub Pages: {url}')
+        webbrowser.open(url)
+        return True
+    except Exception as e:
+        print(f'  [警告] 打开 GitHub Pages 失败: {e}')
+        return False

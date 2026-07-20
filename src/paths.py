@@ -38,3 +38,8 @@ OUTPUT_HTML = os.path.join(OUTPUT_DIR, '主线强度追踪.html')
 
 # === 站点发布 (归档历史报告 + 首页; 本地累积在 output/site/, CI 部署到 gh-pages) ===
 SITE_DIR = os.path.join(OUTPUT_DIR, 'site')
+# GitHub Pages 首页 (可用环境变量 SITE_URL 覆盖; 本地跑完后自动打开)
+SITE_URL = os.environ.get(
+    'SITE_URL',
+    'https://mengkai666.github.io/quant_factor_tutorial/',
+)

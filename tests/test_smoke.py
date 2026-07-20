@@ -45,6 +45,23 @@ def test_mainline_names_seven():
     assert m.MAINLINE_NAMES == ['AI算力', '机器人', 'AI应用', '新能源电网', '军工航天', '周期资源', '医药']
 
 
+def test_ad_breadth_guard_blocks_partial_snapshot():
+    """残缺 A/D 快照必须被市场宽度体检拦下, 合法家数须放行 (根治 414/1274 泄漏)。"""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        'mztrack_ad', os.path.join(_ROOT, 'src', '主线强度追踪.py'))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    # 截图里的残缺快照 (合计1688, 仅覆盖 ~1/3 市场) 必须判为未就位
+    assert m.is_ad_incomplete(414, 1274) is True
+    # up=0 / 空值 也算未就位
+    assert m.is_ad_incomplete(0, 0) is True
+    assert m.is_ad_incomplete(None, None) is True
+    # 全市场权威家数放行: 普通日 (1688/3378=5066) 与极端普跌日 (513/4580=5093)
+    assert m.is_ad_incomplete(1688, 3378) is False
+    assert m.is_ad_incomplete(513, 4580) is False
+
+
 def test_classify_by_tags_no_substring_blackhole():
     """子串黑洞已修复: 短键不再误吸无关标签。"""
     import importlib.util
