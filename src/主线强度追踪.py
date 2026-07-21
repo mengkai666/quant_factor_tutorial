@@ -2793,6 +2793,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
             top30_html += '</div></div>'
 
     sentiment_charts_html = ''
+    mood_card_html = ''  # 情绪状态解读卡片, 供顶部预览区复用 (无情绪数据时为空)
     if sentiment_df is not None and not sentiment_df.empty and 'ad_mood' in sentiment_df.columns:
         s_dates = sentiment_df['日期'].tolist()
         s_dates_fmt = [fmt(d) for d in s_dates]
@@ -2915,10 +2916,8 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
         stars_html = '★' * predict_stars + '☆' * (5 - predict_stars)
         reasons_html = '<br>'.join(f'• {r}' for r in predict_reasons[:4]) if predict_reasons else '• 数据不足,无法生成解读'
 
-        sentiment_charts_html = f'''
-        <h2 class="section-title">🔥 冰火之歌：短线情绪周期统计 <span class="help-icon" data-tip="0-100分制。反映市场短线投机活跃度，20分以下为极冷冰点，80分以上为极热高潮。">?</span></h2>
-        <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:stretch;">
-        <div class="chart-container" id="sentimentChart" style="height:350px;flex:1;min-width:600px;"></div>
+        # 情绪状态解读卡片 (抽成独立变量, 供顶部预览区复用)
+        mood_card_html = f'''
         <div style="min-width:260px;max-width:320px;background:var(--card-bg);border:1px solid var(--border-color);border-radius:12px;padding:20px;backdrop-filter:var(--glass-blur);box-shadow:0 4px 24px rgba(0,0,0,0.3);display:flex;flex-direction:column;gap:12px;">
             <div style="text-align:center;font-size:16px;font-weight:800;color:#58a6ff;border-bottom:1px solid var(--border-color);padding-bottom:10px;">📊 情绪状态解读</div>
             <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -2940,7 +2939,13 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
                     <div style="font-size:11px;color:var(--text-secondary);line-height:1.6;">{reasons_html}</div>
                 </div>
             </div>
-        </div>
+        </div>'''
+
+        sentiment_charts_html = f'''
+        <h2 class="section-title">🔥 冰火之歌：短线情绪周期统计 <span class="help-icon" data-tip="0-100分制。反映市场短线投机活跃度，20分以下为极冷冰点，80分以上为极热高潮。">?</span></h2>
+        <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:stretch;">
+        <div class="chart-container" id="sentimentChart" style="height:350px;flex:1;min-width:600px;"></div>
+        {mood_card_html}
         </div>
         <script>
         (function(){{
@@ -3511,7 +3516,10 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
 
     {timing_html}
 
-    {stance_html}
+    <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:stretch;margin-bottom:30px;">
+        <div style="flex:1;min-width:420px;">{stance_html}</div>
+        {mood_card_html}
+    </div>
 
     <div class="summary-grid">
         <div class="summary-card">
