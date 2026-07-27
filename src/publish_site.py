@@ -95,8 +95,25 @@ def _render_verdict(summary):
   </div>'''
 
 
-def _render_index(reports, updated_at, summary=None):
+def _render_dashboard_entry(dashboard_date):
+    """在 verdict 卡片下方插入的"决策看板"入口卡. dashboard_date 为空则返回空."""
+    if not dashboard_date:
+        return ''
+    return f'''
+  <a class="dashboard-entry" href="dashboards/latest.html">
+    <div class="de-left">
+      <div class="de-label">数据驱动 · 决策看板</div>
+      <div class="de-title">6 场景分类器 + 三因子交叉 + 历史胜率</div>
+      <div class="de-sub">当日看板 · {dashboard_date} · 覆盖明日 T+1 决策树</div>
+    </div>
+    <div class="de-right">打开看板 →</div>
+  </a>'''
+
+
+def _render_index(reports, updated_at, summary=None, dashboard_date=None):
     """生成首页 HTML。reports: [(date_str, filename)] 已按日期倒序。
+
+    dashboard_date: 提供后在首页顶部插入"当日决策看板"卡片入口。
 
     summary: 可选结论 dict, 渲染到首屏 (见 _render_verdict)。缺失时首页为纯归档索引。
     """
@@ -194,6 +211,21 @@ def _render_index(reports, updated_at, summary=None):
   .verdict-play b {{ color: var(--vc); }}
   .verdict-reads {{ color: #8b949e; font-size: 13px; padding-top: 8px; border-top: 1px solid #21262d; }}
   .verdict-reads b {{ color: #e6edf3; }}
+  .dashboard-entry {{
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 20px; text-decoration: none;
+    background: linear-gradient(135deg, #1a1e2e, #16202e);
+    border: 1px solid #30363d; border-left: 4px solid #58a6ff;
+    border-radius: 12px; padding: 18px 24px; margin-bottom: 20px;
+    transition: border-color .15s, transform .15s, box-shadow .15s;
+  }}
+  .dashboard-entry:hover {{ border-color: #58a6ff; transform: translateX(2px);
+    box-shadow: 0 4px 16px rgba(88,166,255,.18); }}
+  .de-label {{ color: #58a6ff; font-size: 11px; text-transform: uppercase;
+    letter-spacing: 1.5px; font-weight: 700; }}
+  .de-title {{ color: #e6edf3; font-size: 16px; font-weight: 700; margin-top: 3px; }}
+  .de-sub {{ color: #8b949e; font-size: 12px; margin-top: 4px; }}
+  .de-right {{ color: #58a6ff; font-size: 14px; font-weight: 600; white-space: nowrap; }}
   footer {{ margin-top: 48px; color: #6e7681; font-size: 12px; text-align: center; }}
 </style>
 </head>
@@ -205,6 +237,8 @@ def _render_index(reports, updated_at, summary=None):
   </header>
 
   {verdict_html}
+
+  {_render_dashboard_entry(dashboard_date)}
 
   <div class="hero">
     <div class="hero-info">
@@ -224,14 +258,16 @@ def _render_index(reports, updated_at, summary=None):
 </html>'''
 
 
-def publish(output_html, site_dir, report_date=None, summary=None):
+def publish(output_html, site_dir, report_date=None, summary=None, dashboard_html=None):
     """把 output_html 归档进 site_dir 并重建首页。
 
     Args:
-        output_html: 当日生成的报告 HTML 绝对路径。
-        site_dir:    站点根目录 (本地为 output/site, CI 为检出的 gh-pages)。
-        report_date: datetime, 报告日期口径 (默认取缓存最新日, 与系统其它模块一致)。
-        summary:     可选结论 dict (择时档位 + 数据可信度), 渲染到首页首屏; 缺失则首页为纯归档索引。
+        output_html:    当日生成的报告 HTML 绝对路径。
+        site_dir:       站点根目录 (本地为 output/site, CI 为检出的 gh-pages)。
+        report_date:    datetime, 报告日期口径 (默认取缓存最新日, 与系统其它模块一致)。
+        summary:        可选结论 dict (择时档位 + 数据可信度), 渲染到首页首屏; 缺失则首页为纯归档索引。
+        dashboard_html: 可选决策看板 HTML 字符串; 提供后归档到 dashboards/YYYY-MM-DD.html
+                        并生成 dashboards/latest.html, 首页顶部加入口。
 
     Returns:
         (archived_path, index_path) 或 None (源文件不存在时)。
@@ -257,11 +293,25 @@ def publish(output_html, site_dir, report_date=None, summary=None):
     # latest.html: 固定链接, 始终等于最新一期
     shutil.copyfile(output_html, os.path.join(site_dir, 'latest.html'))
 
+    # === 决策看板归档 (方案 B 第 3 步) ===
+    dashboard_date = None
+    if dashboard_html:
+        dashboards_dir = os.path.join(site_dir, 'dashboards')
+        os.makedirs(dashboards_dir, exist_ok=True)
+        dash_archived = os.path.join(dashboards_dir, f'{date_str}.html')
+        with open(dash_archived, 'w', encoding='utf-8') as f:
+            f.write(dashboard_html)
+        # dashboards/latest.html: 固定链接, 始终等于最新看板
+        with open(os.path.join(dashboards_dir, 'latest.html'), 'w', encoding='utf-8') as f:
+            f.write(dashboard_html)
+        dashboard_date = date_str
+        print(f"  [publish] 已归档决策看板 {date_str} → {dash_archived}")
+
     reports = _scan_reports(reports_dir)
     updated_at = datetime.now().strftime('%Y-%m-%d %H:%M')
     index_path = os.path.join(site_dir, 'index.html')
     with open(index_path, 'w', encoding='utf-8') as f:
-        f.write(_render_index(reports, updated_at, summary))
+        f.write(_render_index(reports, updated_at, summary, dashboard_date=dashboard_date))
 
     print(f"  [publish] 已归档 {date_str} → {archived}")
     print(f"  [publish] 首页已重建 ({len(reports)} 期) → {index_path}")

@@ -1597,33 +1597,42 @@ def _probe_bs_max_date(args):
         sys.stdout = old_stdout
     return max_date
 
-def _fetch_tencent_close(all_codes, trade_date_str, retry=3):
+def _fetch_tencent_close(all_codes, trade_date_str, retry=3, prev_close_map=None):
     """用腾讯行情接口 (qt.gtimg.cn) 批量获取全市场最新收盘价。
     一次请求可取数百只, 全市场 5000+ 只约 2 秒, 且不走系统代理 (直连)。
     all_codes: ['sh600000', 'sz000001', ...]  trade_date_str: 'YYYY-MM-DD'
-    返回 [{'date', 'code', 'close'}, ...]; 失败返回 []。
+    prev_close_map: {code: close} — 本地价格缓存里"最新已知一天"的收盘价; 用于识别陈旧快照。
+    返回 [{'date', 'code', 'close'}, ...]; 失败/陈旧快照返回 []。
 
     注意: 腾讯接口只返回"当前/最新"收盘价, 仅适用于补当天。历史缺口仍需 baostock。
+
+    陈旧快照护栏 (2026-07-27 事故根因):
+      未开盘时段 (周末/盘前), 腾讯 API 的 parts[3]"当前价"实际是上个交易日
+      收盘价。若目标日 trade_date_str 尚未开盘, 这批数据会把上一交易日 close
+      当今日 close 落库, 下游价格缓存 A/D 全成 flat -> 宽度体检拦下 ->
+      页面显示"数据未就位"。
+      判据: 与本地缓存最新一天的收盘价 >90% 逐股完全相同 = 陈旧快照 (每股
+      close 精确到 2 位小数, 同一交易日的行情几乎不可能全市场 >90% 报价
+      与前一日完全相同, 阈值留了 10% 停牌 / 除权余量)。
+      涨跌幅 (parts[32]) 判据不可靠: 周日的"涨跌幅"实际是周四→周五那笔,
+      并非全 0, 会误漏; 身份比对才是能拦住 pre-market 场景的判据。
     """
     rows = []
     session = requests.Session()
-    # 关键: 绕过系统代理 (本机 Clash 白名单不含行情域名, 走代理会被拒)
     session.trust_env = False
     session.proxies = {'http': None, 'https': None}  # type: ignore
 
-    batch = 800  # 单次 URL 拼接的股票数, 800 只实测稳定
+    batch = 800
     for i in range(0, len(all_codes), batch):
         chunk = all_codes[i:i + batch]
-        # 腾讯代码格式即 sh600000 / sz000001, 与内部格式一致
         query = ','.join(chunk)
         url = f'https://qt.gtimg.cn/q={query}'
         ok = False
         for attempt in range(retry):
             try:
                 resp = session.get(url, timeout=10)
-                resp.encoding = 'gbk'  # 腾讯接口 GBK 编码
+                resp.encoding = 'gbk'
                 text = resp.text
-                # 每行形如: v_sh600000="1~浦发银行~600000~8.98~...";
                 for line in text.split(';'):
                     line = line.strip()
                     if not line.startswith('v_'):
@@ -1631,10 +1640,10 @@ def _fetch_tencent_close(all_codes, trade_date_str, retry=3):
                     eq = line.find('="')
                     if eq < 0:
                         continue
-                    code = line[2:eq]  # v_sh600000 -> sh600000
+                    code = line[2:eq]
                     payload = line[eq + 2:].rstrip('"')
                     parts = payload.split('~')
-                    if len(parts) > 3:
+                    if len(parts) > 32:
                         try:
                             close_val = float(parts[3])
                             if close_val > 0:
@@ -1648,8 +1657,23 @@ def _fetch_tencent_close(all_codes, trade_date_str, retry=3):
                     time.sleep(0.5)
                 continue
         if not ok:
-            # 单批失败不致命, 继续后续批次 (可能网络抖动)
             continue
+
+    if rows and prev_close_map:
+        identical = 0
+        compared = 0
+        for r in rows:
+            prev = prev_close_map.get(r['code'])
+            if prev is None:
+                continue
+            compared += 1
+            if abs(r['close'] - prev) < 1e-6:
+                identical += 1
+        if compared > 0 and identical / compared > 0.9:
+            print(f"    🚫 腾讯快照与本地最新日 close 逐股相同占比 {identical}/{compared}"
+                  f" ({identical/compared:.0%}) > 90%, 判定为未开盘/陈旧快照, 整批弃收")
+            return []
+
     return rows
 
 
@@ -1785,7 +1809,14 @@ def update_price_cache(classified_df):
     if not price_df.empty and 0 <= gap_days <= 4:
         print(f"    ⚡ 仅缺最新交易日 ({latest_zt_str}), 尝试腾讯快照秒补...")
         try:
-            tx_rows = _fetch_tencent_close(all_codes, latest_zt_str)
+            # 构造 "最新已知一日" close 映射, 供腾讯 fastpath 做陈旧快照身份比对。
+            # 若 >90% 股票的腾讯 close 与该映射逐股相同, 判定为未开盘/陈旧, 整批弃收。
+            _max_local_date = price_df['date'].max()
+            _prev_close_map = dict(zip(
+                price_df.loc[price_df['date'] == _max_local_date, 'code'],
+                price_df.loc[price_df['date'] == _max_local_date, 'close']
+            ))
+            tx_rows = _fetch_tencent_close(all_codes, latest_zt_str, prev_close_map=_prev_close_map)
             if tx_rows and len(tx_rows) > len(all_codes) * 0.8:
                 print(f"    ✅ 腾讯快照获取 {len(tx_rows)} 条 (耗时 {time.time()-t0:.1f}s), 跳过 baostock")
                 tx_df = pd.DataFrame(tx_rows)
@@ -3300,7 +3331,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     stance_html = render_stance_html(stance)
 
     # 动态生成量化择时模块
-    timing_res = generate_timing_signal(sentiment_df, advance_decline)
+    timing_res = generate_timing_signal(sentiment_df, advance_decline, echelon)
     timing_html = f'''
     <div style="background: rgba(0,0,0,0.5); border: 2px solid {timing_res['color']}; border-radius: 12px; padding: 20px; margin-bottom: 30px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 0 15px {timing_res['color']}40;">
         <div style="flex: 1;">
@@ -3314,6 +3345,20 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
         </div>
     </div>
     '''
+
+    # 内嵌决策看板 section (方案 2: 主报告顶部内嵌一份完整决策看板, 无需跳转)
+    # report_date 用 dates[-1] (generate_html 作用域内已知), 不是 main 的 latest_date
+    dashboard_section_html = ''
+    try:
+        from decision_dashboard import build_dashboard_ctx, generate_dashboard_section
+        _report_date = dates[-1] if dates else None
+        _dash_ctx = build_dashboard_ctx(
+            timing=timing_res, advance_decline=advance_decline,
+            sentiment_df=sentiment_df, echelon=echelon, report_date=_report_date,
+        )
+        dashboard_section_html = generate_dashboard_section(_dash_ctx)
+    except Exception as e:
+        print(f"  [警告] 内嵌决策看板 section 生成失败 (不影响主流程): {e}")
 
     html = f'''<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8">
@@ -3515,6 +3560,8 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     </div>
 
     {timing_html}
+
+    {dashboard_section_html}
 
     <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:stretch;margin-bottom:30px;">
         <div style="flex:1;min-width:420px;">{stance_html}</div>
@@ -4082,7 +4129,7 @@ def main():
     focus_pool_path = os.path.join(os.path.dirname(OUTPUT_HTML), "focus_pool.csv")
     generate_focus_pool(ml_strength, echelon, top30_data, sentiment_df, focus_pool_path)
 
-    # 7.5 站点发布: 归档当日报告 + 重建首页 (产品化: 首屏先给结论 + 可翻历史)
+    # 7.5 站点发布: 归档当日报告 + 决策看板 + 重建首页 (产品化: 首屏先给结论 + 可翻历史)
     try:
         from publish_site import publish
         # 首屏结论 = 择时档位 (纯规则, main 已有全部入参, 与报告内 3005 行同口径)
@@ -4105,7 +4152,22 @@ def main():
         _summary['data_ok'] = _data_ok
         if _notes:
             _summary['data_note'] = '、'.join(_notes)
-        publish(OUTPUT_HTML, SITE_DIR, summary=_summary)
+
+        # === 决策看板: 独立 HTML 归档到 site/dashboards/ (与主报告内嵌 section 同源) ===
+        _dashboard_html = None
+        try:
+            from timing_signal import generate_timing_signal
+            from decision_dashboard import build_dashboard_ctx, generate_dashboard_html
+            _timing = generate_timing_signal(sentiment_df, advance_decline, echelon)
+            _ctx = build_dashboard_ctx(
+                timing=_timing, advance_decline=advance_decline,
+                sentiment_df=sentiment_df, echelon=echelon, report_date=latest_date,
+            )
+            _dashboard_html = generate_dashboard_html(_ctx)
+        except Exception as e:
+            print(f"  [警告] 决策看板生成失败 (不影响主流程): {e}")
+
+        publish(OUTPUT_HTML, SITE_DIR, summary=_summary, dashboard_html=_dashboard_html)
     except Exception as e:
         print(f"  [警告] 站点发布失败 (不影响主流程): {e}")
 
