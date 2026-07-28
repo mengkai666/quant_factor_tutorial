@@ -706,7 +706,7 @@ def build_echelon_table(cls_data, zt_today=None):
             for p in stock_plates.get(code, []):
                 plate_count[p] = plate_count.get(p, 0) + 1
             best_sub, best_ml = _best_ml_sub(code)
-            stock_details.append({'name': name, 'sub': best_sub or '', 'ml': best_ml or ''})
+            stock_details.append({'name': name, 'code': code, 'sub': best_sub or '', 'ml': best_ml or ''})
 
         sorted_plates = sorted(plate_count.items(), key=lambda x: -x[1])
         primary = f'{sorted_plates[0][0]}{int(sorted_plates[0][1]/count*100)}%' if sorted_plates else '/'
@@ -2201,7 +2201,7 @@ def build_sector_heatmap(classified_df, price_df, echelon):
     </div>''', top_sectors
 def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thresh,
                   leaders, dates, ratings, sub_ratings,
-                  echelon, top30_data, advance_decline, nday_leaders=None, wc_data=None, sentiment_df=None, plates=None, classified_df=None, return_leaders=None, mainline_ladder=None, sub_leaderboard=None, sub_tracks=None, price_df=None, focus_df=None):
+                  echelon, top30_data, advance_decline, nday_leaders=None, wc_data=None, sentiment_df=None, plates=None, classified_df=None, return_leaders=None, mainline_ladder=None, sub_leaderboard=None, sub_tracks=None, price_df=None, focus_df=None, focus_catalysts=None):
     
     if len(dates) > 65:
         dates = dates[-65:]
@@ -3355,7 +3355,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
         _dash_ctx = build_dashboard_ctx(
             timing=timing_res, advance_decline=advance_decline,
             sentiment_df=sentiment_df, echelon=echelon, report_date=_report_date,
-            focus_df=focus_df,
+            focus_df=focus_df, focus_catalysts=focus_catalysts,
         )
         dashboard_section_html = generate_dashboard_section(_dash_ctx)
     except Exception as e:
@@ -4114,6 +4114,19 @@ def main():
     focus_pool_path = os.path.join(os.path.dirname(OUTPUT_HTML), "focus_pool.csv")
     focus_df = generate_focus_pool(ml_strength, echelon, top30_data, sentiment_df, focus_pool_path)
 
+    # 6.5 催化归因: 为 focus_pool 每只票拉真实新闻/公告/龙虎榜, 让"为何走强"不再口水化
+    # 单只 3-4 秒 × 6 只 ~= 20 秒, 只在跑批末尾同步一次
+    focus_catalysts = {}
+    try:
+        from catalyst_attribution import attribute_focus_pool
+        if focus_df is not None and not focus_df.empty:
+            print(f"\n  🔍 [催化归因] 为 focus_pool {len(focus_df)} 只票拉真实催化 (约 20-30 秒)...")
+            _cat_date = f"{latest_date[:4]}-{latest_date[4:6]}-{latest_date[6:]}" \
+                if len(str(latest_date)) == 8 else str(latest_date)
+            focus_catalysts = attribute_focus_pool(focus_df, trade_date=_cat_date, verbose=True)
+    except Exception as e:
+        print(f"  [警告] 催化归因跳过 (不影响主流程): {e}")
+
     print("\n[6/6] 生成可视化...")
     generate_html(
         ml_strength=ml_strength, sub_strength=sub_strength,
@@ -4126,7 +4139,8 @@ def main():
         nday_leaders=nday_leaders, wc_data=wc_data, sentiment_df=sentiment_df,
         plates=plates_data, classified_df=classified, return_leaders=return_leaders,
         mainline_ladder=mainline_ladder, sub_leaderboard=sub_leaderboard,
-        sub_tracks=sub_tracks, price_df=price_df, focus_df=focus_df
+        sub_tracks=sub_tracks, price_df=price_df, focus_df=focus_df,
+        focus_catalysts=focus_catalysts
     )
 
     # 7.5 站点发布: 归档当日报告 + 决策看板 + 重建首页 (产品化: 首屏先给结论 + 可翻历史)
@@ -4162,7 +4176,7 @@ def main():
             _ctx = build_dashboard_ctx(
                 timing=_timing, advance_decline=advance_decline,
                 sentiment_df=sentiment_df, echelon=echelon, report_date=latest_date,
-                focus_df=focus_df,
+                focus_df=focus_df, focus_catalysts=focus_catalysts,
             )
             _dashboard_html = generate_dashboard_html(_ctx)
         except Exception as e:

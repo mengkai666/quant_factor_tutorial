@@ -39,7 +39,13 @@ from typing import Any
 
 
 def build_dashboard_ctx(timing=None, advance_decline=None, sentiment_df=None,
-                        echelon=None, report_date=None, focus_df=None) -> dict:
+                        echelon=None, report_date=None, focus_df=None,
+                        focus_catalysts=None) -> dict:
+    """从 timing + 盘面 + focus_pool + 催化归因结果组装看板 ctx.
+
+    focus_catalysts: {股票名: {catalyst: {tag, text, url} | None, raw: {...}}}
+      来自 catalyst_attribution.attribute_focus_pool(). None 时看板隐藏催化列.
+    """
     """从 timing + 盘面数据组装看板 ctx (供 generate_dashboard_* 使用).
 
     把因子提取逻辑集中在这里, 避免 main 与 generate_html 两处重复构造.
@@ -97,6 +103,7 @@ def build_dashboard_ctx(timing=None, advance_decline=None, sentiment_df=None,
         'ad_ratio': ad_val,
         'ladder': ladder, 'h3': h3, 'h4': h4, 'h5': h5, 'h6p': h6p,
         'focus_df': focus_df,
+        'focus_catalysts': focus_catalysts or {},
     }
 
 
@@ -180,9 +187,29 @@ def _fmt_stock(entry: dict) -> str:
     return name
 
 
-def _render_focus_table(buckets: dict) -> str:
+def _render_catalyst_cell(name: str, catalysts: dict | None) -> str:
+    """催化列 <td> 内容: 一行 tag + 简短 text; 无数据显示 —"""
+    if not catalysts:
+        return '<td class="fp-cat">—</td>'
+    item = catalysts.get(name) or {}
+    cat = item.get('catalyst') if isinstance(item, dict) else None
+    if not cat:
+        return '<td class="fp-cat" style="color:#6e7681;">无近期催化</td>'
+    tag = cat.get('tag', '')
+    text = cat.get('text', '')
+    url = cat.get('url', '')
+    body = _esc(text)
+    if url:
+        body = f'<a href="{_esc(url)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline dotted;">{body}</a>'
+    return (f'<td class="fp-cat"><span class="fp-cat-tag">{_esc(tag)}</span>'
+            f'<div class="fp-cat-text">{body}</div></td>')
+
+
+def _render_focus_table(buckets: dict, catalysts: dict | None = None) -> str:
     """把 focus_pool 拆好的 space/midcore 两桶渲染成两张表 (独立看板用).
 
+    catalysts: {股票名: {catalyst: {tag, text, url}, raw: ...}}, 来自
+        catalyst_attribution.attribute_focus_pool(). 无则催化列显示 '—'.
     空表则整个 section 省略, 避免占版面显示空表。
     """
     space = buckets.get('space', [])
@@ -191,10 +218,12 @@ def _render_focus_table(buckets: dict) -> str:
         return ''
 
     def _row(entry: dict) -> str:
+        name = entry.get('name', '')
         return (
             f'<tr>'
-            f'<td class="fp-name"><b>{_esc(entry.get("name", ""))}</b></td>'
+            f'<td class="fp-name"><b>{_esc(name)}</b></td>'
             f'<td class="fp-plate">{_esc(_clean_plate(entry.get("plate", "")) or "—")}</td>'
+            f'{_render_catalyst_cell(name, catalysts)}'
             f'<td class="fp-entry">{_esc(entry.get("cond", ""))}</td>'
             f'<td class="fp-stop">{_esc(entry.get("stop", ""))}</td>'
             f'</tr>'
@@ -208,7 +237,7 @@ def _render_focus_table(buckets: dict) -> str:
           <div class="fp-block-title">🚀 空间博弈 / 主升接力池 · {len(space)} 只
             <span class="fp-block-sub">高连板追打 · 对应 A / B / C 场景</span></div>
           <table class="fp-table"><thead><tr>
-            <th>标的</th><th>主线</th><th>入场条件</th><th>防守位</th>
+            <th>标的</th><th>主线</th><th>近期催化</th><th>入场条件</th><th>防守位</th>
           </tr></thead><tbody>{space_rows}</tbody></table>
         </div>''')
     if midcore:
@@ -218,7 +247,7 @@ def _render_focus_table(buckets: dict) -> str:
           <div class="fp-block-title">🛡️ 核心中军低吸池 · {len(midcore)} 只
             <span class="fp-block-sub">深蹲抄底 · 对应 D 场景或 C 场景换车备胎</span></div>
           <table class="fp-table"><thead><tr>
-            <th>标的</th><th>周期</th><th>入场条件</th><th>防守位</th>
+            <th>标的</th><th>周期</th><th>近期催化</th><th>入场条件</th><th>防守位</th>
           </tr></thead><tbody>{mid_rows}</tbody></table>
         </div>''')
 
@@ -384,9 +413,10 @@ def generate_dashboard_html(ctx: dict) -> str:
     hist_rows = ''.join(_history_row(c) for c in history_cases) or (
         '<tr><td colspan="8" style="color:#6e7681;padding:20px;">暂无历史同型样本 (需累计更多回测)</td></tr>')
 
-    # 明日核心股票池表 (从 focus_df 拆桶后逐只列出)
+    # 明日核心股票池表 (从 focus_df 拆桶后逐只列出, 附真实催化)
     focus_buckets = _split_focus_pool(focus_df)
-    focus_rows_html = _render_focus_table(focus_buckets)
+    focus_catalysts = ctx.get('focus_catalysts') or {}
+    focus_rows_html = _render_focus_table(focus_buckets, catalysts=focus_catalysts)
 
     wr_color = _win_rate_color(win_rate)
     wr_str = f'{win_rate * 100:.0f}%' if isinstance(win_rate, (int, float)) else '—'
@@ -582,6 +612,11 @@ def generate_dashboard_html(ctx: dict) -> str:
     .fp-plate { width: 130px; color: #79b8ff; font-size: 12px; }
     .fp-entry { color: #c9d1d9; line-height: 1.55; }
     .fp-stop { width: 200px; color: #ff8888; font-size: 12px; }
+    .fp-cat { width: 210px; }
+    .fp-cat-tag { display: inline-block; font-size: 10.5px; font-weight: 700;
+                  color: #0d1117; background: #d29922; padding: 1px 7px;
+                  border-radius: 4px; margin-bottom: 3px; }
+    .fp-cat-text { color: #c9d1d9; font-size: 11.5px; line-height: 1.45; }
 
     footer {
       margin-top: 40px; padding-top: 20px; text-align: center;
@@ -692,6 +727,7 @@ def generate_dashboard_section(ctx: dict) -> str:
     zt_prev = int(ctx.get('zt_prev', 0) or 0)
     zt_boom = (zt / zt_prev) if zt_prev > 0 else None
     focus_df = ctx.get('focus_df')
+    focus_catalysts = ctx.get('focus_catalysts') or {}
 
     scenarios = ctx.get('scenarios') or _default_scenarios(curr_h, prev_h, focus_df=focus_df)
 
@@ -734,23 +770,41 @@ def generate_dashboard_section(ctx: dict) -> str:
     scen_cards = ''.join(_sc(s) for s in scenarios)
 
     # 内嵌简版 focus 表 (与独立看板同源, class 加 dbd- 前缀避免冲突)
+    def _cat_cell_inline(name):
+        """催化列 <td> (dbd- 前缀版): tag + 简短 text; 无数据显示 —"""
+        if not focus_catalysts:
+            return '<td class="dbd-fp-cat">—</td>'
+        item = focus_catalysts.get(name) or {}
+        cat = item.get('catalyst') if isinstance(item, dict) else None
+        if not cat:
+            return '<td class="dbd-fp-cat" style="color:#6e7681;">无近期催化</td>'
+        body = _esc(cat.get('text', ''))
+        url = cat.get('url', '')
+        if url:
+            body = (f'<a href="{_esc(url)}" target="_blank" rel="noopener" '
+                    f'style="color:inherit;text-decoration:underline dotted;">{body}</a>')
+        return (f'<td class="dbd-fp-cat"><span class="dbd-fp-cat-tag">{_esc(cat.get("tag", ""))}</span>'
+                f'<div class="dbd-fp-cat-text">{body}</div></td>')
+
     focus_rows_inline = ''
     try:
         if focus_df is not None and hasattr(focus_df, 'empty') and not focus_df.empty:
             _rows = []
             for _, r in focus_df.iterrows():
+                _name = str(r.get("股票", ""))
                 _rows.append(
                     f'<tr>'
-                    f'<td class="dbd-fp-name">{_esc(r.get("股票", ""))}</td>'
+                    f'<td class="dbd-fp-name">{_esc(_name)}</td>'
                     f'<td class="dbd-fp-plate">{_esc(_clean_plate(str(r.get("板块", ""))) or "—")}</td>'
                     f'<td class="dbd-fp-pool">{_esc(r.get("策略池", ""))}</td>'
+                    f'{_cat_cell_inline(_name)}'
                     f'<td class="dbd-fp-entry">{_esc(r.get("入场条件", ""))}</td>'
                     f'<td class="dbd-fp-stop">{_esc(r.get("防守位", ""))}</td>'
                     f'</tr>'
                 )
             focus_rows_inline = (
                 '<table class="dbd-fp-table"><thead><tr>'
-                '<th>标的</th><th>板块</th><th>策略池</th><th>入场条件</th><th>防守位</th>'
+                '<th>标的</th><th>板块</th><th>策略池</th><th>近期催化</th><th>入场条件</th><th>防守位</th>'
                 '</tr></thead><tbody>' + ''.join(_rows) + '</tbody></table>'
             )
     except Exception:
@@ -902,6 +956,10 @@ def generate_dashboard_section(ctx: dict) -> str:
     .dbd-fp-pool {{ width: 130px; color: #d29922; font-size: 11.5px; }}
     .dbd-fp-entry {{ color: #c9d1d9; line-height: 1.55; }}
     .dbd-fp-stop {{ width: 180px; color: #ff8888; font-size: 11.5px; }}
+    .dbd-fp-cat {{ width: 200px; font-size: 11.5px; }}
+    .dbd-fp-cat-tag {{ display: inline-block; color: #3fb950; font-weight: 700;
+      background: rgba(63,185,80,0.12); padding: 1px 6px; border-radius: 4px; }}
+    .dbd-fp-cat-text {{ color: #c9d1d9; margin-top: 3px; line-height: 1.5; }}
     @media (max-width: 640px) {{
       .dbd-hero {{ flex-direction: column; align-items: stretch; }}
       .dbd-hero .dbd-right {{ text-align: left; }}

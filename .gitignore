@@ -69,3 +69,6 @@ run_*.log
 .env
 .env.*
 !.env.example
+
+# CSV 冲突标记自愈备份 (paths.py 运行产物, 不入库)
+*.conflict.bak

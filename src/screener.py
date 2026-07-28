@@ -29,9 +29,12 @@ def generate_focus_pool(ml_strength, echelon, top30_data, sentiment_df, output_p
         for e in echelon:
             height = str(e.get('height', ''))
             stocks = e.get('stocks', [])
+            stock_details = e.get('stock_details', [])
             primary = str(e.get('primary', ''))
             secondary = str(e.get('secondary', ''))
-            
+            # name -> code 映射, 用于催化归因反查 (stock_details 里带 code)
+            name_to_code = {d.get('name', ''): d.get('code', '') for d in stock_details}
+
             # 放宽条件：只要是首板、2连板、3连板都可以入选
             if '板' in height:
                 # 尽量找核心主线，如果没有匹配上，也把最高板加进去
@@ -40,6 +43,7 @@ def generate_focus_pool(ml_strength, echelon, top30_data, sentiment_df, output_p
                     for s in stocks[:2]:  # 每个高度最多取2只
                         pool.append({
                             '股票': s,
+                            '代码': name_to_code.get(s, ''),
                             '板块': primary.split(',')[0] if primary else core_ml,
                             '策略池': '【主升接力池】' if is_core else '【空间博弈池】',
                             '入场条件': f'昨日{height}。若开盘放量换手且承接极强，可跟随打板；切忌加速缩量秒板。',
@@ -56,6 +60,7 @@ def generate_focus_pool(ml_strength, echelon, top30_data, sentiment_df, output_p
             for r in records[:2]:
                 s = r.get('name', '')
                 pool.append({
+                    '代码': str(r.get('code', '')),
                     '股票': s,
                     '板块': ml,
                     '策略池': '【核心中军低吸池】',

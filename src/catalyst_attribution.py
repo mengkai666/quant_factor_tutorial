@@ -380,6 +380,102 @@ def format_report(info):
 
 
 # ─────────────────────────────────────────────────────────────
+# 5. 看板/决策看板集成入口
+# ─────────────────────────────────────────────────────────────
+# 优先展示的公告类别 (真硬催化, 排在前面); 其它类别只作为退路
+_ANN_PRIORITY = [
+    '重大合同', '收购', '重组', '资产', '中标', '订单',
+    '业绩预告', '业绩快报', '业绩', '分红', '增持', '回购',
+    '解禁', '减持', '定增', '发行',
+]
+
+
+def _pick_top_catalyst(info):
+    """从 attribute_stock 结果里挑一条最"重"的一句话催化, 供看板逐股展示.
+    优先级: 龙虎榜净买大 (>2000万) > 硬类型公告 (重大合同/收购/业绩) > 最新新闻 > 空.
+    返回 dict{tag, text, url} 或 None.
+    """
+    if not info:
+        return None
+    dt = info.get('dragon_tiger') or {}
+    records = dt.get('records') or []
+    # 1) 近期龙虎榜净买 > 2000 万 → 用第一条 (最近一次)
+    for r in records[:3]:
+        try:
+            if abs(float(r.get('net_buy') or 0)) > 2000:
+                sign = '净买' if float(r.get('net_buy')) > 0 else '净卖'
+                return {'tag': '龙虎榜',
+                        'text': f"{r.get('date', '')} {sign} {r.get('net_buy')}万 · {r.get('reason', '')}",
+                        'url': ''}
+        except (TypeError, ValueError):
+            continue
+
+    # 2) 优先类型公告 (硬催化)
+    for kw in _ANN_PRIORITY:
+        for a in info.get('announcements', [])[:15]:
+            title = a.get('title', '') or ''
+            typ = a.get('type', '') or ''
+            if kw in title or kw in typ:
+                return {'tag': f'公告 · {typ or kw}',
+                        'text': f"{a.get('date', '')} {title}",
+                        'url': a.get('url', '')}
+
+    # 3) 任意最新公告
+    anns = info.get('announcements') or []
+    if anns:
+        a = anns[0]
+        return {'tag': f"公告 · {a.get('type', '公告')}",
+                'text': f"{a.get('date', '')} {a.get('title', '')}",
+                'url': a.get('url', '')}
+
+    # 4) 任意最新新闻
+    news = info.get('news') or []
+    if news:
+        n = news[0]
+        return {'tag': f"新闻 · {n.get('source', '')}",
+                'text': f"{n.get('time', '')[:10]} {n.get('title', '')}",
+                'url': n.get('url', '')}
+
+    return None
+
+
+def attribute_focus_pool(focus_df, trade_date=None, verbose=True):
+    """为 focus_pool DataFrame 批量拉真实催化, 返回 {股票名: {catalyst, raw}} dict.
+
+    focus_df 需含 '股票' 和 '代码' 列 ('代码' 为 sh/sz 前缀格式)。
+    catalyst 字段形如 {tag: '龙虎榜', text: '2026-07-25 净买 5200万 · 机构专用', url: ''}, 无则 None.
+    raw 保留 attribute_stock 完整结构, 供上层进一步展开明细.
+
+    单只 3-4 秒 (三路串行 + 1s 节流), 6 只 focus_pool ~= 20-24 秒. 静默失败,
+    任何单只出错不影响其他; 只在跑批末尾调用, 别加进盘中流程.
+    """
+    out = {}
+    if focus_df is None or getattr(focus_df, 'empty', True):
+        return out
+    if '代码' not in focus_df.columns:
+        if verbose:
+            print("  [催化归因] focus_pool 缺 '代码' 列, 跳过 (需要 build_echelon_table 版本 ≥ v2)")
+        return out
+    for _, row in focus_df.iterrows():
+        name = str(row.get('股票', '')).strip()
+        code = str(row.get('代码', '')).strip()
+        if not name or not code:
+            continue
+        try:
+            info = attribute_stock(code, name, trade_date=trade_date)
+            catalyst = _pick_top_catalyst(info)
+            out[name] = {'catalyst': catalyst, 'raw': info}
+            if verbose:
+                tag = catalyst['tag'] if catalyst else '无催化'
+                print(f"    · {name}({code}): {tag}")
+        except Exception as e:
+            if verbose:
+                print(f"    · {name}({code}): 归因失败 {e}")
+            out[name] = {'catalyst': None, 'raw': None}
+    return out
+
+
+# ─────────────────────────────────────────────────────────────
 # CLI: python -m catalyst_attribution <code> [name] [date]
 # ─────────────────────────────────────────────────────────────
 if __name__ == "__main__":
