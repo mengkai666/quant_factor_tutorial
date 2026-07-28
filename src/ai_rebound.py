@@ -26,8 +26,11 @@ import requests
 def _load_dotenv():
     """极简 .env 加载器 (零依赖): 把项目根 .env 的键值注入 os.environ。
 
-    只在环境里尚无该键时注入 (CI 的 Secrets 优先, 不被本地 .env 覆盖)。
-    .env 已在 .gitignore 中, 不入库。格式: KEY=value, 支持 # 注释与引号。
+    .env 里的值**覆盖** shell/系统环境变量。原因: 本机 Claude Code 客户端会在
+    用户环境里塞一套自用的 ANTHROPIC_* (指向自己的中转), 会顶掉项目 .env 的
+    api key/base_url。.env 只在本地存在 (已 .gitignore, CI 无此文件), 覆盖不
+    影响 CI —— CI 上 GitHub Secrets 直接进 os.environ, 此函数走 return。
+    格式: KEY=value, 支持 # 注释与引号。
     """
     # src/ai_rebound.py -> 项目根
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -43,7 +46,7 @@ def _load_dotenv():
                 key, _, val = line.partition("=")
                 key = key.strip()
                 val = val.strip().strip('"').strip("'")
-                if key and key not in os.environ:
+                if key:
                     os.environ[key] = val
     except Exception as e:
         print(f"  [提示] .env 加载跳过: {e}")
