@@ -33,12 +33,13 @@ ctx 字段约定 (缺失字段自动降级为 '—'):
 from __future__ import annotations
 
 import os
+import re
 from datetime import datetime
 from typing import Any
 
 
 def build_dashboard_ctx(timing=None, advance_decline=None, sentiment_df=None,
-                        echelon=None, report_date=None) -> dict:
+                        echelon=None, report_date=None, focus_df=None) -> dict:
     """从 timing + 盘面数据组装看板 ctx (供 generate_dashboard_* 使用).
 
     把因子提取逻辑集中在这里, 避免 main 与 generate_html 两处重复构造.
@@ -95,6 +96,7 @@ def build_dashboard_ctx(timing=None, advance_decline=None, sentiment_df=None,
         'zt': zt, 'dt': dt, 'zt_prev': zt_prev,
         'ad_ratio': ad_val,
         'ladder': ladder, 'h3': h3, 'h4': h4, 'h5': h5, 'h6p': h6p,
+        'focus_df': focus_df,
     }
 
 
@@ -116,34 +118,181 @@ def _win_rate_color(wr: float | None) -> str:
     return '#ff4444'
 
 
-def _default_scenarios(curr_h: int, prev_h: int) -> list[dict]:
-    """T+1 4 情形树的默认模板 (依赖当前空间板 + 昨日空间板做话术)."""
+def _split_focus_pool(focus_df) -> dict:
+    """把 focus_pool DataFrame 按'策略池'字段拆成三桶, 便于挂到 4 情形.
+    返回: {'space': [...], 'core': [...], 'midcore': [...]}
+      space: 高连板追打 (空间博弈池 + 主升接力池, 用于 A/B/C)
+      midcore: 中军低吸 (核心中军低吸池, 用于 D 或 C 换车)
+    每个元素形如 {'name': '爱丽家居', 'plate': '并购重组50%', 'cond': '...', 'stop': '...'}
+    """
+    buckets = {'space': [], 'midcore': []}
+    if focus_df is None:
+        return buckets
+    try:
+        if hasattr(focus_df, 'empty') and focus_df.empty:
+            return buckets
+    except Exception:
+        return buckets
+    try:
+        for _, row in focus_df.iterrows():
+            pool = str(row.get('策略池', ''))
+            entry = {
+                'name': str(row.get('股票', '')).strip(),
+                'plate': str(row.get('板块', '')).strip(),
+                'cond':  str(row.get('入场条件', '')).strip(),
+                'stop':  str(row.get('防守位', '')).strip(),
+            }
+            if not entry['name']:
+                continue
+            if '空间博弈' in pool or '主升接力' in pool:
+                buckets['space'].append(entry)
+            elif '中军' in pool or '低吸' in pool:
+                buckets['midcore'].append(entry)
+    except Exception:
+        pass
+    return buckets
+
+
+def _clean_plate(plate: str) -> str:
+    """把 focus_pool 的'板块'字段清洗成可读题材名, 无意义时返回空串.
+    - '并购重组50%' / 'IDC电力设备50%' -> 去掉尾部的"数字+%"投票占比 -> '并购重组' / 'IDC电力设备'
+    - '/' / '' -> 空串 (占位符, 不显示)
+    - '10日' / '5日' -> 空串 (中军池这里存的是 N日窗口, 不是真题材)
+    """
+    p = (plate or '').strip()
+    if not p or p == '/':
+        return ''
+    # 中军低吸池的"板块"字段实为 N日窗口 (如 '10日'), 非真题材
+    if re.fullmatch(r'\d+日', p):
+        return ''
+    # 只取第一个题材 (可能逗号分隔), 去掉尾部的"数字+%"投票占比
+    p = p.split(',')[0].strip()
+    p = re.sub(r'\d+%$', '', p).strip()
+    return p
+
+
+def _fmt_stock(entry: dict) -> str:
+    """一只票的紧凑话术: '爱丽家居 (并购重组)'; 板块无意义时只显示股名."""
+    name = entry.get('name', '')
+    plate_short = _clean_plate(entry.get('plate', ''))
+    if plate_short:
+        return f'{name} ({plate_short})'
+    return name
+
+
+def _render_focus_table(buckets: dict) -> str:
+    """把 focus_pool 拆好的 space/midcore 两桶渲染成两张表 (独立看板用).
+
+    空表则整个 section 省略, 避免占版面显示空表。
+    """
+    space = buckets.get('space', [])
+    midcore = buckets.get('midcore', [])
+    if not space and not midcore:
+        return ''
+
+    def _row(entry: dict) -> str:
+        return (
+            f'<tr>'
+            f'<td class="fp-name"><b>{_esc(entry.get("name", ""))}</b></td>'
+            f'<td class="fp-plate">{_esc(_clean_plate(entry.get("plate", "")) or "—")}</td>'
+            f'<td class="fp-entry">{_esc(entry.get("cond", ""))}</td>'
+            f'<td class="fp-stop">{_esc(entry.get("stop", ""))}</td>'
+            f'</tr>'
+        )
+
+    parts = []
+    if space:
+        space_rows = ''.join(_row(x) for x in space)
+        parts.append(f'''
+        <div class="fp-block fp-space">
+          <div class="fp-block-title">🚀 空间博弈 / 主升接力池 · {len(space)} 只
+            <span class="fp-block-sub">高连板追打 · 对应 A / B / C 场景</span></div>
+          <table class="fp-table"><thead><tr>
+            <th>标的</th><th>主线</th><th>入场条件</th><th>防守位</th>
+          </tr></thead><tbody>{space_rows}</tbody></table>
+        </div>''')
+    if midcore:
+        mid_rows = ''.join(_row(x) for x in midcore)
+        parts.append(f'''
+        <div class="fp-block fp-midcore">
+          <div class="fp-block-title">🛡️ 核心中军低吸池 · {len(midcore)} 只
+            <span class="fp-block-sub">深蹲抄底 · 对应 D 场景或 C 场景换车备胎</span></div>
+          <table class="fp-table"><thead><tr>
+            <th>标的</th><th>周期</th><th>入场条件</th><th>防守位</th>
+          </tr></thead><tbody>{mid_rows}</tbody></table>
+        </div>''')
+
+    return f'''
+    <div class="section-title">明日核心股票池 · 逐只落地</div>
+    <div class="fp-wrap">{''.join(parts)}</div>'''
+
+
+def _default_scenarios(curr_h: int, prev_h: int, focus_df=None) -> list[dict]:
+    """T+1 4 情形树的默认模板. 从 focus_df 挂具体标的:
+    - A (双龙一字): 空间池最强 2 只锁仓
+    - B (空间一字+接力分歧): 换车 space 池第 2-3 只
+    - C (高开分歧+二三进阶): space 池首选 + midcore 池 1 只
+    - D (龙头炸板): midcore 池深蹲 + 前排清仓
+    focus_df 为空时话术自动降级为主线级别 (不 hardcode 具体股名).
+    """
+    buckets = _split_focus_pool(focus_df)
+    space = buckets['space']
+    midcore = buckets['midcore']
+
+    # A: 前 2 只空间强势股锁仓
+    if space[:2]:
+        a_head = space[0]
+        a_items = [
+            f'前排持仓不动 · 锁仓核心: {_fmt_stock(a_head)}',
+            f'盯 {curr_h - 1}板梯队是否秒板 → 主线延续' if curr_h > 1 else '盯高度是否新高',
+            '盘中不追后排 (主升诱多)',
+            '目标: 分歧日再兑现',
+        ]
+    else:
+        a_items = ['前排持仓不动 / 场内锁仓', '盘中不追后排 (主升诱多)',
+                   f'盯 {curr_h - 1}板梯队是否秒板 → 主线延续',
+                   '目标: 分歧日再兑现']
+
+    # B: 换车到空间池第 2-3 只 (次强梯队, 低吸接力)
+    if len(space) >= 2:
+        switch_targets = ', '.join(_fmt_stock(x) for x in space[1:3])
+        b_items = [
+            '前排减仓 30-50% · 兑现主升',
+            f'低吸换车: {switch_targets}',
+            '不追高位孤峰 (胜率 <40%)',
+            '警惕孤峰塌陷',
+        ]
+    else:
+        b_items = ['前排减仓 30-50%', '换车次高梯队低吸',
+                   '不接高位孤峰回封', '警惕孤峰塌陷']
+
+    # C: 空间池首选 + midcore 池 1 只 (三因子共振买点)
+    c_items = ['★ 三因子共振时才启动 (A/D>0.65 + 梯队≥12 + 破压)']
+    if space[:1]:
+        c_items.append(f'加仓接力核心: {_fmt_stock(space[0])}')
+    if midcore[:1]:
+        c_items.append(f'低吸预备: {_fmt_stock(midcore[0])}')
+    else:
+        c_items.append('主线中军低吸做备胎')
+    c_items.append('目标周期 3-5 天')
+
+    # D: 前排清仓 + midcore 深蹲 (只留防守低吸)
+    d_items = ['F 顶部崩塌预警 (断板 ≥ 3 + 跌停 >15)', '立即清仓前排 · 不抄任何高位股']
+    if midcore[:2]:
+        deep_targets = ', '.join(_fmt_stock(x) for x in midcore[:2])
+        d_items.append(f'仅留深蹲低吸: {deep_targets}')
+    else:
+        d_items.append('全线离场观望')
+
     return [
-        {
-            'kind': 'attack', 'name': 'A · 双龙一字', 'prob': '概率 20%',
-            'items': ['前排持仓不动 / 场内锁仓', '盘中不追后排 (主升诱多)',
-                     f'盯 {curr_h - 1}板梯队是否秒板 → 主线延续',
-                     '目标: 分歧日再兑现'],
-            'pos': '仓位 · 7-8 成',
-        },
-        {
-            'kind': 'moderate', 'name': 'B · 空间一字 + 接力分歧', 'prob': '概率 30%',
-            'items': ['前排减仓 30-50%', '换车 3板电缆低吸 (长缆/汉缆)',
-                     '不接美利云回封 (胜率 <40%)', '警惕孤峰塌陷'],
-            'pos': '仓位 · 4-5 成',
-        },
-        {
-            'kind': 'attack', 'name': 'C · 高开分歧 + 二三进阶', 'prob': '概率 25%',
-            'items': ['★ A+ 三因子共振信号触发', '加仓核心接力位',
-                     '电缆板块 1-2 只跟随', '目标周期 3-5 天'],
-            'pos': '仓位 · 8-9 成 ⭐',
-        },
-        {
-            'kind': 'defense', 'name': 'D · 龙头炸板', 'prob': '概率 25%',
-            'items': [f'F 顶部崩塌预警 (断板 ≥ 3板 + 跌停 >15)', '立即清仓前排',
-                     '不抄底任何高位股', '电缆低吸也放弃'],
-            'pos': '仓位 · 1-2 成',
-        },
+        {'kind': 'attack', 'name': 'A · 双龙一字', 'prob': '概率 20%',
+         'items': a_items, 'pos': '仓位 · 7-8 成'},
+        {'kind': 'moderate', 'name': 'B · 空间一字 + 接力分歧', 'prob': '概率 30%',
+         'items': b_items, 'pos': '仓位 · 4-5 成'},
+        {'kind': 'attack', 'name': 'C · 高开分歧 + 二三进阶', 'prob': '概率 25%',
+         'items': c_items, 'pos': '仓位 · 8-9 成 ⭐'},
+        {'kind': 'defense', 'name': 'D · 龙头炸板', 'prob': '概率 25%',
+         'items': d_items, 'pos': '仓位 · 1-2 成'},
     ]
 
 
@@ -209,8 +358,9 @@ def generate_dashboard_html(ctx: dict) -> str:
 
     zt_prev = int(ctx.get('zt_prev', 0) or 0)
     zt_boom = (zt / zt_prev) if zt_prev > 0 else None
+    focus_df = ctx.get('focus_df')
 
-    scenarios = ctx.get('scenarios') or _default_scenarios(curr_h, prev_h)
+    scenarios = ctx.get('scenarios') or _default_scenarios(curr_h, prev_h, focus_df=focus_df)
     history_cases = ctx.get('history_cases') or []
 
     # 三因子交叉表
@@ -233,6 +383,10 @@ def generate_dashboard_html(ctx: dict) -> str:
     scen_cards = ''.join(_scen_card(s) for s in scenarios)
     hist_rows = ''.join(_history_row(c) for c in history_cases) or (
         '<tr><td colspan="8" style="color:#6e7681;padding:20px;">暂无历史同型样本 (需累计更多回测)</td></tr>')
+
+    # 明日核心股票池表 (从 focus_df 拆桶后逐只列出)
+    focus_buckets = _split_focus_pool(focus_df)
+    focus_rows_html = _render_focus_table(focus_buckets)
 
     wr_color = _win_rate_color(win_rate)
     wr_str = f'{win_rate * 100:.0f}%' if isinstance(win_rate, (int, float)) else '—'
@@ -397,6 +551,38 @@ def generate_dashboard_html(ctx: dict) -> str:
     .critical .name, .critical .pos { color: #ff8800; }
     .critical .pos { background: rgba(255, 136, 0, 0.15); }
 
+    /* 明日核心股票池 (fp-*) */
+    .fp-block { margin-bottom: 20px; }
+    .fp-block-title {
+      font-size: 15px; font-weight: 700; color: #e6edf3;
+      padding: 10px 14px; border-radius: 8px 8px 0 0;
+      background: rgba(30, 35, 42, 0.9);
+      border-left: 4px solid;
+    }
+    .fp-space .fp-block-title { border-left-color: #ff4444; color: #ff8888; }
+    .fp-midcore .fp-block-title { border-left-color: #58a6ff; color: #79b8ff; }
+    .fp-block-sub { color: #8b949e; font-size: 12px; font-weight: 400; margin-left: 10px; }
+    table.fp-table {
+      width: 100%; background: rgba(22, 27, 34, 0.7);
+      border-radius: 0 0 8px 8px; border-collapse: separate;
+      border-spacing: 0; overflow: hidden;
+    }
+    table.fp-table th, table.fp-table td {
+      padding: 10px 14px; border-bottom: 1px solid rgba(48, 54, 61, 0.6);
+      text-align: left; font-size: 13px; vertical-align: top;
+    }
+    table.fp-table th {
+      background: rgba(30, 35, 42, 0.5); color: #8b949e;
+      font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    table.fp-table tbody tr:hover { background: rgba(88, 166, 255, 0.05); }
+    table.fp-table tbody tr:last-child td { border-bottom: none; }
+    .fp-name { width: 100px; color: #ffcc00; }
+    .fp-plate { width: 130px; color: #79b8ff; font-size: 12px; }
+    .fp-entry { color: #c9d1d9; line-height: 1.55; }
+    .fp-stop { width: 200px; color: #ff8888; font-size: 12px; }
+
     footer {
       margin-top: 40px; padding-top: 20px; text-align: center;
       color: #6e7681; font-size: 12px;
@@ -405,6 +591,7 @@ def generate_dashboard_html(ctx: dict) -> str:
     @media (max-width: 640px) {
       .hero { flex-direction: column; align-items: stretch; }
       .hero .right { text-align: left; }
+      .fp-plate, .fp-stop { width: auto; }
     }
     '''
 
@@ -443,6 +630,9 @@ def generate_dashboard_html(ctx: dict) -> str:
 
   <div class="section-title">明日 T+1 · 4 情形决策树</div>
   <div class="scenario-tree">{scen_cards}</div>
+
+  <div class="section-title">明日核心股票池 · 具体标的与入场条件</div>
+  {focus_rows_html}
 
   <div class="section-title">历史同型样本 (T+1/T+2/T+3 走势对照)</div>
   <table class="history">
@@ -501,8 +691,9 @@ def generate_dashboard_section(ctx: dict) -> str:
     h6p = ctx.get('h6p', 0)
     zt_prev = int(ctx.get('zt_prev', 0) or 0)
     zt_boom = (zt / zt_prev) if zt_prev > 0 else None
+    focus_df = ctx.get('focus_df')
 
-    scenarios = ctx.get('scenarios') or _default_scenarios(curr_h, prev_h)
+    scenarios = ctx.get('scenarios') or _default_scenarios(curr_h, prev_h, focus_df=focus_df)
 
     # 因子交叉表
     ap_ad_ok = '✅ 达标' if isinstance(ad, (int, float)) and ad > 0.65 else (
@@ -541,6 +732,29 @@ def generate_dashboard_section(ctx: dict) -> str:
                 f'</div>')
 
     scen_cards = ''.join(_sc(s) for s in scenarios)
+
+    # 内嵌简版 focus 表 (与独立看板同源, class 加 dbd- 前缀避免冲突)
+    focus_rows_inline = ''
+    try:
+        if focus_df is not None and hasattr(focus_df, 'empty') and not focus_df.empty:
+            _rows = []
+            for _, r in focus_df.iterrows():
+                _rows.append(
+                    f'<tr>'
+                    f'<td class="dbd-fp-name">{_esc(r.get("股票", ""))}</td>'
+                    f'<td class="dbd-fp-plate">{_esc(_clean_plate(str(r.get("板块", ""))) or "—")}</td>'
+                    f'<td class="dbd-fp-pool">{_esc(r.get("策略池", ""))}</td>'
+                    f'<td class="dbd-fp-entry">{_esc(r.get("入场条件", ""))}</td>'
+                    f'<td class="dbd-fp-stop">{_esc(r.get("防守位", ""))}</td>'
+                    f'</tr>'
+                )
+            focus_rows_inline = (
+                '<table class="dbd-fp-table"><thead><tr>'
+                '<th>标的</th><th>板块</th><th>策略池</th><th>入场条件</th><th>防守位</th>'
+                '</tr></thead><tbody>' + ''.join(_rows) + '</tbody></table>'
+            )
+    except Exception:
+        pass
 
     wr_color = _win_rate_color(win_rate)
     wr_str = f'{win_rate * 100:.0f}%' if isinstance(win_rate, (int, float)) else '—'
@@ -669,6 +883,25 @@ def generate_dashboard_section(ctx: dict) -> str:
       border: 1px solid #30363d; border-radius: 6px; font-size: 12px;
     }}
     .dbd-full-link:hover {{ border-color: #58a6ff; }}
+    .dbd-fp-table {{
+      width: 100%; background: rgba(22, 27, 34, 0.7);
+      border-radius: 10px; border-collapse: separate; border-spacing: 0;
+      overflow: hidden; margin-bottom: 8px;
+    }}
+    .dbd-fp-table th, .dbd-fp-table td {{
+      padding: 10px 12px; border-bottom: 1px solid rgba(48, 54, 61, 0.6);
+      text-align: left; font-size: 12.5px; vertical-align: top;
+    }}
+    .dbd-fp-table th {{
+      background: rgba(30, 35, 42, 0.9); color: #8b949e;
+      font-size: 11px; font-weight: 600; text-transform: uppercase;
+    }}
+    .dbd-fp-table tbody tr:last-child td {{ border-bottom: none; }}
+    .dbd-fp-name {{ width: 100px; color: #ffcc00; font-weight: 700; }}
+    .dbd-fp-plate {{ width: 130px; color: #79b8ff; font-size: 11.5px; }}
+    .dbd-fp-pool {{ width: 130px; color: #d29922; font-size: 11.5px; }}
+    .dbd-fp-entry {{ color: #c9d1d9; line-height: 1.55; }}
+    .dbd-fp-stop {{ width: 180px; color: #ff8888; font-size: 11.5px; }}
     @media (max-width: 640px) {{
       .dbd-hero {{ flex-direction: column; align-items: stretch; }}
       .dbd-hero .dbd-right {{ text-align: left; }}
@@ -700,4 +933,7 @@ def generate_dashboard_section(ctx: dict) -> str:
 
   <div class="dbd-section-title">明日 T+1 · 4 情形决策树</div>
   <div class="dbd-tree">{scen_cards}</div>
+
+  <div class="dbd-section-title">明日核心股票池 · 具体标的与入场条件</div>
+  {focus_rows_inline}
 </section>'''

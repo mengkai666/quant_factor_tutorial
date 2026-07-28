@@ -2201,7 +2201,7 @@ def build_sector_heatmap(classified_df, price_df, echelon):
     </div>''', top_sectors
 def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thresh,
                   leaders, dates, ratings, sub_ratings,
-                  echelon, top30_data, advance_decline, nday_leaders=None, wc_data=None, sentiment_df=None, plates=None, classified_df=None, return_leaders=None, mainline_ladder=None, sub_leaderboard=None, sub_tracks=None, price_df=None):
+                  echelon, top30_data, advance_decline, nday_leaders=None, wc_data=None, sentiment_df=None, plates=None, classified_df=None, return_leaders=None, mainline_ladder=None, sub_leaderboard=None, sub_tracks=None, price_df=None, focus_df=None):
     
     if len(dates) > 65:
         dates = dates[-65:]
@@ -3355,6 +3355,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
         _dash_ctx = build_dashboard_ctx(
             timing=timing_res, advance_decline=advance_decline,
             sentiment_df=sentiment_df, echelon=echelon, report_date=_report_date,
+            focus_df=focus_df,
         )
         dashboard_section_html = generate_dashboard_section(_dash_ctx)
     except Exception as e:
@@ -4109,12 +4110,15 @@ def main():
         else:
             sentiment_df['ad_mood'] = 50.0
 
-    # 6. 生成HTML
+    # 6. 先算股票池, 再生成 HTML (让内嵌决策看板 section 能吃到 focus_df 挂具体标的)
+    focus_pool_path = os.path.join(os.path.dirname(OUTPUT_HTML), "focus_pool.csv")
+    focus_df = generate_focus_pool(ml_strength, echelon, top30_data, sentiment_df, focus_pool_path)
+
     print("\n[6/6] 生成可视化...")
     generate_html(
         ml_strength=ml_strength, sub_strength=sub_strength,
-        ml_ma=ml_ma, sub_ma=sub_returns, 
-        ml_thresh=calc_threshold(len(dates)), 
+        ml_ma=ml_ma, sub_ma=sub_returns,
+        ml_thresh=calc_threshold(len(dates)),
         sub_thresh=calc_threshold(len(dates), 10.0, 20.0),
         leaders=leaders, dates=dates,
         ratings=ratings, sub_ratings=sub_ratings,
@@ -4122,12 +4126,8 @@ def main():
         nday_leaders=nday_leaders, wc_data=wc_data, sentiment_df=sentiment_df,
         plates=plates_data, classified_df=classified, return_leaders=return_leaders,
         mainline_ladder=mainline_ladder, sub_leaderboard=sub_leaderboard,
-        sub_tracks=sub_tracks, price_df=price_df
+        sub_tracks=sub_tracks, price_df=price_df, focus_df=focus_df
     )
-
-    # 7. 自动化生成选股池与交易预案
-    focus_pool_path = os.path.join(os.path.dirname(OUTPUT_HTML), "focus_pool.csv")
-    generate_focus_pool(ml_strength, echelon, top30_data, sentiment_df, focus_pool_path)
 
     # 7.5 站点发布: 归档当日报告 + 决策看板 + 重建首页 (产品化: 首屏先给结论 + 可翻历史)
     try:
@@ -4162,6 +4162,7 @@ def main():
             _ctx = build_dashboard_ctx(
                 timing=_timing, advance_decline=advance_decline,
                 sentiment_df=sentiment_df, echelon=echelon, report_date=latest_date,
+                focus_df=focus_df,
             )
             _dashboard_html = generate_dashboard_html(_ctx)
         except Exception as e:
