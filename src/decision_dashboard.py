@@ -125,6 +125,46 @@ def _win_rate_color(wr: float | None) -> str:
     return '#ff4444'
 
 
+def _pick_base_scenario(scenarios: list[dict]) -> tuple[dict | None, int]:
+    """从情形列表里挑"概率最高"的作为基准情形 (供重点提炼带高亮).
+    prob 字段形如 '概率 30%'; 无法解析按 0 处理. 平票取先出现者.
+    """
+    best, best_p = None, -1
+    for s in scenarios or []:
+        m = re.search(r'(\d+)\s*%', str(s.get('prob', '')))
+        p = int(m.group(1)) if m else 0
+        if p > best_p:
+            best, best_p = s, p
+    return best, max(best_p, 0)
+
+
+def _sentiment_temp(ad, zt, dt, curr_h, pressure_5d) -> tuple[int, str, str]:
+    """把盘面折算成 0-100 情绪温度 + 档位标签 + 颜色 (A股口径: 热=红, 冷=绿).
+    A/D 为主轴; 跌停家数触发亏钱效应减分; 空间板破 5 日压力加分.
+    A/D 缺失时用涨跌停家数比兜底.
+    """
+    base = None
+    if isinstance(ad, (int, float)):
+        base = ad * 100
+    if base is None:
+        tot = (zt or 0) + (dt or 0)
+        base = (zt / tot * 100) if tot else 50.0
+    if dt and dt > 15:
+        base -= min((dt - 15) * 0.8, 15)
+    if curr_h and pressure_5d and curr_h > pressure_5d:
+        base += 5
+    pct = int(max(2, min(98, round(base))))
+    if pct < 35:
+        return pct, '冰点', '#3fb950'
+    if pct < 50:
+        return pct, '偏弱', '#58a6ff'
+    if pct < 65:
+        return pct, '中性', '#d29922'
+    if pct < 80:
+        return pct, '偏强', '#ff8800'
+    return pct, '过热', '#ff4444'
+
+
 def _split_focus_pool(focus_df) -> dict:
     """把 focus_pool DataFrame 按'策略池'字段拆成三桶, 便于挂到 4 情形.
     返回: {'space': [...], 'core': [...], 'midcore': [...]}
@@ -251,9 +291,7 @@ def _render_focus_table(buckets: dict, catalysts: dict | None = None) -> str:
           </tr></thead><tbody>{mid_rows}</tbody></table>
         </div>''')
 
-    return f'''
-    <div class="section-title">明日核心股票池 · 逐只落地</div>
-    <div class="fp-wrap">{''.join(parts)}</div>'''
+    return f'''<div class="fp-wrap">{''.join(parts)}</div>'''
 
 
 def _default_scenarios(curr_h: int, prev_h: int, focus_df=None) -> list[dict]:
@@ -339,8 +377,10 @@ def _factor_row(name: str, value: str, ok: str, hint: str) -> str:
 
 def _scen_card(s: dict) -> str:
     items = ''.join(f'<li>{_esc(x)}</li>' for x in s.get('items', []))
-    return (f'<div class="scen-card {s.get("kind", "moderate")}">'
-            f'<div class="head"><span class="name">{_esc(s.get("name", ""))}</span>'
+    base_cls = ' scen-base' if s.get('is_base') else ''
+    base_badge = '<span class="scen-base-badge">基准</span>' if s.get('is_base') else ''
+    return (f'<div class="scen-card {s.get("kind", "moderate")}{base_cls}">'
+            f'<div class="head"><span class="name">{_esc(s.get("name", ""))}{base_badge}</span>'
             f'<span class="prob">{_esc(s.get("prob", ""))}</span></div>'
             f'<ul>{items}</ul>'
             f'<div class="pos">{_esc(s.get("pos", ""))}</div>'
@@ -358,6 +398,56 @@ def _history_row(c: dict) -> str:
             f'<td>{_esc(c.get("t2"))}</td>'
             f'<td>{_esc(c.get("t3"))}</td>'
             f'<td>{_esc(result)}</td></tr>')
+
+
+def _sentiment_score(ad, curr_h, pressure_5d, zt, dt, zt_prev) -> tuple[int, str, str]:
+    """把多因子压成 0-100 情绪温度分, 供顶部温度计一眼读。
+    返回 (score, mood_label, mood_color).
+      A/D 主导 (0-55), 空间突破加成 (0-20), 涨停环比 (0-15), 跌停惩罚 (0 到 -20)。
+    """
+    score = 50.0
+    if isinstance(ad, (int, float)):
+        # A/D 0.30→冰点, 0.50→中性, 0.70+→亢奋; 线性映射到 20-85
+        score = 20 + max(0.0, min(1.0, (ad - 0.30) / 0.45)) * 65
+    # 空间突破前压力: 情绪外扩
+    if pressure_5d and curr_h > pressure_5d:
+        score += 8
+    elif pressure_5d and curr_h < pressure_5d:
+        score -= 6
+    # 涨停环比放大/萎缩
+    if zt_prev > 0:
+        boom = zt / zt_prev
+        if boom >= 1.2:
+            score += 8
+        elif boom <= 0.6:
+            score -= 8
+    # 跌停亏钱效应惩罚
+    if dt > 15:
+        score -= min(18, (dt - 15) * 1.2)
+    score = max(2, min(98, round(score)))
+    if score >= 70:
+        return score, '亢奋 · 主升', '#3fb950'
+    if score >= 55:
+        return score, '偏暖 · 结构活跃', '#58c463'
+    if score >= 45:
+        return score, '中性 · 结构博弈', '#d29922'
+    if score >= 30:
+        return score, '偏冷 · 防守', '#ff8800'
+    return score, '冰点 · 空仓观望', '#ff4444'
+
+
+def _mark_base_scenario(scenarios: list[dict]) -> dict | None:
+    """从场景列表挑概率最高的作为'基准情形', 打 is_base 标记并返回它本身。
+    概率解析失败时退回第一个。"""
+    if not scenarios:
+        return None
+    def _p(s):
+        m = re.search(r'(\d+)', str(s.get('prob', '')))
+        return int(m.group(1)) if m else -1
+    base = max(scenarios, key=_p)
+    for s in scenarios:
+        s['is_base'] = (s is base)
+    return base
 
 
 def generate_dashboard_html(ctx: dict) -> str:
@@ -409,6 +499,7 @@ def generate_dashboard_html(ctx: dict) -> str:
                     f'3板 {h3} / 4板 {h4} / 5板 {h5} / 6+板 {h6p}'),
     ])
 
+    base_scen = _mark_base_scenario(scenarios)
     scen_cards = ''.join(_scen_card(s) for s in scenarios)
     hist_rows = ''.join(_history_row(c) for c in history_cases) or (
         '<tr><td colspan="8" style="color:#6e7681;padding:20px;">暂无历史同型样本 (需累计更多回测)</td></tr>')
@@ -417,6 +508,37 @@ def generate_dashboard_html(ctx: dict) -> str:
     focus_buckets = _split_focus_pool(focus_df)
     focus_catalysts = ctx.get('focus_catalysts') or {}
     focus_rows_html = _render_focus_table(focus_buckets, catalysts=focus_catalysts)
+
+    # 情绪温度计 (0-100) — 顶部一眼读盘面冷热
+    senti_score, senti_label, senti_color = _sentiment_score(
+        ad, curr_h, pressure_5d, zt, dt, zt_prev)
+
+    # 重点提炼带 — 把"明天最可能发生 + 该干什么 + 首选标的"压成一句,
+    # 左箱=基准决策, 右箱=情绪温度计, 一眼看结论。
+    top_pick = ''
+    _sp = focus_buckets.get('space', [])
+    if _sp:
+        top_pick = _fmt_stock(_sp[0])
+    base_name = _esc(base_scen.get('name', '')) if base_scen else '—'
+    base_prob = _esc(base_scen.get('prob', '')) if base_scen else ''
+    base_pos = _esc(base_scen.get('pos', '')) if base_scen else _esc(position)
+    base_first = _esc(base_scen['items'][0]) if (base_scen and base_scen.get('items')) else _esc(action)
+    pick_html = f' — <span class="pk">首选 {_esc(top_pick)}</span>' if top_pick else ''
+    headline_html = f'''
+    <div class="headline">
+      <div class="box primary">
+        <div class="lbl">重点 · 明日基准情形 {base_prob}</div>
+        <div class="big">{base_name}{pick_html}</div>
+        <div class="sub2">{base_first} · 建议仓位 {base_pos}</div>
+      </div>
+      <div class="box gauge-wrap">
+        <div class="lbl">盘面情绪温度</div>
+        <div class="gauge-score" style="color:{senti_color};">{senti_score}</div>
+        <div class="gauge-track"><div class="gauge-pin" style="left:{senti_score}%;"></div></div>
+        <div class="gauge-legend"><span>冰点</span><span>中性</span><span>亢奋</span></div>
+        <div class="gauge-mood" style="color:{senti_color};">{senti_label}</div>
+      </div>
+    </div>'''
 
     wr_color = _win_rate_color(win_rate)
     wr_str = f'{win_rate * 100:.0f}%' if isinstance(win_rate, (int, float)) else '—'
@@ -519,11 +641,56 @@ def generate_dashboard_html(ctx: dict) -> str:
     .kpi.blue { color: #58a6ff; }
     .hint { color: #8b949e; font-size: 12px; margin-top: 4px; }
 
+    /* 重点提炼带: 一眼看结论 */
+    .headline {
+      display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px;
+      margin-bottom: 22px;
+    }
+    .headline .box {
+      background: rgba(22, 27, 34, 0.7);
+      border: 1px solid rgba(48, 54, 61, 0.8);
+      border-radius: 14px; padding: 18px 20px;
+    }
+    .headline .box.primary { border-color: var(--sc);
+      background: linear-gradient(135deg, color-mix(in srgb, var(--sc) 14%, transparent), transparent); }
+    .headline .lbl { font-size: 12px; color: #8b949e; text-transform: uppercase;
+      letter-spacing: 0.5px; margin-bottom: 8px; }
+    .headline .big { font-size: 20px; font-weight: 800; color: #fff; line-height: 1.35; }
+    .headline .big .pk { color: var(--sc); }
+    .headline .sub2 { color: #c9d1d9; font-size: 13px; margin-top: 8px; line-height: 1.5; }
+    /* 情绪温度计 */
+    .gauge-wrap { text-align: center; }
+    .gauge-track { position: relative; height: 12px; border-radius: 6px; margin: 14px 0 6px;
+      background: linear-gradient(90deg, #ff4444 0%, #d29922 45%, #3fb950 100%); }
+    .gauge-pin { position: absolute; top: -5px; width: 4px; height: 22px;
+      background: #fff; border-radius: 2px; box-shadow: 0 0 6px rgba(255,255,255,0.7);
+      transform: translateX(-2px); }
+    .gauge-score { font-size: 30px; font-weight: 800; }
+    .gauge-legend { display: flex; justify-content: space-between; color: #6e7681;
+      font-size: 11px; margin-top: 2px; }
+    .gauge-mood { font-size: 13px; margin-top: 6px; font-weight: 700; }
+
     .section-title {
       font-size: 18px; font-weight: 700; color: #ffcc00;
       margin: 28px 0 14px; padding-left: 10px;
       border-left: 4px solid #ffcc00;
     }
+    .section-title .st-sub { font-size: 12px; font-weight: 400; color: #8b949e; margin-left: 8px; }
+    /* 证据折叠区 */
+    details.evidence { margin: 24px 0 8px; border: 1px solid rgba(48,54,61,0.6);
+      border-radius: 12px; background: rgba(22,27,34,0.4); overflow: hidden; }
+    details.evidence > summary { cursor: pointer; padding: 14px 18px; list-style: none;
+      font-size: 14px; font-weight: 700; color: #8b949e; user-select: none; }
+    details.evidence > summary::-webkit-details-marker { display: none; }
+    details.evidence > summary::before { content: '▸ '; color: #58a6ff; }
+    details.evidence[open] > summary::before { content: '▾ '; }
+    details.evidence > summary:hover { color: #c9d1d9; }
+    details.evidence .evidence-body { padding: 0 18px 16px; }
+    /* 基准场景高亮 */
+    .scen-card.scen-base { box-shadow: 0 0 0 1px currentColor, 0 0 24px color-mix(in srgb, var(--sc) 28%, transparent); }
+    .scen-base-badge { display: inline-block; font-size: 10px; font-weight: 700;
+      background: var(--sc); color: #0d1117; padding: 1px 7px; border-radius: 4px;
+      margin-left: 8px; vertical-align: middle; }
     table.factor, table.history {
       width: 100%; background: rgba(22, 27, 34, 0.7);
       border-radius: 12px; border-collapse: separate;
@@ -655,28 +822,33 @@ def generate_dashboard_html(ctx: dict) -> str:
     <div class="hero-desc">{_esc(desc)}</div>
   </div>
 
-  {kpi_html}
+  {headline_html}
 
-  <div class="section-title">场景判定 · 三因子交叉</div>
-  <table class="factor">
-    <thead><tr><th>因子</th><th>当前读数</th><th>是否达标</th><th>辅助说明</th></tr></thead>
-    <tbody>{factor_rows}</tbody>
-  </table>
-
-  <div class="section-title">明日 T+1 · 4 情形决策树</div>
+  <div class="section-title">明日 T+1 · 4 情形决策树<span class="st-sub">概率最高者为基准情形</span></div>
   <div class="scenario-tree">{scen_cards}</div>
 
-  <div class="section-title">明日核心股票池 · 具体标的与入场条件</div>
+  <div class="section-title">明日核心股票池<span class="st-sub">具体标的 · 入场条件 · 防守位</span></div>
   {focus_rows_html}
 
-  <div class="section-title">历史同型样本 (T+1/T+2/T+3 走势对照)</div>
-  <table class="history">
-    <thead><tr>
-      <th>日期</th><th>空间板</th><th>涨停</th><th>梯队分</th>
-      <th>T+1</th><th>T+2</th><th>T+3</th><th>结局</th>
-    </tr></thead>
-    <tbody>{hist_rows}</tbody>
-  </table>
+  <details class="evidence">
+    <summary>数据佐证 · 盘面因子明细 与 历史同型样本</summary>
+    <div class="evidence-body">
+      {kpi_html}
+      <div class="section-title">场景判定 · 三因子交叉</div>
+      <table class="factor">
+        <thead><tr><th>因子</th><th>当前读数</th><th>是否达标</th><th>辅助说明</th></tr></thead>
+        <tbody>{factor_rows}</tbody>
+      </table>
+      <div class="section-title">历史同型样本 (T+1/T+2/T+3 走势对照)</div>
+      <table class="history">
+        <thead><tr>
+          <th>日期</th><th>空间板</th><th>涨停</th><th>梯队分</th>
+          <th>T+1</th><th>T+2</th><th>T+3</th><th>结局</th>
+        </tr></thead>
+        <tbody>{hist_rows}</tbody>
+      </table>
+    </div>
+  </details>
 
   <footer>
     连板情绪分析 · 6 场景数据驱动模型 · 每日自动跑批生成
@@ -757,11 +929,15 @@ def generate_dashboard_section(ctx: dict) -> str:
             f'3板 {h3} / 4板 {h4} / 5板 {h5} / 6+板 {h6p}'),
     ])
 
+    base_scen = _mark_base_scenario(scenarios)
+
     def _sc(s):
         items = ''.join(f'<li>{_esc(x)}</li>' for x in s.get('items', []))
         kind = s.get('kind', 'moderate')
-        return (f'<div class="dbd-scen dbd-{kind}">'
-                f'<div class="dbd-scen-head"><span class="dbd-scen-name">{_esc(s.get("name", ""))}</span>'
+        base_cls = ' dbd-scen-base' if s.get('is_base') else ''
+        base_badge = '<span class="dbd-scen-base-badge">基准</span>' if s.get('is_base') else ''
+        return (f'<div class="dbd-scen dbd-{kind}{base_cls}">'
+                f'<div class="dbd-scen-head"><span class="dbd-scen-name">{_esc(s.get("name", ""))}{base_badge}</span>'
                 f'<span class="dbd-scen-prob">{_esc(s.get("prob", ""))}</span></div>'
                 f'<ul>{items}</ul>'
                 f'<div class="dbd-scen-pos">{_esc(s.get("pos", ""))}</div>'
@@ -814,6 +990,32 @@ def generate_dashboard_section(ctx: dict) -> str:
     wr_str = f'{win_rate * 100:.0f}%' if isinstance(win_rate, (int, float)) else '—'
     boom_str = f'×{zt_boom:.2f}' if zt_boom else '—'
 
+    # 重点提炼带 + 情绪温度计 (与独立看板同源, dbd- 前缀)
+    senti_score, senti_label, senti_color = _sentiment_score(
+        ad, curr_h, pressure_5d, zt, dt, zt_prev)
+    _sp = _split_focus_pool(focus_df).get('space', [])
+    top_pick = _fmt_stock(_sp[0]) if _sp else ''
+    base_name = _esc(base_scen.get('name', '')) if base_scen else '—'
+    base_prob = _esc(base_scen.get('prob', '')) if base_scen else ''
+    base_pos = _esc(base_scen.get('pos', '')) if base_scen else _esc(position)
+    base_first = _esc(base_scen['items'][0]) if (base_scen and base_scen.get('items')) else _esc(action)
+    pick_html = f' — <span class="dbd-pk">首选 {_esc(top_pick)}</span>' if top_pick else ''
+    headline_html = f'''
+    <div class="dbd-headline">
+      <div class="dbd-hbox dbd-hbox-primary">
+        <div class="dbd-hlbl">重点 · 明日基准情形 {base_prob}</div>
+        <div class="dbd-hbig">{base_name}{pick_html}</div>
+        <div class="dbd-hsub">{base_first} · 建议仓位 {base_pos}</div>
+      </div>
+      <div class="dbd-hbox dbd-gauge-wrap">
+        <div class="dbd-hlbl">盘面情绪温度</div>
+        <div class="dbd-gauge-score" style="color:{senti_color};">{senti_score}</div>
+        <div class="dbd-gauge-track"><div class="dbd-gauge-pin" style="left:{senti_score}%;"></div></div>
+        <div class="dbd-gauge-legend"><span>冰点</span><span>中性</span><span>亢奋</span></div>
+        <div class="dbd-gauge-mood" style="color:{senti_color};">{senti_label}</div>
+      </div>
+    </div>'''
+
     kpi_html = f'''
     <div class="dbd-grid">
       <div class="dbd-card"><h4>空间板</h4><div class="dbd-kpi dbd-red">{curr_h}板</div>
@@ -833,6 +1035,35 @@ def generate_dashboard_section(ctx: dict) -> str:
     css = f'''
     <style>
     .dbd-wrap {{ --dbd-sc: {color}; font-family: inherit; margin: 24px 0 32px; }}
+    .dbd-headline {{ display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; margin-bottom: 18px; }}
+    .dbd-hbox {{ background: rgba(22,27,34,0.7); border: 1px solid rgba(48,54,61,0.8);
+      border-radius: 12px; padding: 16px 18px; }}
+    .dbd-hbox-primary {{ border-color: var(--dbd-sc);
+      background: linear-gradient(135deg, color-mix(in srgb, var(--dbd-sc) 14%, transparent), transparent); }}
+    .dbd-hlbl {{ font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }}
+    .dbd-hbig {{ font-size: 18px; font-weight: 800; color: #fff; line-height: 1.35; }}
+    .dbd-hbig .dbd-pk {{ color: var(--dbd-sc); }}
+    .dbd-hsub {{ color: #c9d1d9; font-size: 12.5px; margin-top: 7px; line-height: 1.5; }}
+    .dbd-gauge-wrap {{ text-align: center; }}
+    .dbd-gauge-score {{ font-size: 26px; font-weight: 800; }}
+    .dbd-gauge-track {{ position: relative; height: 11px; border-radius: 6px; margin: 12px 0 5px;
+      background: linear-gradient(90deg, #ff4444 0%, #d29922 45%, #3fb950 100%); }}
+    .dbd-gauge-pin {{ position: absolute; top: -5px; width: 4px; height: 21px; background: #fff;
+      border-radius: 2px; box-shadow: 0 0 6px rgba(255,255,255,0.7); transform: translateX(-2px); }}
+    .dbd-gauge-legend {{ display: flex; justify-content: space-between; color: #6e7681; font-size: 10px; margin-top: 2px; }}
+    .dbd-gauge-mood {{ font-size: 12px; margin-top: 5px; font-weight: 700; }}
+    .dbd-scen.dbd-base {{ box-shadow: 0 0 0 1px currentColor, 0 0 22px color-mix(in srgb, var(--dbd-sc) 26%, transparent); }}
+    .dbd-base-badge {{ display: inline-block; font-size: 9.5px; font-weight: 700; background: var(--dbd-sc);
+      color: #0d1117; padding: 1px 6px; border-radius: 4px; margin-left: 6px; vertical-align: middle; }}
+    details.dbd-evidence {{ margin: 18px 0 8px; border: 1px solid rgba(48,54,61,0.6);
+      border-radius: 12px; background: rgba(22,27,34,0.4); overflow: hidden; }}
+    details.dbd-evidence > summary {{ cursor: pointer; padding: 12px 16px; list-style: none;
+      font-size: 13px; font-weight: 700; color: #8b949e; user-select: none; }}
+    details.dbd-evidence > summary::-webkit-details-marker {{ display: none; }}
+    details.dbd-evidence > summary::before {{ content: '▸ '; color: #58a6ff; }}
+    details.dbd-evidence[open] > summary::before {{ content: '▾ '; }}
+    details.dbd-evidence .dbd-evidence-body {{ padding: 0 16px 14px; }}
+    @media (max-width: 640px) {{ .dbd-headline {{ grid-template-columns: 1fr; }} }}
     .dbd-hero {{
       background: linear-gradient(135deg, color-mix(in srgb, var(--dbd-sc) 20%, transparent),
                                        color-mix(in srgb, var(--dbd-sc) 8%, transparent));
@@ -883,6 +1114,7 @@ def generate_dashboard_section(ctx: dict) -> str:
       margin: 20px 0 10px; padding-left: 9px;
       border-left: 3px solid #ffcc00;
     }}
+    .dbd-st-sub {{ font-size: 11px; font-weight: 400; color: #8b949e; margin-left: 8px; }}
     .dbd-factor {{
       width: 100%; background: rgba(22, 27, 34, 0.7);
       border-radius: 10px; border-collapse: separate; border-spacing: 0;
@@ -981,17 +1213,23 @@ def generate_dashboard_section(ctx: dict) -> str:
     <div class="dbd-desc">{_esc(desc)}</div>
   </div>
 
-  {kpi_html}
+  {headline_html}
 
-  <div class="dbd-section-title">场景判定 · 三因子交叉</div>
-  <table class="dbd-factor">
-    <thead><tr><th>因子</th><th>当前读数</th><th>是否达标</th><th>辅助说明</th></tr></thead>
-    <tbody>{factor_rows}</tbody>
-  </table>
-
-  <div class="dbd-section-title">明日 T+1 · 4 情形决策树</div>
+  <div class="dbd-section-title">明日 T+1 · 4 情形决策树 <span class="dbd-st-sub">基准情形已高亮</span></div>
   <div class="dbd-tree">{scen_cards}</div>
 
   <div class="dbd-section-title">明日核心股票池 · 具体标的与入场条件</div>
   {focus_rows_inline}
+
+  <details class="dbd-evidence">
+    <summary>数据佐证 · 盘面因子明细</summary>
+    <div class="dbd-evidence-body">
+      {kpi_html}
+      <div class="dbd-section-title">场景判定 · 三因子交叉</div>
+      <table class="dbd-factor">
+        <thead><tr><th>因子</th><th>当前读数</th><th>是否达标</th><th>辅助说明</th></tr></thead>
+        <tbody>{factor_rows}</tbody>
+      </table>
+    </div>
+  </details>
 </section>'''
