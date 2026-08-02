@@ -260,7 +260,6 @@ INDUSTRY_TO_SECTOR = {
 # ============================================================
 def _cls_sign(params):
     ss = ''.join(sorted([f'{k}={v}' for k, v in params.items()])) + ',cailianpressPcANBfjw'
-    import hashlib
     return hashlib.md5(ss.encode()).hexdigest()
 
 def fetch_cls_plate_data(date_str):
@@ -1835,7 +1834,7 @@ def update_price_cache(classified_df):
     # === 策略1: baostock (首选, 稳定可靠) ===
     try:
         import multiprocessing
-        print(f"    🔄 尝试 baostock 获取...")
+        print("    🔄 尝试 baostock 获取...")
         bs_ok = False
         fetch_end_str = latest_zt_str  # baostock 实际收口日期, 默认目标日, 探测后可回退
         try:
@@ -1843,12 +1842,12 @@ def update_price_cache(classified_df):
                 res = pool.apply_async(_check_bs_login)
                 bs_ok = res.get(timeout=5)
         except multiprocessing.context.TimeoutError:
-            print(f"    ⚠️ baostock 登录超时, 服务器无响应")
+            print("    ⚠️ baostock 登录超时, 服务器无响应")
         except Exception as e:
             print(f"    ⚠️ baostock 连通性检测异常: {e}")
         
         if not bs_ok:
-            print(f"    ⚠️ baostock 不可用")
+            print("    ⚠️ baostock 不可用")
         else:
             # 探测 baostock 实际能覆盖到的最大日期。
             # 关键修复: 不再因"最新日未更新"就跳过整段, 而是取回实际可用的
@@ -1859,7 +1858,7 @@ def update_price_cache(classified_df):
                     res = pool.apply_async(_probe_bs_max_date, ((start_date_str, latest_zt_str),))
                     probe_max = res.get(timeout=10)
             except multiprocessing.context.TimeoutError:
-                print(f"    ⚠️ baostock 数据预检超时 (服务器无响应)")
+                print("    ⚠️ baostock 数据预检超时 (服务器无响应)")
             except Exception as e:
                 print(f"    ⚠️ baostock 数据预检异常: {e}")
 
@@ -1888,7 +1887,7 @@ def update_price_cache(classified_df):
                             elapsed = time.time() - t0
                             print(f"    已获取 {pc}/{len(all_codes)} 只股票... ({elapsed:.1f}s)")
                         if time.time() - t0 > GLOBAL_TIMEOUT:
-                            print(f"    ⚠️ baostock 获取超时, 使用已获取的部分数据")
+                            print("    ⚠️ baostock 获取超时, 使用已获取的部分数据")
                             break
                 if new_rows:
                     print(f"    ✅ baostock 成功获取 {len(new_rows)} 条记录")
@@ -3894,12 +3893,11 @@ def main():
             sub_strength[s] = 0
 
     ml_ma = calc_ma(ml_strength)
-    sub_ma = calc_ma(sub_strength)
-    
+
     leaders = get_leaders(classified, '细分板块')
     
     # 计算细分板块累计涨幅 (高保真版)
-    print(f"  📈 计算细分板块累计涨幅与领涨股...")
+    print("  📈 计算细分板块累计涨幅与领涨股...")
     sub_returns, return_leaders, sub_leaderboard, sub_tracks = calc_subsector_returns(classified, price_df, dates)
 
     nday_leaders = get_nday_leaders(classified, price_df, '细分板块') if not price_df.empty else {}
@@ -4187,7 +4185,7 @@ def main():
         print(f"  [警告] 站点发布失败 (不影响主流程): {e}")
 
     print(f"\n{'='*60}")
-    print(f"  ✅ V3 同步版已完成!")
+    print("  ✅ V3 同步版已完成!")
     print(f"  → 本地报告: {OUTPUT_HTML}")
     print(f"  → GitHub Pages: {SITE_URL}")
     print(f"{'='*60}")
@@ -4236,7 +4234,7 @@ def main():
                         # 策略2: STARTTLS(587)
                         if not _sent:
                             try:
-                                print(f"    尝试策略2 STARTTLS(587)...")
+                                print("    尝试策略2 STARTTLS(587)...")
                                 server = smtplib.SMTP(EMAIL_SMTP_SERVER, 587, timeout=30)
                                 server.ehlo()
                                 ctx2 = ssl.create_default_context()
@@ -4253,7 +4251,7 @@ def main():
                         # 策略3: SSL(465) + 跳过证书验证 (最后手段)
                         if not _sent:
                             try:
-                                print(f"    尝试策略3 SSL(465)+跳过验证...")
+                                print("    尝试策略3 SSL(465)+跳过验证...")
                                 ctx3 = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
                                 ctx3.check_hostname = False
                                 ctx3.verify_mode = ssl.CERT_NONE

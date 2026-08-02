@@ -30,9 +30,7 @@ if sys.platform == 'win32':
         pass
 
 import pandas as pd
-import numpy as np
 from datetime import datetime, timedelta
-from time_utils import get_latest_date
 
 
 import hashlib
@@ -139,7 +137,7 @@ def _fetch_em_one_day(date_str):
             res_df['名称'] = df['名称']
             res_df['连板数'] = df['连板数']
             return res_df, pd.DataFrame(), True
-    except Exception as e:
+    except Exception:
         pass
     return None, pd.DataFrame(), False
 
@@ -336,7 +334,6 @@ def analyze_lianban(zt_data, dt_data):
     """分析连板数据，含龙头首板日期追踪 (精确历史回溯版)"""
     sorted_dates = sorted(zt_data.keys())
     results = []
-    prev_day_stocks = {}
 
     # 准备市场情绪因子
     try:
@@ -552,8 +549,6 @@ def generate_echarts_html(df, save_path='连板高度分析.html'):
     zt_count_data = df['涨停数'].tolist()
     dt_count_data = df['跌停数'].tolist()
     ratio_data = df['涨跌比'].tolist()
-    sentiment_data = df['情绪'].tolist()
-    sentiment_colors = df['情绪颜色'].tolist()
 
     # 连板高度标签 (只取第一个，防止分叉/重叠)
     lianban_labels = []

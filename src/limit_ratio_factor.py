@@ -11,12 +11,9 @@
 """
 
 import pandas as pd
-import numpy as np
 import os
 import requests
-import json
 import urllib3
-from datetime import datetime, timedelta
 from time_utils import get_latest_date
 
 # 禁用 SSL 警告
@@ -297,13 +294,13 @@ def demo():
     print(f"   当前情绪: {res['sentiment']}")
     print(f"   综合解读: {res['interpretation']}")
     
-    print(f"\n2. 细分指标:")
+    print("\n2. 细分指标:")
     print(f"   A/D 家数比: {res.get('ad_ratio', 0):.2%} (涨{res.get('market_up', 0)}/跌{res.get('market_down', 0)})")
     
     # 历史趋势截取
     df = factor._get_composite_data()
     if not df.empty:
-        print(f"\n3. 最近5日情绪趋势:")
+        print("\n3. 最近5日情绪趋势:")
         for _, r in df.tail(5).iterrows():
             f_res = factor.calculate_factor(r['date'])
             print(f"   {r['date']} | 评分: {r['score_ema']:.3f} | {f_res['sentiment']}")

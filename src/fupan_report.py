@@ -1,9 +1,7 @@
 import requests  # type: ignore
-import json 
 # pyrefly: ignore [missing-import]
-import urllib3 
-import os
-from datetime import datetime 
+import urllib3
+from datetime import datetime
 from time_utils import get_latest_date
  
 # 禁用 SSL 警告 
@@ -175,9 +173,8 @@ class FuPanZhangTingYuanYin:
         ladder = data["ladder"] 
         filename = f"综合复盘报告_{date}.html" 
  
-        # 1. 构造天梯 HTML 
-        ladder_html = "" 
-        if ladder: 
+        # 1. 构造天梯 HTML
+        if ladder:
             # 热门板块 
             sector_html = "" 
             sorted_sectors = sorted(ladder["sector_summary"].items(), key=lambda x: x[1], reverse=True)[:6] 
@@ -205,9 +202,8 @@ class FuPanZhangTingYuanYin:
         else: 
             ladder_content = '<div id="ladder-tab" class="tab-content">暂无市场动向数据</div>' 
  
-        # 2. 构造原因 HTML 
-        reason_html = "" 
-        if reason: 
+        # 2. 构造原因 HTML
+        if reason:
             plates_html = "" 
             for p in reason["plates"]: 
                 # 每个板块的列表头 

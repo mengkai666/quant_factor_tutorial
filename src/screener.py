@@ -1,20 +1,11 @@
 import pandas as pd
-import os
-from datetime import datetime
 
 def generate_focus_pool(ml_strength, echelon, top30_data, sentiment_df, output_path="focus_pool.csv"):
     """
     自动化生成“明日核心股票池”与“操作预案”
     """
     pool = []
-    
-    # 获取近期情绪来决定策略倾向
-    curr_mood = 50
-    if sentiment_df is not None and not sentiment_df.empty:
-        try:
-            curr_mood = sentiment_df['ad_mood'].dropna().values[-1]
-        except (KeyError, IndexError): pass
-        
+
     # 获取当前最强主线
     core_ml = "未知"
     if ml_strength is not None and not ml_strength.empty:
@@ -80,6 +71,6 @@ def generate_focus_pool(ml_strength, echelon, top30_data, sentiment_df, output_p
         except Exception as e:
             print(f"  [量化引擎] 写入股票池失败: {e}")
     else:
-        print(f"  [量化引擎] 今日未筛选出符合条件的个股，股票池为空。")
+        print("  [量化引擎] 今日未筛选出符合条件的个股，股票池为空。")
         
     return df

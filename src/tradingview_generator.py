@@ -1,7 +1,6 @@
 import pandas as pd
 import baostock as bs
 import json
-import os
 import datetime
 from time_utils import get_latest_date
 
