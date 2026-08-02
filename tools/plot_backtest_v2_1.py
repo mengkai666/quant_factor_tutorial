@@ -14,6 +14,8 @@ from matplotlib import font_manager
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(_ROOT, 'tools'))
+sys.path.insert(0, os.path.join(_ROOT, 'src'))
+from plot_utils import safe_savefig  # 出图超 2000px 上限时自动压 dpi (单一真源)
 
 # 中文字体 (强制覆盖 monospace, 防止 tick_label 回落到 DejaVu Sans Mono 掉字)
 _installed = {fp.name for fp in font_manager.fontManager.ttflist}
@@ -191,7 +193,8 @@ def render():
                  fontsize=22, color='#ffcc00', fontweight='bold', y=0.98)
 
     out = os.path.join(_ROOT, 'output', 'backtest_v2_1_report.png')
-    fig.savefig(out, dpi=140, facecolor='#0d1117')
+    # safe_savefig: dpi 超 2000px 上限时自动压 (24×16in @140 会被压到 ~83dpi)
+    safe_savefig(fig, out, dpi=140, facecolor='#0d1117')
     print(f'已保存 → {out}')
 
 

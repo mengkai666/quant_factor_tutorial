@@ -450,6 +450,86 @@ def _mark_base_scenario(scenarios: list[dict]) -> dict | None:
     return base
 
 
+def _build_playbook(curr_h, zt, ad, h5, date_str) -> list[dict]:
+    """基于当日盘面, 从三条实证规律挑出命中的"今日操作口令"。
+
+    规律来源 (见 output/limit_pattern_study.md, 179 交易日回测):
+      ① 极端情绪不对称回归 — 冰点(涨停≤46 / 红盘率<0.2)次日反弹 85%;
+         过热(涨停≥126)次日不一定崩但收益到头, 缓慢消化。
+      ② 连板 2 板陷阱 — 2 板仅 33% 能封二板, 3-6 板反而稳定 45-50%。
+      ③ 孤峰效应 — 最高板 ≥6 且 5 板断档, 次日崩塌 39%(阶梯连续日仅 26%)。
+      ④ 日历脾气 — 周四高潮易引周五崩(56%) / 周五冰点周一反弹(66%)。
+
+    返回 [{tone, icon, text}], tone ∈ hot|cold|warn|ok|neutral 决定配色。
+    只输出命中的口令; 数据是论据, 口令是动作。
+    """
+    cmds: list[dict] = []
+    ad_is = isinstance(ad, (int, float))
+    ZT_HOT, ZT_COLD = 126, 46
+
+    # ① 情绪极值逆向 (最高优先级)
+    if zt >= ZT_HOT:
+        cmds.append({'tone': 'hot', 'icon': '🔥',
+            'text': f'涨停 {zt} 家破高潮线 — 明天别追高。过热不一定崩(缓慢消化), '
+                    f'但收益已到头, 该止盈的分批走。'})
+    elif zt <= ZT_COLD or (ad_is and ad < 0.2):
+        _r = f'红盘率 {ad:.0%} ' if ad_is else ''
+        cmds.append({'tone': 'cold', 'icon': '🥶',
+            'text': f'涨停 {zt} 家 {_r}冰点 — 明天大概率反弹(冰点次日反弹 85%), '
+                    f'敢逢低加, 越恐慌越看多。'})
+
+    # ② 孤峰预警 (最高板 ≥6 且 5 板断档)
+    if curr_h >= 6 and h5 == 0:
+        cmds.append({'tone': 'warn', 'icon': '⚠️',
+            'text': f'空间板 {curr_h}板孤峰、5板断档 — 龙一独一档没接力, '
+                    f'次日崩塌概率 39%, 手里高位股先出别恋战。'})
+    elif curr_h >= 6:
+        cmds.append({'tone': 'ok', 'icon': '🪜',
+            'text': f'空间板 {curr_h}板且阶梯连续 — 主升情绪健康, '
+                    f'可放胆做题材, 中位段(3-6板)拿得住。'})
+
+    # ③ 连板 2 板陷阱 (常驻提醒)
+    cmds.append({'tone': 'neutral', 'icon': '📉',
+        'text': '手里首板/2板 → 尾盘减仓(2板仅 33% 能封二板); '
+                '3-6板 → 拿住, 能走到的都是硬货(晋级率 45-50%)。'})
+
+    # ④ 日历脾气 (T+1 前瞻)
+    try:
+        wd = datetime.strptime(date_str, '%Y-%m-%d').weekday()
+    except Exception:
+        wd = -1
+    if wd == 3:  # 今天周四 → 明天周五
+        cmds.append({'tone': 'warn', 'icon': '📅',
+            'text': '今天周四 — 周四高潮易引周五崩(56%), '
+                    '高位股明天开盘冲高先减, 别裸奔过周末。'})
+    elif wd == 2:  # 今天周三 → 明天周四(全周最危险)
+        cmds.append({'tone': 'warn', 'icon': '📅',
+            'text': '明天周四(全周最危险, 崩塌 35%) — '
+                    '今天尾盘别加满, 给明天留减仓空间。'})
+    elif wd == 4 and (zt <= ZT_COLD or (ad_is and ad < 0.35)):  # 今天周五冰点 → 周一
+        cmds.append({'tone': 'cold', 'icon': '📅',
+            'text': '周五冰点收盘 — 周一 66% 概率反弹, '
+                    '别地板割肉, 可留底仓过周末。'})
+
+    return cmds
+
+
+def _render_playbook(cmds: list[dict], p: str = '') -> str:
+    """把口令列表渲染成 HTML。p 是 class 前缀 (''=独立看板, 'dbd-'=内嵌 section)。"""
+    if not cmds:
+        return ''
+    rows = ''.join(
+        f'<div class="{p}pb-cmd {p}pb-{c["tone"]}">'
+        f'<span class="{p}pb-icon">{c["icon"]}</span>'
+        f'<span class="{p}pb-txt">{_esc(c["text"])}</span></div>'
+        for c in cmds
+    )
+    return (f'<div class="{p}playbook">'
+            f'<div class="{p}pb-title">今日操作口令'
+            f'<span class="{p}pb-sub">命中实证规律 · 看到什么做什么</span></div>'
+            f'{rows}</div>')
+
+
 def generate_dashboard_html(ctx: dict) -> str:
     """把 ctx 渲染成一份完整的看板 HTML (single-file, 无外部依赖)."""
     # 数据取值 + 兜底
@@ -539,6 +619,9 @@ def generate_dashboard_html(ctx: dict) -> str:
         <div class="gauge-mood" style="color:{senti_color};">{senti_label}</div>
       </div>
     </div>'''
+
+    # 今日操作口令 — 从三条实证规律里挑当日命中的动作项
+    playbook_html = _render_playbook(_build_playbook(curr_h, zt, ad, h5, date_str))
 
     wr_color = _win_rate_color(win_rate)
     wr_str = f'{win_rate * 100:.0f}%' if isinstance(win_rate, (int, float)) else '—'
@@ -669,6 +752,22 @@ def generate_dashboard_html(ctx: dict) -> str:
     .gauge-legend { display: flex; justify-content: space-between; color: #6e7681;
       font-size: 11px; margin-top: 2px; }
     .gauge-mood { font-size: 13px; margin-top: 6px; font-weight: 700; }
+
+    /* 今日操作口令带: 命中实证规律 → 动作 */
+    .playbook { margin-bottom: 22px; }
+    .pb-title { font-size: 14px; font-weight: 700; color: #ffcc00;
+      margin-bottom: 10px; padding-left: 10px; border-left: 4px solid #ffcc00; }
+    .pb-title .pb-sub { font-size: 11px; font-weight: 400; color: #8b949e; margin-left: 8px; }
+    .pb-cmd { display: flex; align-items: flex-start; gap: 10px;
+      background: rgba(22,27,34,0.7); border: 1px solid rgba(48,54,61,0.8);
+      border-left-width: 3px; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px;
+      font-size: 13.5px; line-height: 1.5; color: #e6edf3; }
+    .pb-icon { font-size: 16px; flex-shrink: 0; line-height: 1.4; }
+    .pb-cmd.pb-hot { border-left-color: #ff4444; }
+    .pb-cmd.pb-cold { border-left-color: #58a6ff; }
+    .pb-cmd.pb-warn { border-left-color: #ff8800; }
+    .pb-cmd.pb-ok { border-left-color: #3fb950; }
+    .pb-cmd.pb-neutral { border-left-color: #6e7681; }
 
     .section-title {
       font-size: 18px; font-weight: 700; color: #ffcc00;
@@ -823,6 +922,8 @@ def generate_dashboard_html(ctx: dict) -> str:
   </div>
 
   {headline_html}
+
+  {playbook_html}
 
   <div class="section-title">明日 T+1 · 4 情形决策树<span class="st-sub">概率最高者为基准情形</span></div>
   <div class="scenario-tree">{scen_cards}</div>
@@ -1016,6 +1117,10 @@ def generate_dashboard_section(ctx: dict) -> str:
       </div>
     </div>'''
 
+    # 今日操作口令 (命中实证规律; dbd- 前缀)
+    playbook_html = _render_playbook(
+        _build_playbook(curr_h, zt, ad, h5, date_str), p='dbd-')
+
     kpi_html = f'''
     <div class="dbd-grid">
       <div class="dbd-card"><h4>空间板</h4><div class="dbd-kpi dbd-red">{curr_h}板</div>
@@ -1063,6 +1168,21 @@ def generate_dashboard_section(ctx: dict) -> str:
     details.dbd-evidence > summary::before {{ content: '▸ '; color: #58a6ff; }}
     details.dbd-evidence[open] > summary::before {{ content: '▾ '; }}
     details.dbd-evidence .dbd-evidence-body {{ padding: 0 16px 14px; }}
+    .dbd-playbook {{ margin-bottom: 18px; border: 1px solid rgba(48,54,61,0.8);
+      border-radius: 12px; background: rgba(22,27,34,0.55); padding: 14px 16px; }}
+    .dbd-pb-title {{ font-size: 13px; font-weight: 700; color: #ffcc00; margin-bottom: 10px;
+      border-left: 3px solid #ffcc00; padding-left: 8px; }}
+    .dbd-pb-sub {{ font-size: 11px; font-weight: 400; color: #8b949e; margin-left: 8px; }}
+    .dbd-pb-cmd {{ display: flex; align-items: flex-start; gap: 9px; padding: 8px 11px;
+      margin-bottom: 6px; border-radius: 8px; border-left: 3px solid #6e7681;
+      background: rgba(13,17,23,0.5); font-size: 12.5px; line-height: 1.5; color: #c9d1d9; }}
+    .dbd-pb-cmd:last-child {{ margin-bottom: 0; }}
+    .dbd-pb-icon {{ flex-shrink: 0; font-size: 14px; }}
+    .dbd-pb-hot {{ border-left-color: #ff4444; background: rgba(255,68,68,0.09); }}
+    .dbd-pb-cold {{ border-left-color: #58a6ff; background: rgba(88,166,255,0.09); }}
+    .dbd-pb-warn {{ border-left-color: #ff8800; background: rgba(255,136,0,0.09); }}
+    .dbd-pb-ok {{ border-left-color: #3fb950; background: rgba(63,185,80,0.09); }}
+    .dbd-pb-neutral {{ border-left-color: #6e7681; }}
     @media (max-width: 640px) {{ .dbd-headline {{ grid-template-columns: 1fr; }} }}
     .dbd-hero {{
       background: linear-gradient(135deg, color-mix(in srgb, var(--dbd-sc) 20%, transparent),
@@ -1214,6 +1334,8 @@ def generate_dashboard_section(ctx: dict) -> str:
   </div>
 
   {headline_html}
+
+  {playbook_html}
 
   <div class="dbd-section-title">明日 T+1 · 4 情形决策树 <span class="dbd-st-sub">基准情形已高亮</span></div>
   <div class="dbd-tree">{scen_cards}</div>
