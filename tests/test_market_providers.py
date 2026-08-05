@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 import threading
 import time
 
@@ -16,13 +17,13 @@ def test_limit_pool_successful_empty_response_is_zero():
     assert result.actual_count == 0
 
 
-def test_limit_pool_timeout_is_failed_not_zero():
+def test_limit_pool_timeout_with_other_side_zero_is_partial_not_zero():
     provider = LimitPoolProvider(
         fetch_zt=lambda _: (_ for _ in ()).throw(TimeoutError("timeout")),
         fetch_dt=lambda _: pd.DataFrame(),
     )
     result = provider.fetch_day("2026-08-05")
-    assert result.status is FetchStatus.FAILED
+    assert result.status is FetchStatus.PARTIAL
     assert "timeout" in result.message
 
 
@@ -37,6 +38,156 @@ def test_limit_pool_partial_when_one_side_fails_and_codes_include_bj():
     assert result.status is FetchStatus.PARTIAL
     assert set(result.data["code"]) == {"sh600000", "bj920117"}
     assert set(result.data["pool_type"]) == {"ZT"}
+
+
+def test_limit_pool_primary_success_does_not_call_fallback():
+    calls = []
+    zt = pd.DataFrame({"代码": ["600000"], "名称": ["浦发银行"], "连板数": [1]})
+    provider = LimitPoolProvider(
+        fetch_zt=lambda _date: zt,
+        fetch_dt=lambda _date: pd.DataFrame(),
+        zt_fallbacks=[("fallback", lambda _date: calls.append("fallback"))],
+    )
+
+    result = provider.fetch_day("2026-08-05")
+
+    assert result.status is FetchStatus.SUCCESS
+    assert calls == []
+    assert result.source == "ZT:akshare_em|DT:akshare_em"
+
+
+def test_limit_pool_uses_fallback_after_primary_error():
+    fallback = pd.DataFrame({
+        "code": ["920117"], "name": ["国航远洋"], "limit_count": [2],
+    })
+    provider = LimitPoolProvider(
+        fetch_zt=lambda _date: (_ for _ in ()).throw(TimeoutError("primary timeout")),
+        fetch_dt=lambda _date: pd.DataFrame(),
+        zt_fallbacks=[("eastmoney_push2ex", lambda _date: fallback)],
+    )
+
+    result = provider.fetch_day("2026-08-05")
+
+    assert result.status is FetchStatus.SUCCESS
+    assert result.source == "ZT:eastmoney_push2ex|DT:akshare_em"
+    assert result.data.iloc[0].to_dict()["code"] == "bj920117"
+    assert "primary timeout" in result.message
+
+
+def test_limit_pool_uses_fallback_after_primary_empty_response():
+    fallback = pd.DataFrame({
+        "code": ["000001"], "name": ["平安银行"], "limit_count": [1],
+    })
+    provider = LimitPoolProvider(
+        fetch_zt=lambda _date: pd.DataFrame(),
+        fetch_dt=lambda _date: pd.DataFrame(),
+        zt_fallbacks=[("eastmoney_push2ex", lambda _date: fallback)],
+    )
+
+    result = provider.fetch_day("2026-08-05")
+
+    assert result.status is FetchStatus.SUCCESS
+    assert result.source == "ZT:eastmoney_push2ex|DT:akshare_em"
+    assert result.data.iloc[0].to_dict()["code"] == "sz000001"
+
+
+def test_limit_pool_all_valid_empty_sources_return_zero():
+    provider = LimitPoolProvider(
+        fetch_zt=lambda _date: pd.DataFrame(),
+        fetch_dt=lambda _date: pd.DataFrame(),
+        zt_fallbacks=[("fallback", lambda _date: pd.DataFrame())],
+    )
+
+    assert provider.fetch_day("2026-08-05").status is FetchStatus.ZERO
+
+
+def test_limit_pool_one_available_side_is_partial():
+    provider = LimitPoolProvider(
+        fetch_zt=lambda _date: pd.DataFrame({"code": ["600000"]}),
+        fetch_dt=lambda _date: (_ for _ in ()).throw(TimeoutError("dt timeout")),
+    )
+
+    result = provider.fetch_day("2026-08-05")
+
+    assert result.status is FetchStatus.PARTIAL
+    assert set(result.data["pool_type"]) == {"ZT"}
+
+
+def test_limit_pool_all_sources_failed_is_failed():
+    fail = lambda _date: (_ for _ in ()).throw(TimeoutError("offline"))
+
+    result = LimitPoolProvider(fetch_zt=fail, fetch_dt=fail).fetch_day("2026-08-05")
+
+    assert result.status is FetchStatus.FAILED
+
+
+def test_limit_pool_default_chain_contains_direct_and_independent_fallbacks():
+    provider = LimitPoolProvider()
+
+    assert [name for name, _ in provider.zt_sources] == [
+        "akshare_em", "eastmoney_push2ex", "ths_limit_up"
+    ]
+    assert [name for name, _ in provider.dt_sources] == [
+        "akshare_em", "eastmoney_push2ex"
+    ]
+
+
+def test_custom_primary_does_not_enable_network_fallbacks_implicitly():
+    provider = LimitPoolProvider(
+        fetch_zt=lambda _date: pd.DataFrame(),
+        fetch_dt=lambda _date: pd.DataFrame(),
+    )
+
+    assert [name for name, _ in provider.zt_sources] == ["akshare_em"]
+    assert [name for name, _ in provider.dt_sources] == ["akshare_em"]
+
+
+def test_one_sided_custom_primary_keeps_other_default_fallback_chain():
+    provider = LimitPoolProvider(fetch_zt=lambda _date: pd.DataFrame())
+
+    assert [name for name, _ in provider.zt_sources] == ["akshare_em"]
+    assert [name for name, _ in provider.dt_sources] == [
+        "akshare_em", "eastmoney_push2ex"
+    ]
+
+
+def test_limit_pool_reports_discarded_invalid_rows():
+    zt = pd.DataFrame({
+        "code": ["600000", "invalid"],
+        "name": ["浦发银行", "坏行"],
+    })
+    provider = LimitPoolProvider(
+        fetch_zt=lambda _date: zt,
+        fetch_dt=lambda _date: pd.DataFrame(),
+    )
+
+    result = provider.fetch_day("2026-08-05")
+
+    assert result.status is FetchStatus.SUCCESS
+    assert result.data["code"].tolist() == ["sh600000"]
+    assert "discarded 1 invalid stock row" in result.message
+
+
+def test_legacy_entrypoint_blocks_unexpected_limit_pool_stage_error(monkeypatch):
+    import legacy_tracker
+    import lianban_analysis
+    from data_sources.calendar_provider import CalendarProvider
+
+    monkeypatch.setattr(CalendarProvider, "latest_closed_day", lambda _self: "2026-08-05")
+    monkeypatch.setattr(legacy_tracker, "trim_cache_file", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        lianban_analysis,
+        "fetch_zt_pool_data",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("pool stage offline")),
+    )
+    monkeypatch.setattr(
+        legacy_tracker,
+        "load_and_classify_zt",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("continued after failure")),
+    )
+
+    with pytest.raises(RuntimeError, match="pool stage offline"):
+        next(legacy_tracker.iter_main(limit_pool_provider=object(), plate_provider=object()))
 
 
 def test_plate_provider_distinguishes_partial_coverage_and_normalizes_codes():

@@ -28,7 +28,7 @@ class FakeSession:
 
 
 def test_eastmoney_limit_pool_parses_beijing_code_and_count():
-    session = FakeSession({"data": {"pool": [
+    session = FakeSession({"rc": 0, "data": {"pool": [
         {"c": "920117", "n": "国航远洋", "lbc": 2},
     ]}})
     source = EastmoneyLimitPoolSource(session=session, min_interval=0)
@@ -44,15 +44,24 @@ def test_eastmoney_limit_pool_parses_beijing_code_and_count():
 
 def test_eastmoney_missing_data_node_raises_schema_error():
     source = EastmoneyLimitPoolSource(
-        session=FakeSession({"result": "ok"}), min_interval=0
+        session=FakeSession({"rc": 0, "result": "ok"}), min_interval=0
     )
 
     with pytest.raises(ValueError, match="data.pool"):
         source.fetch_dt("2026-08-05")
 
 
+def test_eastmoney_business_error_is_not_a_credible_empty_pool():
+    source = EastmoneyLimitPoolSource(
+        session=FakeSession({"rc": 102, "data": {"pool": []}}), min_interval=0
+    )
+
+    with pytest.raises(ValueError, match="rc=102"):
+        source.fetch_zt("2026-08-05")
+
+
 def test_ths_limit_pool_extracts_high_days_count():
-    source = ThsLimitUpSource(session=FakeSession({"data": {"info": [
+    source = ThsLimitUpSource(session=FakeSession({"status_code": 0, "data": {"info": [
         {"code": "920117", "name": "国航远洋", "high_days": "3天2板"},
     ]}}))
 
@@ -64,7 +73,27 @@ def test_ths_limit_pool_extracts_high_days_count():
 
 
 def test_ths_missing_info_node_raises_schema_error():
-    source = ThsLimitUpSource(session=FakeSession({"data": {}}))
+    source = ThsLimitUpSource(session=FakeSession({"status_code": 0, "data": {}}))
+
+    with pytest.raises(ValueError, match="data.info"):
+        source.fetch_zt("2026-08-05")
+
+
+def test_ths_business_error_is_not_a_credible_empty_pool():
+    source = ThsLimitUpSource(session=FakeSession({
+        "status_code": 1001,
+        "status_msg": "invalid date",
+        "data": {"info": []},
+    }))
+
+    with pytest.raises(ValueError, match="status_code=1001"):
+        source.fetch_zt("2026-08-05")
+
+
+def test_ths_info_must_be_a_list():
+    source = ThsLimitUpSource(session=FakeSession({
+        "status_code": 0, "data": {"info": {}},
+    }))
 
     with pytest.raises(ValueError, match="data.info"):
         source.fetch_zt("2026-08-05")

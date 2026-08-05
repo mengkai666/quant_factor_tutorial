@@ -3777,6 +3777,7 @@ def iter_main(limit_pool_provider=None, plate_provider=None):
             
     except Exception as e:
         print(f"[警告] 涨停数据更新失败 ({e})")
+        raise
 
     # 2. 加载并分类涨停数据
     print(f"\n[{datetime.now().strftime('%H:%M:%S')}] [2/7] 加载并分类涨停股票...")

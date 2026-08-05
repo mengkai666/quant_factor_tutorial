@@ -60,18 +60,23 @@ def _rows_to_frame(rows, *, count_key: str | None) -> pd.DataFrame:
         return _empty_frame()
 
     normalized = []
+    discarded = 0
     for item in rows:
         if not isinstance(item, dict):
+            discarded += 1
             continue
         code = str(item.get("c", item.get("code", ""))).strip()
         if not re.fullmatch(r"\d{6}", code):
+            discarded += 1
             continue
         name = str(item.get("n", item.get("name", "")) or "").strip()
         count = _parse_limit_count(item.get(count_key) if count_key else None)
         normalized.append({"code": code, "name": name, "limit_count": count})
     if not normalized:
         raise ValueError("pool contains no valid stock rows")
-    return pd.DataFrame(normalized, columns=SOURCE_COLUMNS)
+    frame = pd.DataFrame(normalized, columns=SOURCE_COLUMNS)
+    frame.attrs["discarded_rows"] = discarded
+    return frame
 
 
 class EastmoneyLimitPoolSource:
@@ -113,6 +118,9 @@ class EastmoneyLimitPoolSource:
         )
         response.raise_for_status()
         payload = response.json()
+        if not isinstance(payload, dict) or payload.get("rc") != 0:
+            rc = payload.get("rc") if isinstance(payload, dict) else "missing"
+            raise ValueError(f"response business error rc={rc}")
         data = payload.get("data") if isinstance(payload, dict) else None
         if not isinstance(data, dict) or "pool" not in data:
             raise ValueError("response missing data.pool")
@@ -151,19 +159,28 @@ class ThsLimitUpSource:
         )
         response.raise_for_status()
         payload = response.json()
+        if not isinstance(payload, dict) or payload.get("status_code") != 0:
+            status = payload.get("status_code") if isinstance(payload, dict) else "missing"
+            raise ValueError(f"response business error status_code={status}")
         data = payload.get("data") if isinstance(payload, dict) else None
-        if not isinstance(data, dict) or "info" not in data:
+        if (not isinstance(data, dict) or "info" not in data
+                or not isinstance(data["info"], list)):
             raise ValueError("response missing data.info")
         rows = []
+        discarded = 0
         for item in data["info"]:
             if not isinstance(item, dict):
+                discarded += 1
                 continue
             code = str(item.get("code", "")).strip()
             if not re.fullmatch(r"\d{6}", code):
+                discarded += 1
                 continue
             rows.append({
                 "c": code,
                 "n": str(item.get("name", "") or "").strip(),
                 "limit_count": _parse_limit_count(item.get("high_days")),
             })
-        return _rows_to_frame(rows, count_key="limit_count")
+        frame = _rows_to_frame(rows, count_key="limit_count")
+        frame.attrs["discarded_rows"] += discarded
+        return frame

@@ -32,6 +32,17 @@ python tools/audit_data_integrity.py --quiet
 
 `data/fetch_status.csv` 记录每次 universe/price 抓取的最终聚合状态；`success`、`zero`、`partial`、`failed`、`stale` 和 `not_available` 分别表示成功、可信空结果、部分覆盖、失败、过期和当前源不可用。
 
+### 涨跌停池备用链
+
+最新闭市日的涨跌停池由 `LimitPoolProvider` 独立取数，并按以下顺序回退：
+
+- 涨停：`akshare_em` -> `eastmoney_push2ex` -> `ths_limit_up`。
+- 跌停：`akshare_em` -> `eastmoney_push2ex`。
+
+主源返回可信非空数据后不会调用后续来源；空结果会继续尝试备用源。每行的 `source` 字段和 `data/fetch_status.csv` 中的聚合 `source`（例如 `ZT:eastmoney_push2ex|DT:akshare_em`）记录实际来源，失败原因摘要保存在状态消息中。东财请求带有限速和重试，同花顺仅用于涨停池。
+
+若涨停或跌停任一核心池不可用，结果会标记为 `partial` 或 `failed`，不会用空值伪装成完整成功；质量闸门会阻断报告生成、站点发布和邮件发送。沪深北代码统一保存为 `shxxxxxx`、`szxxxxxx` 或 `bjxxxxxx`。
+
 ## 生成报告
 
 ```bash
