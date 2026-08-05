@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>主线强度追踪 · A股短线主线终端</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #0d1117; color: #e6edf3; line-height: 1.6;
+    min-height: 100vh; padding: 48px 20px;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  header { margin-bottom: 40px; }
+  h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
+  .tagline { color: #8b949e; font-size: 15px; margin-top: 8px; }
+  .hero {
+    background: linear-gradient(135deg, #161b22, #1c2128);
+    border: 1px solid #30363d; border-radius: 14px;
+    padding: 28px 32px; margin: 32px 0 40px;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 20px;
+  }
+  .hero-info .label { color: #8b949e; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; }
+  .hero-info .date { font-size: 32px; font-weight: 700; margin-top: 4px; }
+  .hero-info .sub { color: #8b949e; font-size: 13px; margin-top: 6px; }
+  .btn {
+    background: #238636; color: #fff; text-decoration: none;
+    padding: 12px 28px; border-radius: 10px; font-size: 15px; font-weight: 600;
+    transition: background .15s; white-space: nowrap;
+  }
+  .btn:hover { background: #2ea043; }
+  .section-title { font-size: 14px; color: #8b949e; text-transform: uppercase;
+    letter-spacing: 1px; margin-bottom: 16px; }
+  .month { margin-bottom: 20px; }
+  .month-label { font-size: 13px; color: #6e7681; margin-bottom: 8px; }
+  .days { display: flex; flex-wrap: wrap; gap: 8px; }
+  .day {
+    display: inline-block; min-width: 44px; text-align: center;
+    background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+    padding: 8px 12px; color: #58a6ff; text-decoration: none; font-size: 14px;
+    transition: border-color .15s, background .15s;
+  }
+  .day:hover { border-color: #58a6ff; background: #1c2333; }
+  .empty { color: #6e7681; }
+  .verdict {
+    background: linear-gradient(135deg, #12171e, #171d26);
+    border: 2px solid var(--vc); border-left-width: 6px; border-radius: 14px;
+    padding: 24px 28px; margin: 0 0 24px;
+    box-shadow: 0 0 24px color-mix(in srgb, var(--vc) 22%, transparent);
+  }
+  .verdict-top { display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+  .verdict-label { color: #8b949e; font-size: 12px; text-transform: uppercase;
+    letter-spacing: 1px; font-weight: 700; }
+  .badge { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
+  .badge.ok { color: #3fb950; background: rgba(63,185,80,.12); border: 1px solid rgba(63,185,80,.35); }
+  .badge.warn { color: #d29922; background: rgba(210,153,34,.12); border: 1px solid rgba(210,153,34,.4); }
+  .verdict-stance { font-size: 30px; font-weight: 800; color: var(--vc); margin-bottom: 8px; letter-spacing: -0.5px; }
+  .verdict-head { color: #e6edf3; font-size: 15px; margin-bottom: 6px; }
+  .verdict-play { color: #c9d1d9; font-size: 14px; margin-bottom: 10px; }
+  .verdict-play b { color: var(--vc); }
+  .verdict-reads { color: #8b949e; font-size: 13px; padding-top: 8px; border-top: 1px solid #21262d; }
+  .verdict-reads b { color: #e6edf3; }
+  .dashboard-entry {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 20px; text-decoration: none;
+    background: linear-gradient(135deg, #1a1e2e, #16202e);
+    border: 1px solid #30363d; border-left: 4px solid #58a6ff;
+    border-radius: 12px; padding: 18px 24px; margin-bottom: 20px;
+    transition: border-color .15s, transform .15s, box-shadow .15s;
+  }
+  .dashboard-entry:hover { border-color: #58a6ff; transform: translateX(2px);
+    box-shadow: 0 4px 16px rgba(88,166,255,.18); }
+  .de-label { color: #58a6ff; font-size: 11px; text-transform: uppercase;
+    letter-spacing: 1.5px; font-weight: 700; }
+  .de-title { color: #e6edf3; font-size: 16px; font-weight: 700; margin-top: 3px; }
+  .de-sub { color: #8b949e; font-size: 12px; margin-top: 4px; }
+  .de-right { color: #58a6ff; font-size: 14px; font-weight: 600; white-space: nowrap; }
+  footer { margin-top: 48px; color: #6e7681; font-size: 12px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>主线强度追踪</h1>
+    <div class="tagline">每天收盘后自动更新 · 告诉你明天主线在哪、该进攻还是防御</div>
+  </header>
+
+  
+  <div class="verdict" style="--vc:#58a6ff;">
+    <div class="verdict-top">
+      <span class="verdict-label">今日结论 · 顺逆指数</span>
+      <span class="badge ok">● 数据完整</span>
+    </div>
+    <div class="verdict-stance">防御档 · 逆指数</div>
+    <div class="verdict-head">高度断层(最高8板中间缺3档)。</div>
+    <div class="verdict-play"><b>操作</b> · 防御为主、控回撤。避险抱团(医药类)可作对冲工具, 但属防御非转势, 情绪一好反要警惕。科技反抽按诱多处理。</div>
+    <div class="verdict-reads">A/D <b>4.0</b>　|　涨停 <b>103</b> / 跌停 <b>1</b>　|　最高 <b>8</b> 板</div>
+  </div>
+
+  
+  <a class="dashboard-entry" href="dashboards/latest.html">
+    <div class="de-left">
+      <div class="de-label">数据驱动 · 决策看板</div>
+      <div class="de-title">6 场景分类器 + 三因子交叉 + 历史胜率</div>
+      <div class="de-sub">当日看板 · 2026-08-05 · 覆盖明日 T+1 决策树</div>
+    </div>
+    <div class="de-right">打开看板 →</div>
+  </a>
+
+  <div class="hero">
+    <div class="hero-info">
+      <div class="label">最新报告</div>
+      <div class="date">2026-08-05</div>
+      <div class="sub">共 15 期历史 · 更新于 2026-08-05 12:30</div>
+    </div>
+    <a class="btn" href="reports/2026-08-05.html">查看最新报告 →</a>
+  </div>
+
+  <div class="section-title">历史归档</div>
+  <div class="month"><div class="month-label">2026-08</div><div class="days"><a class="day" href="reports/2026-08-05.html">05</a><a class="day" href="reports/2026-08-04.html">04</a><a class="day" href="reports/2026-08-03.html">03</a></div></div><div class="month"><div class="month-label">2026-07</div><div class="days"><a class="day" href="reports/2026-07-31.html">31</a><a class="day" href="reports/2026-07-30.html">30</a><a class="day" href="reports/2026-07-29.html">29</a><a class="day" href="reports/2026-07-28.html">28</a><a class="day" href="reports/2026-07-27.html">27</a><a class="day" href="reports/2026-07-24.html">24</a><a class="day" href="reports/2026-07-23.html">23</a><a class="day" href="reports/2026-07-22.html">22</a><a class="day" href="reports/2026-07-21.html">21</a><a class="day" href="reports/2026-07-20.html">20</a><a class="day" href="reports/2026-07-17.html">17</a><a class="day" href="reports/2026-07-16.html">16</a></div></div>
+
+  <footer>数据自动跑批生成 · 仅供研究参考, 不构成投资建议</footer>
+</div>
+</body>
+</html>
