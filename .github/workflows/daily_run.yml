@@ -137,8 +137,12 @@ jobs:
         git config --local user.name "github-actions[bot]"
         # 只 add 小体积缓存文件 (data/ 下), 不 add 大体积 CSV 和 HTML
         git add data/涨停历史缓存.csv data/cls_plate_cache.csv data/sentiment_history_cache.csv 2>/dev/null || true
-        # 如果文件有变更，则自动 Commit 和 Push
-        git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-update market data caches [skip ci]" && git push)
+        # 只看暂存区判断是否提交。旧写法多看了一眼工作区 (git diff --quiet &&),
+        # 兜底重跑时种子缓存幂等无变化 (暂存区空), 但 em 缓存等未 add 的文件必变
+        # (工作区脏) → 短路进 commit → 空暂存区报 "nothing to commit" 退出 1 →
+        # 本步 failure → 后续 gh-pages 部署被 skip。化石版场景下兜底本该覆盖
+        # 凌晨残缺报告, 却因此被锁死 (08-03/08-04 兜底连炸即此因)。
+        git diff --staged --quiet || (git commit -m "Auto-update market data caches [skip ci]" && git push)
 
     - name: 部署报告站点到 GitHub Pages
       if: steps.idempotency.outputs.skip != 'true'
