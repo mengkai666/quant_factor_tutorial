@@ -31,6 +31,7 @@ if sys.platform == 'win32':
 
 import pandas as pd
 from datetime import datetime, timedelta
+from data_sources.models import normalize_code
 
 
 import hashlib
@@ -196,6 +197,7 @@ def _load_cache():
         df = pd.read_csv(CACHE_FILE, encoding='utf-8-sig', dtype={'日期': str, '代码': str})
         if df.empty:
             return {}, {}
+        df['代码'] = df['代码'].map(normalize_code)
 
         zt_data = {}
         dt_data = {}
@@ -285,6 +287,42 @@ def fetch_zt_pool_data(n_trading_days=120):
     return final_zt, final_dt
 
 
+def refresh_latest_limit_pool(zt_data, dt_data, date: str, provider, persist: bool = False):
+    """Refresh one closed day through LimitPoolProvider and update legacy maps."""
+    from data_sources.models import FetchStatus
+
+    canonical_date = str(date).replace("-", "")
+    iso_date = f"{canonical_date[:4]}-{canonical_date[4:6]}-{canonical_date[6:8]}"
+    result = provider.fetch_day(iso_date)
+    if result.data is None:
+        return result
+
+    data = result.data.copy()
+
+    def legacy_pool(pool_type: str, include_count: bool):
+        part = data[data["pool_type"] == pool_type].copy()
+        columns = ["代码", "名称"] + (["连板数"] if include_count else [])
+        if part.empty:
+            return pd.DataFrame(columns=columns)
+        out = pd.DataFrame({
+            "代码": part["code"].astype(str).str[2:],
+            "名称": part["name"].astype(str),
+        })
+        if include_count:
+            out["连板数"] = pd.to_numeric(part["limit_count"], errors="coerce").fillna(1).astype(int)
+        return out[columns].reset_index(drop=True)
+
+    present_types = set(data["pool_type"].astype(str)) if not data.empty else set()
+    complete = result.status in {FetchStatus.SUCCESS, FetchStatus.ZERO}
+    if complete or "ZT" in present_types:
+        zt_data[canonical_date] = legacy_pool("ZT", include_count=True)
+    if complete or "DT" in present_types:
+        dt_data[canonical_date] = legacy_pool("DT", include_count=False)
+    if persist and (complete or present_types):
+        _save_cache(zt_data, dt_data)
+    return result
+
+
 def _save_cache(zt_data, dt_data):
     """把涨停/跌停数据保存到本地CSV缓存"""
     rows = []
@@ -297,6 +335,8 @@ def _save_cache(zt_data, dt_data):
         for col in keep_cols:
             if col in df.columns:
                 sub[col] = df[col].values
+        if '代码' in sub.columns:
+            sub['代码'] = sub['代码'].map(normalize_code)
         rows.append(sub)
 
     for date_str, df in dt_data.items():
@@ -307,6 +347,8 @@ def _save_cache(zt_data, dt_data):
             for col in ['代码', '名称']:
                 if col in df.columns:
                     sub[col] = df[col].values
+            if '代码' in sub.columns:
+                sub['代码'] = sub['代码'].map(normalize_code)
             rows.append(sub)
 
     if rows:

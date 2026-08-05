@@ -64,7 +64,7 @@ def _load_sentiment() -> pd.DataFrame:
 def _load_price_cache() -> pd.DataFrame:
     df = pd.read_csv(PRICE_CACHE)
     df['date'] = df['date'].astype(str).str.replace('-', '', regex=False)
-    df['close'] = pd.to_numeric(df['close'], errors='coerce')
+    df['close'] = pd.to_numeric(df['close_qfq'], errors='coerce')
     return df.dropna(subset=['close'])
 
 

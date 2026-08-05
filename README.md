@@ -25,10 +25,33 @@ pip install -r requirements.txt
 ### 本地运行
 
 ```bash
+# 首次运行或需要重建历史时，先生成沪深北全 A 股统一缓存
+python tools/rebuild_market_data.py --start 2025-11-04
+python tools/audit_data_integrity.py --quiet
+
+# 质量闸门通过后再生成报告
 python src/主线强度追踪.py
 ```
 
 运行后查看 `output/主线强度追踪.html` 报告。
+
+### 市场数据契约
+
+统一 universe 覆盖上海、深圳、北京证券交易所全部 A 股，标准代码分别为
+`sh600000`、`sz000001`、`bj920117`。价格缓存字段为：
+
+- `close_raw`：未复权收盘价，仅用于 A/D 和停牌状态判断。
+- `close_qfq`：前复权收盘价，仅用于收益率、排行和回测。
+- `trade_status`：`traded`、`suspended`、`not_listed`。
+- `source_raw`、`source_qfq`：逐字段记录数据源。
+
+候选文件通过质量闸门后才原子替换正式缓存。抓取状态写入
+`data/fetch_status.csv`，质量报告写入 `data/market_data_quality.json`。
+价格、universe、涨跌停池的 `partial/failed/stale/not_available` 会阻断报告；板块归因属于可降级增强项，其部分覆盖记录为 warning 并使用已有缓存或行业映射继续运行。
+
+### 失败恢复
+
+重建支持按代码分批和检查点续跑。网络失败时保留候选文件和状态记录，修复网络后重新执行同一命令即可；质量闸门失败不会覆盖已有正式缓存。Universe 刷新还会按交易所对比上次有效规模，接口静默返回明显不完整的列表时保留旧缓存并记录失败。
 
 ### 启用邮件推送
 
@@ -59,7 +82,10 @@ quant_factor_tutorial/
 ├── .github/workflows/
 │   └── daily_run.yml              # GitHub Actions 每日跑批
 ├── src/                           # 📦 源码
-│   ├── 主线强度追踪.py            # 🎯 核心主程序 (入口)
+│   ├── 主线强度追踪.py            # 🎯 兼容入口
+│   ├── app.py                     # 四阶段应用编排
+│   ├── data_sources/              # 日历、universe、价格及质量 Provider
+│   ├── pipeline/                  # 数据准备与报告前质量闸门
 │   ├── lianban_analysis.py        # 连板高度分析模块
 │   ├── fupan_report.py            # 复盘报告 API
 │   ├── limit_ratio_factor.py      # 市场情绪因子 (A/D 真源)
@@ -71,7 +97,10 @@ quant_factor_tutorial/
 │   ├── 涨停历史缓存.csv           # [种子缓存] 涨停数据 (<1MB)
 │   ├── cls_plate_cache.csv        # [种子缓存] 板块分类 (<1MB)
 │   ├── sentiment_history_cache.csv# [种子缓存] 情绪历史 (<1MB)
-│   ├── price_history_cache.csv    # [运行时生成] 全市场价格 (~18MB, 不入库)
+│   ├── price_history_cache.csv    # [运行时生成] 全市场 raw/qfq 价格 (不入库)
+│   ├── stock_universe.csv         # [运行时生成] 沪深北全 A 股 universe (不入库)
+│   ├── fetch_status.csv           # [运行时生成] 分批抓取状态 (不入库)
+│   ├── market_data_quality.json   # [运行时生成] 最后一次质量报告 (不入库)
 │   └── industry_cache.csv         # [运行时生成] 行业映射 (不入库)
 ├── output/                        # 📤 生成产物 (不入库)
 │   ├── 主线强度追踪.html          # 主报告
@@ -84,7 +113,7 @@ quant_factor_tutorial/
 └── .gitignore
 ```
 
-> **大文件说明**: `data/price_history_cache.csv` (~18MB) 和 `data/industry_cache.csv` 不在 Git 仓库中，
+> **运行时文件说明**: `data/price_history_cache.csv` 和 `data/industry_cache.csv` 不在 Git 仓库中，
 > 在 GitHub Actions 中通过 `actions/cache` 管理，本地运行时自动生成。
 > `output/` 下的报告产物也不入库。
 

@@ -8,18 +8,40 @@
 pip install -r requirements.txt
 ```
 
-项目依赖 `pandas`、`numpy`、`requests`、`baostock`、`wordcloud` 和 `akshare`。网络接口不可用时，脚本会尽量使用已有缓存继续生成报告。
+项目依赖 `pandas`、`numpy`、`requests`、`baostock`、`wordcloud` 和 `akshare`。市场数据首次运行需要网络访问 AkShare、腾讯或新浪接口。
+
+## 重建沪深北市场数据
+
+首次运行、缓存损坏或需要扩大历史窗口时，先执行：
+
+```bash
+python tools/rebuild_market_data.py --start 2025-11-04
+python tools/audit_data_integrity.py --quiet
+```
+
+该流程覆盖上海、深圳、北京证券交易所全部 A 股。价格缓存同时保留未复权和前复权口径：
+
+| 字段 | 用途 |
+|---|---|
+| `close_raw` | A/D、涨跌方向和停牌判断 |
+| `close_qfq` | 周期收益、排行和回测 |
+| `trade_status` | `traded`、`suspended`、`not_listed` |
+| `source_raw` / `source_qfq` | 逐字段来源追踪 |
+
+候选缓存只有在质量闸门通过后才替换 `data/price_history_cache.csv`。失败时可保留候选文件，修复网络后重复执行命令，检查点会跳过已可信代码。
+
+`data/fetch_status.csv` 记录每次 universe/price 抓取的最终聚合状态；`success`、`zero`、`partial`、`failed`、`stale` 和 `not_available` 分别表示成功、可信空结果、部分覆盖、失败、过期和当前源不可用。
 
 ## 生成报告
 
 ```bash
-python 主线强度追踪.py
+python src/主线强度追踪.py
 ```
 
 核心输出：
 
-- `主线强度追踪111111.html`：可视化投研报告。
-- `data_quality_report.json`：缓存覆盖、重复数据、分类覆盖、情绪异常等审计信息。
+- `output/主线强度追踪.html`：可视化投研报告。
+- `data/market_data_quality.json`：统一价格缓存的质量闸门结果。
 - `*.csv`：涨停、概念分类、价格和情绪缓存。
 
 ## 配置邮件
@@ -31,12 +53,14 @@ $env:EMAIL_ENABLE="1"
 $env:EMAIL_SENDER="your@qq.com"
 $env:EMAIL_PASSWORD="your_auth_code"
 $env:EMAIL_RECEIVERS="receiver1@qq.com,receiver2@qq.com"
-python 主线强度追踪.py
+python src/主线强度追踪.py
 ```
 
 ## 检查数据质量
 
-运行后打开 `data_quality_report.json`。重点关注：
+运行后检查 `data/market_data_quality.json` 和 `python tools/audit_data_integrity.py --quiet` 的退出码。质量报告存在 `critical` 项时，报告生成、站点发布和邮件发送都会被阻断。
+
+旧版业务缓存仍可单独检查：
 
 - `warnings`：需要优先处理的风险提示。
 - `cls_plate_cache.duplicate_rows`：概念分类缓存是否存在重复。
