@@ -44,6 +44,7 @@ ai_*.txt
 # === 打包归档 ===
 *.zip
 backups/
+.worktrees/
 
 # === PyInstaller ===
 *.manifest
