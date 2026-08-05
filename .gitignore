@@ -17,6 +17,8 @@ price_history_cache.csv
 industry_cache.csv
 
 # === 运行时生成的输出/报告 ===
+# output/ 整目录为运行时产物 (报告/图表/回测CSV/日志), 零跟踪文件, 不入 master
+output/
 *.html
 data_quality_report.json
 focus_pool.csv
