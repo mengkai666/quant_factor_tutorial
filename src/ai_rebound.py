@@ -20,6 +20,7 @@
 """
 import os
 import json
+import time
 import requests
 
 
@@ -61,6 +62,9 @@ ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-opus-4-8")
 ANTHROPIC_ENABLE = os.environ.get("ANTHROPIC_ENABLE", "1") == "1"
 # 中转地址 (留空 = 官方)。裸域名会自动补 /v1/messages。
 ANTHROPIC_BASE_URL = os.environ.get("ANTHROPIC_BASE_URL", "").strip()
+# 部分中转强制要求显式启用 1M 上下文 beta (如 anyrouter: 不带此头直接 400
+# "请启用 1m 上下文")。留空则不发 anthropic-beta 头 (官方/多数中转无需)。
+ANTHROPIC_BETA = os.environ.get("ANTHROPIC_BETA", "").strip()
 
 _API_VERSION = "2023-06-01"
 
@@ -130,9 +134,20 @@ def generate_ai_rebound(facts: dict, timeout: int = 45) -> dict | None:
             "anthropic-version": _API_VERSION,
             "content-type": "application/json",
         }
-        resp = requests.post(_resolve_api_url(), headers=headers, json=payload, timeout=timeout)
-        if resp.status_code != 200:
-            print(f"  [警告] AI 研判 API 返回 {resp.status_code}: {resp.text[:200]}")
+        if ANTHROPIC_BETA:
+            headers["anthropic-beta"] = ANTHROPIC_BETA
+        # 中转易抽风: 429/5xx 视为临时错误, 退避重试最多 3 次
+        resp = None
+        for attempt in range(3):
+            resp = requests.post(_resolve_api_url(), headers=headers, json=payload, timeout=timeout)
+            if resp.status_code == 200:
+                break
+            print(f"  [警告] AI 研判 API 返回 {resp.status_code} (第{attempt+1}/3次): {resp.text[:160]}")
+            if resp.status_code not in (429, 500, 502, 503, 504):
+                return None
+            if attempt < 2:
+                time.sleep(2 * (attempt + 1))
+        if resp is None or resp.status_code != 200:
             return None
         data = resp.json()
         # Claude messages API: content 是 block 数组, 取 text

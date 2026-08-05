@@ -17,6 +17,13 @@ import sys
 
 import pandas as pd
 
+# Windows 控制台默认 GBK, emoji/中文会 UnicodeEncodeError; 强制 UTF-8 输出
+try:
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')  # pyrefly: ignore [missing-attribute]
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')  # pyrefly: ignore [missing-attribute]
+except Exception:
+    pass
+
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(_ROOT, 'src'))
 
@@ -26,6 +33,41 @@ from timing_signal import _classify_scene  # noqa: E402
 # ============================================================
 #  数据加载
 # ============================================================
+# 全市场宽度下限 (与 tools/reconcile_sentiment_ad.py / 主程序 MIN_MARKET_BREADTH 同义)
+MIN_MARKET_BREADTH = 4000
+
+
+def _trim_uninformative_prefix(facts):
+    """裁掉序列开头"无真源"的天, 中段残缺只告警不丢弃。
+
+    sentiment 缓存起点 (20250919) 早于价格缓存起点 (2025-11-04) 40 天, 这段
+    up/down 全是 0 —— A/D 真源根本不覆盖, 对账窗口开多大都补不上。它们进回测后
+    ad = 0/0 = NaN, 全部落进 '中性震荡' 桶 (E/A 场景都要求 ad > 0.65, NaN 进不去,
+    故不伪造进攻信号), 但会给该桶掺入零信息样本稀释胜率分母。同理开头缺 ZT 数据的
+    天 max_h=0, 连板因子失真。
+
+    只裁前缀: 中段丢天会让 prev_h / T+1 指向非相邻交易日, 反而制造新的失真 ——
+    中段残缺的正解是回补价格缓存 (tools/backfill_price_gap.py), 故此处只告警。
+    """
+    breadth = facts['up'] + facts['down']
+    ok = (breadth >= MIN_MARKET_BREADTH) & (facts['max_h'] > 0)
+    if not ok.any():
+        return facts
+    first = int(ok.idxmax())
+    if first > 0:
+        dropped = facts.iloc[:first]
+        print(f'  ⚠️ 裁掉开头 {first} 天无真源样本 '
+              f'({dropped["date"].min()} ~ {dropped["date"].max()}): '
+              f'早于价格缓存起点, up/down 无 A/D 真源可对账')
+        facts = facts.iloc[first:].reset_index(drop=True)
+    thin = facts[(facts['up'] + facts['down']) < MIN_MARKET_BREADTH]
+    if not thin.empty:
+        print(f'  ⚠️ 中段 {len(thin)} 天宽度残缺 (<{MIN_MARKET_BREADTH}), 已保留以维持序列连续性, '
+              f'但胜率含噪: {sorted(thin["date"].tolist())[:5]}...')
+        print('     ➡️ 修复: python tools/backfill_price_gap.py --dates <这些天> --apply --overwrite')
+    return facts
+
+
 def load_daily_facts():
     """回放全量 173 天, 每天生成一个 dict, 含分类器所需全部因子."""
     ad = pd.read_csv(os.path.join(_ROOT, 'data', 'sentiment_history_cache.csv'))
@@ -62,7 +104,8 @@ def load_daily_facts():
               }).reset_index()
     facts['ad'] = facts['up'] / (facts['up'] + facts['down'])
     facts['ladder'] = facts['h3'] + 2 * facts['h4'] + 3 * facts['h5'] + 4 * facts['h6p']
-    return facts.sort_values('date').reset_index(drop=True)
+    facts = facts.sort_values('date').reset_index(drop=True)
+    return _trim_uninformative_prefix(facts)
 
 
 # ============================================================

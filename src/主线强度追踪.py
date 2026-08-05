@@ -1748,6 +1748,11 @@ def _fetch_bs_chunk(args):
         if rs and rs.error_code == '0':
             while rs.next():
                 row = rs.get_row_data()
+                # 串号护栏: baostock 批量/多进程下偶发对 query(A) 返回 B 的 K 线;
+                # 用返回行 row[1] 裸码校验, 不符即丢弃, 防相邻代码 close 张冠李戴污染 A/D。
+                ret_code = row[1].replace('.', '') if row[1] else ''
+                if ret_code and ret_code != code_str:
+                    continue
                 rows.append({
                     'date': row[0],
                     'code': code_str,
@@ -1764,6 +1769,36 @@ def _fetch_bs_chunk(args):
         
     return rows
 
+def _drop_stale_latest_day(price_df, threshold=0.9):
+    """体检价格缓存最新一天是否为前一交易日的陈旧副本; 命中则剔除该日并返回。
+
+    判据与 _fetch_tencent_close 的护栏同源 (逐股 close 身份比对): 同一交易日
+    全市场 >90% 报价与前一日精确到分完全相同的概率为 0, 阈值留 10% 停牌余量。
+    交集不足 500 只时不判 (样本太小, 宁可放过也不误删真实数据)。
+    """
+    if price_df.empty:
+        return price_df
+    dates = sorted(price_df['date'].unique())
+    if len(dates) < 2:
+        return price_df
+    latest, prev = dates[-1], dates[-2]
+    cur_map = dict(zip(price_df.loc[price_df['date'] == latest, 'code'],
+                       price_df.loc[price_df['date'] == latest, 'close']))
+    prev_map = dict(zip(price_df.loc[price_df['date'] == prev, 'code'],
+                        price_df.loc[price_df['date'] == prev, 'close']))
+    common = set(cur_map) & set(prev_map)
+    if len(common) < 500:
+        return price_df
+    identical = sum(1 for c in common if abs(float(cur_map[c]) - float(prev_map[c])) < 1e-6)
+    ratio = identical / len(common)
+    if ratio > threshold:
+        print(f"    🚫 价格缓存最新日 {latest} 与 {prev} 的 close 逐股相同占比 "
+              f"{identical}/{len(common)} ({ratio:.0%}) > {threshold:.0%}, "
+              f"判定为陈旧副本, 剔除该日并重抓")
+        return price_df[price_df['date'] != latest].reset_index(drop=True)
+    return price_df
+
+
 def update_price_cache(classified_df):
     price_df = load_price_cache()
     
@@ -1772,12 +1807,23 @@ def update_price_cache(classified_df):
     latest_zt_str = latest_zt_dt.strftime('%Y-%m-%d')
     
     if not price_df.empty:
-        max_price_date = price_df['date'].max()
-        if max_price_date >= latest_zt_str:
-            return price_df
-        
-        start_date_dt = datetime.strptime(max_price_date, '%Y-%m-%d') + timedelta(days=1)
-        start_date_str = start_date_dt.strftime('%Y-%m-%d')
+        # 陈旧副本体检 (2026-08-03 事故): 旧实现只比日期就 return, 若最新一天的
+        # close 整批是前一交易日的副本 (腾讯未开盘快照落库 / 外部脚本写坏),
+        # 缓存"看起来是最新的", 主程序直接 return, 护栏所在的 fastpath 根本不
+        # 被调用, 污染永久留存 —— 下游 A/D 全成 flat (08-03 实测 up+down 仅 80)。
+        # 判据与 _fetch_tencent_close 同源: 与前一交易日 close 逐股完全相同
+        # 占比 >90% = 陈旧副本; 命中则剔除该日, 让后续流程重抓。
+        price_df = _drop_stale_latest_day(price_df)
+        if price_df.empty:
+            start_date_dt = latest_zt_dt - timedelta(days=90)
+            start_date_str = start_date_dt.strftime('%Y-%m-%d')
+        else:
+            max_price_date = price_df['date'].max()
+            if max_price_date >= latest_zt_str:
+                return price_df
+
+            start_date_dt = datetime.strptime(max_price_date, '%Y-%m-%d') + timedelta(days=1)
+            start_date_str = start_date_dt.strftime('%Y-%m-%d')
     else:
         start_date_dt = latest_zt_dt - timedelta(days=90)
         start_date_str = start_date_dt.strftime('%Y-%m-%d')
@@ -1802,10 +1848,17 @@ def update_price_cache(classified_df):
 
     # === 策略0: 腾讯快照 (仅补最新一天, 全市场约2秒) ===
     # 日常场景: 缓存只差最新交易日, 腾讯批量接口秒取全市场收盘价, 避免 baostock 逐股慢查。
-    # 仅当缺口就是"最新一天"时启用: start_date 与 latest_zt 属同一交易日缺口
-    # (日历差 <=4 天可涵盖周末/单个假期), 且腾讯只返回最新价, 只能填 latest_zt_str 当天。
-    gap_days = (latest_zt_dt - start_date_dt).days if not price_df.empty else 999
-    if not price_df.empty and 0 <= gap_days <= 4:
+    # 腾讯快照只返回"最新价", 只能填 latest_zt_str 当天; 故仅当"缺失交易日只有最新一天"才启用。
+    # ⚠️ 旧实现按日历天差 <=4 判断, 会在缓存落后 >=2 个交易日时误触发 —— 只补最新日就 return,
+    #    把中间交易日 (如 07-29/07-30) 永久丢弃, 且下游 A/D 对账对缺失日静默跳过。
+    #    改用权威交易日历 (classified_df['日期']) 精确判断: 只有当缺失交易日恰为 latest_zt 一天时才走腾讯,
+    #    落后多天则 _only_latest_missing=False, 落到 baostock 兜底 (它按 [start,latest] 整段抓, 自动补齐)。
+    _trading_days = sorted(str(d) for d in classified_df['日期'].unique())
+    # 从 price_df 直接取 (始终在作用域内; max_price_date 仅在非空分支定义)
+    _max_price_ymd = price_df['date'].max().replace('-', '') if not price_df.empty else ''
+    _missing_trading = [d for d in _trading_days if d > _max_price_ymd and d <= latest_zt_date]
+    _only_latest_missing = (not price_df.empty) and _missing_trading == [latest_zt_date]
+    if _only_latest_missing:
         print(f"    ⚡ 仅缺最新交易日 ({latest_zt_str}), 尝试腾讯快照秒补...")
         try:
             # 构造 "最新已知一日" close 映射, 供腾讯 fastpath 做陈旧快照身份比对。
