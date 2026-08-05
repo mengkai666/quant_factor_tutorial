@@ -86,6 +86,8 @@ jobs:
         path: |
           data/price_history_cache.csv
           data/industry_cache.csv
+          data/stock_universe.csv
+          data/fetch_status.csv
         key: market-data-cache-${{ github.run_number }}
         restore-keys: |
           market-data-cache-
@@ -102,6 +104,16 @@ jobs:
         sudo apt-get update -qq > /dev/null 2>&1
         sudo apt-get install -y -qq fonts-wqy-zenhei > /dev/null 2>&1
 
+    - name: 重建/刷新沪深北统一市场数据
+      if: steps.idempotency.outputs.skip != 'true'
+      run: |
+        python tools/rebuild_market_data.py
+
+    - name: 核心数据质量闸门 (失败即阻断报告与发布)
+      if: steps.idempotency.outputs.skip != 'true'
+      run: |
+        python tools/audit_data_integrity.py --quiet
+
     - name: 执行主线强度追踪脚本 (并发送邮件)
       if: steps.idempotency.outputs.skip != 'true'
       env:
@@ -116,17 +128,6 @@ jobs:
         ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
       run: |
         python src/主线强度追踪.py
-
-    - name: 数据完整性体检 (只告警, 不阻断发布)
-      if: steps.idempotency.outputs.skip != 'true'
-      # 跑批后体检, 覆盖"今天刚写进去的数据"而不只是恢复出来的旧缓存。
-      # --recent 30: CI 的价格缓存来自 actions/cache, 更早的历史可能根本没恢复进来,
-      #   全量体检会把"CI 侧没有的历史"误报成缺陷 (本地全量目前也仍有 40 天已知缺口)。
-      # continue-on-error: 体检失败只留 annotation, 不能让报告停发 —— 数据残缺时
-      #   主程序自身的"数据未就位"护栏已经会标记报告, 这里是第二道观测, 不是闸门。
-      continue-on-error: true
-      run: |
-        python tools/audit_data_integrity.py --quiet --recent 30
 
     - name: 提交并推送更新的缓存数据
       if: steps.idempotency.outputs.skip != 'true'

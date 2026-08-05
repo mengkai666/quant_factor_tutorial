@@ -15,6 +15,7 @@ import os
 import requests
 import urllib3
 from time_utils import get_latest_date
+from market_data import compute_advance_decline
 
 # 禁用 SSL 警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -118,25 +119,13 @@ class MarketSentimentFactor:
             return {}
             
         try:
-            # 性能优化：避免 pivot (在大数据集上极慢), 改用 groupby + shift
             df = pd.read_csv(PRICE_CACHE_FILE, dtype={'code': str, 'date': str})
-            df['date_clean'] = df['date'].str.replace('-', '')
-            df = df.sort_values(['code', 'date_clean'])
-            
-            # 在每只股票内计算涨跌幅
-            df['prev_close'] = df.groupby('code')['close'].shift(1)
-            df['chg_pct'] = (df['close'] / df['prev_close'] - 1) * 100
-            df = df.dropna(subset=['chg_pct'])
-            
-            # 按日统计涨跌家数
-            daily_up = df[df['chg_pct'] > 0.1].groupby('date_clean').size()
-            daily_dn = df[df['chg_pct'] < -0.1].groupby('date_clean').size()
-            
-            all_dates = df['date_clean'].unique()
+            breadth = compute_advance_decline(df)
             result = {}
-            for d in all_dates:
-                up = int(daily_up.get(d, 0))
-                dn = int(daily_dn.get(d, 0))
+            for _, row in breadth.iterrows():
+                d = str(row['date']).replace('-', '')
+                up = int(row['up'])
+                dn = int(row['down'])
                 total = up + dn
                 result[d] = {
                     'date': d,
