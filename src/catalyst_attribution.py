@@ -413,7 +413,7 @@ def _pick_top_catalyst(info):
     for kw in _ANN_PRIORITY:
         for a in info.get('announcements', [])[:15]:
             title = a.get('title', '') or ''
-            typ = str(a.get('type') or '').strip()
+            typ = a.get('type', '') or ''
             if kw in title or kw in typ:
                 return {'tag': f'公告 · {typ or kw}',
                         'text': f"{a.get('date', '')} {title}",
@@ -423,18 +423,29 @@ def _pick_top_catalyst(info):
     anns = info.get('announcements') or []
     if anns:
         a = anns[0]
-        typ = str(a.get('type') or '').strip()
-        return {'tag': f"公告 · {typ}" if typ else '公告',
-                'text': f"{a.get('date', '')} {a.get('title', '')}",
-                'url': a.get('url', '')}
+        announcement_type = a.get('type')
+        # 真实公告没有细分类别时只展示“公告”，避免“公告 · 公告”这种
+        # 重复标签；没有 URL 的旧调用方保留旧标签，兼容历史报告中的
+        # 已序列化数据（新数据源都会带 URL）。
+        if announcement_type:
+            tag = f"公告 · {announcement_type}"
+        elif a.get('url'):
+            tag = '公告'
+        else:
+            tag = '公告 · 公告'
+        return {'tag': tag,
+                'text': f"{a.get('date') or ''} {a.get('title') or ''}",
+                'url': a.get('url') or ''}
 
     # 4) 任意最新新闻
     news = info.get('news') or []
     if news:
         n = news[0]
-        return {'tag': f"新闻 · {n.get('source', '')}",
-                'text': f"{n.get('time', '')[:10]} {n.get('title', '')}",
-                'url': n.get('url', '')}
+        news_source = n.get('source') or '新闻'
+        news_time = str(n.get('time') or '')[:10]
+        return {'tag': f"新闻 · {news_source}",
+                'text': f"{news_time} {n.get('title') or ''}",
+                'url': n.get('url') or ''}
 
     return None
 

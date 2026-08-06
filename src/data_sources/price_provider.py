@@ -21,6 +21,100 @@ FETCH_COLUMNS = [
     "date", "close_raw", "close_qfq", "trade_status", "source_raw", "source_qfq",
 ]
 
+CANONICAL_PRICE_COLUMNS = [
+    "date", "code", "close_raw", "close_qfq", "close_legacy",
+    "price_basis", "source", "source_timestamp",
+]
+
+def normalize_price_frame(frame: pd.DataFrame | None) -> pd.DataFrame:
+    """Normalize legacy/provider rows to the auditable report price contract."""
+    if frame is None or frame.empty:
+        return pd.DataFrame(columns=CANONICAL_PRICE_COLUMNS)
+    out = frame.copy()
+    if "date" not in out.columns or "code" not in out.columns:
+        return pd.DataFrame(columns=CANONICAL_PRICE_COLUMNS)
+    out["date"] = pd.to_datetime(out["date"], errors="coerce").dt.strftime("%Y-%m-%d")
+    out["code"] = out["code"].map(normalize_code)
+    out = out.dropna(subset=["date", "code"])
+    basis = out.get("price_basis", pd.Series("", index=out.index)).astype(str).str.lower()
+    for col in ("close_raw", "close_qfq", "close_legacy"):
+        if col not in out.columns:
+            out[col] = pd.NA
+    if "close" in out.columns:
+        legacy = pd.to_numeric(out["close"], errors="coerce")
+        raw_mask = out["close_raw"].isna() & basis.isin(["raw", "close_raw", "raw_close"])
+        qfq_mask = out["close_qfq"].isna() & basis.isin(["qfq", "close_qfq", "adjusted"])
+        out.loc[raw_mask, "close_raw"] = legacy[raw_mask]
+        out.loc[qfq_mask, "close_qfq"] = legacy[qfq_mask]
+        out.loc[~raw_mask & ~qfq_mask, "close_legacy"] = legacy[~raw_mask & ~qfq_mask]
+    for col in ("close_raw", "close_qfq", "close_legacy"):
+        out[col] = pd.to_numeric(out[col], errors="coerce")
+    if "source" not in out.columns:
+        out["source"] = out.get("source_raw", out.get("source_qfq", "legacy_cache"))
+    out["source"] = out["source"].fillna("unknown").astype(str)
+    if "source_timestamp" not in out.columns:
+        out["source_timestamp"] = out.get("fetched_at", "")
+    out["source_timestamp"] = out["source_timestamp"].fillna("").astype(str)
+    out["price_basis"] = basis.where(basis.ne(""), "unknown")
+    has_raw = out["close_raw"].notna()
+    has_qfq = out["close_qfq"].notna()
+    has_legacy = out["close_legacy"].notna()
+    out.loc[has_raw & ~has_qfq & ~has_legacy, "price_basis"] = "raw"
+    out.loc[~has_raw & has_qfq & ~has_legacy, "price_basis"] = "qfq"
+    out.loc[~has_raw & ~has_qfq & has_legacy, "price_basis"] = "legacy"
+    out.loc[has_raw & has_qfq, "price_basis"] = "mixed"
+    return (out[CANONICAL_PRICE_COLUMNS].drop_duplicates(["date", "code"], keep="last")
+            .sort_values(["date", "code"]).reset_index(drop=True))
+
+def merge_price_frames(*frames: pd.DataFrame | None) -> pd.DataFrame:
+    """Merge source frames by date/code, preferring latest non-null values."""
+    pieces = [normalize_price_frame(frame) for frame in frames if frame is not None and not frame.empty]
+    if not pieces:
+        return pd.DataFrame(columns=CANONICAL_PRICE_COLUMNS)
+    merged = pd.concat(pieces, ignore_index=True)
+    rows = []
+    for (_, _), group in merged.groupby(["date", "code"], sort=False):
+        row = group.iloc[-1].copy()
+        for col in ("close_raw", "close_qfq", "close_legacy"):
+            vals = group[col].dropna()
+            if not vals.empty:
+                row[col] = vals.iloc[-1]
+        for col in ("source", "source_timestamp"):
+            vals = group[col].replace("", pd.NA).dropna()
+            if not vals.empty:
+                row[col] = vals.iloc[-1]
+        available = [b for b, col in (("raw", "close_raw"), ("qfq", "close_qfq"), ("legacy", "close_legacy")) if pd.notna(row[col])]
+        row["price_basis"] = available[0] if len(available) == 1 else ("mixed" if available else "unknown")
+        rows.append(row)
+    return pd.DataFrame(rows)[CANONICAL_PRICE_COLUMNS].sort_values(["date", "code"]).reset_index(drop=True)
+
+def price_value_column(frame: pd.DataFrame | None, basis: str = "qfq", allow_legacy: bool = True) -> str | None:
+    if frame is None or frame.empty:
+        return None
+    wanted = "close_raw" if str(basis).lower() == "raw" else "close_qfq"
+    if wanted in frame.columns and pd.to_numeric(frame[wanted], errors="coerce").notna().any():
+        return wanted
+    if allow_legacy and "close_legacy" in frame.columns and pd.to_numeric(frame["close_legacy"], errors="coerce").notna().any():
+        return "close_legacy"
+    # Compatibility for callers that inspect an old in-memory frame before
+    # normalize_price_frame has been applied.
+    if allow_legacy and "close" in frame.columns and pd.to_numeric(frame["close"], errors="coerce").notna().any():
+        return "close"
+    return None
+
+def price_coverage(frame: pd.DataFrame | None, basis: str = "qfq", dates=None, codes=None) -> dict:
+    column = price_value_column(frame, basis, allow_legacy=False)
+    if frame is None or frame.empty or column is None:
+        return {"column": column, "rows": 0, "covered": 0, "coverage_pct": 0.0, "dates": 0, "codes": 0}
+    work = frame.copy()
+    if dates is not None:
+        work = work[work["date"].astype(str).isin({str(d)[:10] for d in dates})]
+    if codes is not None:
+        work = work[work["code"].map(normalize_code).isin({normalize_code(c) for c in codes})]
+    valid = pd.to_numeric(work[column], errors="coerce").notna()
+    total, covered = int(len(work)), int(valid.sum())
+    return {"column": column, "rows": total, "covered": covered, "coverage_pct": round(covered / total * 100, 2) if total else 0.0, "dates": int(work.loc[valid, "date"].nunique()), "codes": int(work.loc[valid, "code"].nunique())}
+
 
 def parse_tencent_kline_payload(code: str, raw_payload: dict, qfq_payload: dict) -> pd.DataFrame:
     raw_item = (raw_payload.get("data") or {}).get(code) or {}

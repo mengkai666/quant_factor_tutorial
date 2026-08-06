@@ -5,7 +5,7 @@
 市场综合情绪因子 (Market Sentiment Factor)
 基于全市场 涨跌家数比 (A/D Ratio) 来衡量市场整体情绪
 
-数据来源: 
+数据来源:
   - 涨停历史缓存.csv (涨跌停家数)
   - price_history_cache.csv (全市场涨跌家数)
 """
@@ -14,8 +14,7 @@ import pandas as pd
 import os
 import requests
 import urllib3
-from time_utils import get_latest_date
-from market_data import compute_advance_decline
+from time_utils import filter_completed_rows, get_latest_date
 
 # 禁用 SSL 警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -28,10 +27,10 @@ from paths import ZT_CACHE_FILE, PRICE_CACHE as PRICE_CACHE_FILE
 class MarketSentimentFactor:
     """
     市场综合情绪因子
-    
+
     量化维度：
     1. 涨跌家数比 (A/D Ratio, 市场普涨/普跌情况) — 核心指标
-    
+
     情绪层级 (5级):
     - [0.0, 0.20): 极弱/冰点 ❄️ (跌多涨少，恐慌寻底)
     - [0.20, 0.45): 弱势/低迷 ☁️ (多头退守，震荡探底)
@@ -39,7 +38,7 @@ class MarketSentimentFactor:
     - [0.55, 0.80): 强势/活跃 🌤️ (涨多跌少，赚钱回暖)
     - [0.80, 1.0]: 极强/高潮 🔥 (普涨井喷，注意过热)
     """
-    
+
     def __init__(self):
         self._zt_cache = None
         self._ad_cache = None
@@ -49,12 +48,12 @@ class MarketSentimentFactor:
             "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
             "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 9; PFEM10 Build/PQ3A.190605.003)",
         }
-    
+
     def _fetch_longhu_sentiment(self, day=None):
         """从龙虎榜API获取当日涨跌家数与涨跌停数据"""
         if not day:
             day = get_latest_date().strftime("%Y-%m-%d")
-        
+
         params = {
             "a": "GetPlateInfo_w38",
             "st": "100",
@@ -68,12 +67,12 @@ class MarketSentimentFactor:
         }
         payload = "&".join([f"{k}={v}" for k, v in params.items()])
         try:
-            response = requests.post(self.api_url, data=payload, headers=self.headers, timeout=10)
+            response = requests.post(self.api_url, data=payload, headers=self.headers, verify=False, timeout=10)
             res_json = response.json()
             nums = res_json.get("nums", {})
             if not nums:
                 return None
-            
+
             return {
                 "date": day.replace('-', ''),
                 "up": int(nums.get("SZJS", 0)),
@@ -85,18 +84,19 @@ class MarketSentimentFactor:
         except Exception as e:
             print(f"  ⚠️ LongHu API 请求失败: {e}")
             return None
-    
+
     def _load_zt_cache(self):
         """加载涨跌停计数缓存"""
         if self._zt_cache is not None:
             return self._zt_cache
-            
+
         if not os.path.exists(ZT_CACHE_FILE):
             self._zt_cache = {}
             return {}
-            
+
         try:
             df = pd.read_csv(ZT_CACHE_FILE, encoding='utf-8-sig', dtype={'日期': str})
+            df = filter_completed_rows(df, '日期')
             result = {}
             for date_str, gdf in df.groupby('日期'):
                 zt_count = len(gdf[gdf['类型'] == 'ZT'])
@@ -113,19 +113,32 @@ class MarketSentimentFactor:
         """从价格缓存计算A/D家数比 (带内部内存缓存)"""
         if self._ad_cache is not None:
             return self._ad_cache
-            
+
         if not os.path.exists(PRICE_CACHE_FILE):
             self._ad_cache = {}
             return {}
-            
+
         try:
+            # 性能优化：避免 pivot (在大数据集上极慢), 改用 groupby + shift
             df = pd.read_csv(PRICE_CACHE_FILE, dtype={'code': str, 'date': str})
-            breadth = compute_advance_decline(df)
+            df = filter_completed_rows(df, 'date')
+            df['date_clean'] = df['date'].str.replace('-', '')
+            df = df.sort_values(['code', 'date_clean'])
+
+            # 在每只股票内计算涨跌幅
+            df['prev_close'] = df.groupby('code')['close'].shift(1)
+            df['chg_pct'] = (df['close'] / df['prev_close'] - 1) * 100
+            df = df.dropna(subset=['chg_pct'])
+
+            # 按日统计涨跌家数
+            daily_up = df[df['chg_pct'] > 0.1].groupby('date_clean').size()
+            daily_dn = df[df['chg_pct'] < -0.1].groupby('date_clean').size()
+
+            all_dates = df['date_clean'].unique()
             result = {}
-            for _, row in breadth.iterrows():
-                d = str(row['date']).replace('-', '')
-                up = int(row['up'])
-                dn = int(row['down'])
+            for d in all_dates:
+                up = int(daily_up.get(d, 0))
+                dn = int(daily_dn.get(d, 0))
                 total = up + dn
                 result[d] = {
                     'date': d,
@@ -133,7 +146,7 @@ class MarketSentimentFactor:
                     'down': dn,
                     'ad_ratio': up / total if total > 0 else 0.5
                 }
-            
+
             self._ad_cache = result
             return result
         except Exception as e:
@@ -145,16 +158,16 @@ class MarketSentimentFactor:
         """合并涨跌停与AD比例，并进行EMA平滑处理"""
         if self._composite_cache is not None:
             return self._composite_cache
-            
+
         zt = self._load_zt_cache()
         ad = self._load_ad_cache()
-        
+
         all_dates = sorted(set(zt.keys()) | set(ad.keys()))
         data = []
         for d in all_dates:
             z_data = zt.get(d, {'limit_up': 0, 'limit_down': 0})
             a_data = ad.get(d, {'up': 0, 'down': 0, 'ad_ratio': 0.5})
-            
+
             # 使用 API 覆盖最新一天的数据 (如果可用)
             today_str = get_latest_date().strftime("%Y%m%d")
             if d == today_str:
@@ -162,10 +175,10 @@ class MarketSentimentFactor:
                 if api_data:
                     a_data = {'up': api_data['up'], 'down': api_data['down'], 'ad_ratio': api_data['ad_ratio']}
                     z_data = {'limit_up': api_data['zt'], 'limit_down': api_data['dt']}
-            
+
             # 纯粹基于 A/D 比例 (Breadth only)
             raw_score = a_data['ad_ratio']
-            
+
             data.append({
                 'date': d,
                 'limit_up': z_data['limit_up'],
@@ -175,15 +188,15 @@ class MarketSentimentFactor:
                 'ad_ratio': a_data['ad_ratio'],
                 'raw_score': raw_score
             })
-            
+
         if not data:
             self._composite_cache = pd.DataFrame()
             return self._composite_cache
-            
+
         df = pd.DataFrame(data)
         # 用3日EMA进行平滑，更快反映日内转势
         df['score_ema'] = df['raw_score'].ewm(span=3, adjust=False).mean()
-        
+
         self._composite_cache = df
         return df
 
@@ -195,7 +208,7 @@ class MarketSentimentFactor:
         df = self._get_composite_data()
         if df.empty:
             return self._fallback_result('无数据可用')
-            
+
         # 确定目标行
         exact_match = False
         if date is None:
@@ -215,9 +228,9 @@ class MarketSentimentFactor:
                     row = df.iloc[0]
                 else:
                     row = matches.iloc[-1]
-        
+
         score = row['score_ema']
-        
+
         # 5级情绪层级分类 (基于AD比例优化的阈值)
         if score >= 0.8:
             lvl = 5
@@ -239,7 +252,7 @@ class MarketSentimentFactor:
             lvl = 1
             sentiment = "极弱/冰点 ❄️"
             interpretation = "普跌杀跌，关注市场何时出现冰点反转"
-        
+
         # 关键修复: 仅当精确匹配到日期时才返回真实的 market_up/market_down
         # 否则返回0, 让调用方知道需要从API补全
         return {
@@ -274,18 +287,18 @@ def demo():
     print("=" * 60)
     print("市场综合情绪因子演示 (5层级优化版)")
     print("=" * 60)
-    
+
     factor = MarketSentimentFactor()
     res = factor.calculate_factor()
-    
+
     print(f"\n1. 概览 (日期: {res.get('date', 'N/A')}):")
     print(f"   综合评分: {res['score']:.3f} | 情绪层级: {res['level']}层")
     print(f"   当前情绪: {res['sentiment']}")
     print(f"   综合解读: {res['interpretation']}")
-    
+
     print("\n2. 细分指标:")
     print(f"   A/D 家数比: {res.get('ad_ratio', 0):.2%} (涨{res.get('market_up', 0)}/跌{res.get('market_down', 0)})")
-    
+
     # 历史趋势截取
     df = factor._get_composite_data()
     if not df.empty:
@@ -293,7 +306,7 @@ def demo():
         for _, r in df.tail(5).iterrows():
             f_res = factor.calculate_factor(r['date'])
             print(f"   {r['date']} | 评分: {r['score_ema']:.3f} | {f_res['sentiment']}")
-            
+
     print("\n" + "=" * 60)
 
 

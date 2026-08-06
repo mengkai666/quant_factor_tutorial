@@ -1,120 +1,93 @@
-"""Role-aware focus-pool construction for the next-session report."""
-from __future__ import annotations
-
-import re
-
 import pandas as pd
 
+from report_logic import filter_tradeable_pool
 
-def _height(value) -> int:
-    text = str(value or "")
-    if "首板" in text:
-        return 1
-    match = re.search(r"(\d+)", text)
-    return int(match.group(1)) if match else 0
-
-
-def _risky_name(name: str) -> bool:
-    upper = str(name or "").strip().upper()
-    return not upper or "ST" in upper or "退" in upper
-
-
-def _core_mainline(ml_strength) -> str:
-    if ml_strength is None or getattr(ml_strength, "empty", True):
-        return ""
-    try:
-        values = ml_strength.iloc[-1].to_dict()
-        return max(values, key=values.get) if values else ""
-    except (KeyError, IndexError, TypeError, ValueError):
-        return ""
-
-
-def generate_focus_pool(ml_strength, echelon, top30_data, sentiment_df,
-                        output_path="focus_pool.csv"):
-    """Build mutually exclusive space, low-level and trend roles."""
+def generate_focus_pool(ml_strength, echelon, top30_data, sentiment_df, output_path="focus_pool.csv", security_master=None):
+    """
+    自动化生成“明日核心股票池”与“操作预案”
+    """
     pool = []
-    selected_codes = set()
-    core_ml = _core_mainline(ml_strength)
 
-    for item in echelon or []:
-        height_label = str(item.get("height", ""))
-        height = _height(height_label)
-        details = item.get("stock_details") or []
-        primary = str(item.get("primary", "") or "")
-        is_core = bool(core_ml and core_ml in primary)
-        if not details:
-            names = item.get("stocks") or []
-            details = [{"name": name, "code": ""} for name in names]
+    # 获取当前最强主线
+    core_ml = "未知"
+    if ml_strength is not None and not ml_strength.empty:
+        try:
+            sorted_ml = sorted(ml_strength.iloc[-1].to_dict().items(), key=lambda x: x[1], reverse=True)
+            if sorted_ml:
+                core_ml = sorted_ml[0][0]
+        except (KeyError, IndexError): pass
 
-        if height >= 3:
-            role = "空间龙头"
-            strategy = "【空间博弈池】"
-            limit = 2
-        elif height in (1, 2) and (height == 2 or is_core):
-            role = "低位补涨"
-            strategy = "【低位补涨池】"
-            limit = 2
-        else:
-            continue
+    # === 策略一：主升接力池 (寻找当前主线的首板或2连板) ===
+    if echelon:
+        for e in echelon:
+            height = str(e.get('height', ''))
+            stocks = e.get('stocks', [])
+            stock_details = e.get('stock_details', [])
+            primary = str(e.get('primary', ''))
+            secondary = str(e.get('secondary', ''))
+            # name -> code 映射, 用于催化归因反查 (stock_details 里带 code)
+            name_to_code = {d.get('name', ''): d.get('code', '') for d in stock_details}
 
-        accepted = 0
-        for detail in details:
-            name = str(detail.get("name", "")).strip()
-            code = str(detail.get("code", "")).strip()
-            if not code or code in selected_codes or _risky_name(name):
-                continue
-            selected_codes.add(code)
-            accepted += 1
-            pool.append({
-                "股票": name,
-                "代码": code,
-                "板块": re.sub(r"\d+%$", "", primary).strip() or core_ml,
-                "角色": role,
-                "策略池": strategy,
-                "入场条件": (
-                    f"昨日{height_label}。仅在竞价与板块强度同时确认后参与，"
-                    "缩量加速和孤立封板不追。"
-                ),
-                "防守位": "开板后失去板块承接或跌破分时承接位退出",
-            })
-            if accepted >= limit:
-                break
+            # 放宽条件：只要是首板、2连板、3连板都可以入选
+            if '板' in height:
+                # 尽量找核心主线，如果没有匹配上，也把最高板加进去
+                is_core = (core_ml in primary or core_ml in secondary or core_ml == "未知")
+                height_num = 0
+                try:
+                    height_num = int(''.join(ch for ch in height if ch.isdigit()))
+                except ValueError:
+                    pass
+                is_space = height_num >= 3
+                is_low_level = height_num in {1, 2} or '首板' in height
+                if is_core or height_num >= 3:
+                    for s in stocks[:2]:  # 每个高度最多取2只
+                        bucket = '【空间博弈池】' if is_space else ('【低位补涨池】' if is_low_level else '【主升接力池】')
+                        pool.append({
+                            '股票': s,
+                            '代码': name_to_code.get(s, ''),
+                            '板块': primary.split(',')[0] if primary else core_ml,
+                            '策略池': bucket,
+                            '入场条件': f'昨日{height}。若开盘放量换手且承接极强，可跟随打板；切忌加速缩量秒板。',
+                            '防守位': '昨日收盘价破位止损'
+                        })
 
-    trend_added = 0
-    for period, records in (top30_data or {}).items():
-        if trend_added >= 2:
-            break
-        for record in records or []:
-            code = str(record.get("code", "")).strip()
-            name = str(record.get("name", "")).strip()
-            if not code or code in selected_codes or _risky_name(name):
-                continue
-            selected_codes.add(code)
-            trend_added += 1
-            mainline = str(
-                record.get("mainline") or record.get("sub_sector")
-                or record.get("industry") or core_ml or ""
-            ).strip()
-            pool.append({
-                "股票": name,
-                "代码": code,
-                "板块": mainline,
-                "角色": "趋势中军",
-                "策略池": "【核心中军低吸池】",
-                "入场条件": (
-                    f"近期{period}趋势居前。仅在主线强度未转弱、回踩缩量且承接确认时低吸。"
-                ),
-                "防守位": "有效跌破20日均线或主线转弱退出",
-            })
-            if trend_added >= 2:
-                break
+    # === 策略二：冰点低吸池 (寻找大容量中军回踩) ===
+    # 只要有 top30_data 就选出前两大板块的中军，无视情绪绝对值
+    if top30_data:
+        ml_keys = list(top30_data.keys())[:2] # 取前两大主线
+        for ml in ml_keys:
+            records = top30_data[ml]
+            if not records: continue
+            for r in records[:2]:
+                s = r.get('name', '')
+                pool.append({
+                    '代码': str(r.get('code', '')),
+                    '股票': s,
+                    '板块': ml,
+                    '策略池': '【核心中军低吸池】',
+                    '入场条件': f'近期{ml}核心中军。若随大盘情绪杀跌至核心均线(10日/20日)且缩量抗跌，可左侧分批建仓。',
+                    '防守位': '有效跌破20日均线无条件斩仓'
+                })
 
-    frame = pd.DataFrame(pool)
-    if not frame.empty:
-        frame = frame.drop_duplicates(subset=["代码"], keep="first").head(10).reset_index(drop=True)
-        if output_path:
-            frame.to_csv(output_path, index=False, encoding="utf-8-sig")
-            print(f"  ✅ [量化引擎] 成功生成明日核心股票池: {output_path} (共 {len(frame)} 只标的)")
+    # 统一经过可交易过滤器：股票池是报告的决策出口，不能只依赖上游缓存名称。
+    # 这里同时过滤 ST、停牌、退市、不可交易和无有效代码的记录，避免历史缓存或摘帽变更
+    # 直接穿透到 focus_pool.csv。
+    filtered_pool = filter_tradeable_pool(
+        pool,
+        include_bj=True,
+        security_master=security_master,
+    )
+    df = pd.DataFrame(filtered_pool)
+    if not df.empty:
+        df = df.drop_duplicates(subset=['代码'])
+        if len(df) > 10:
+            df = df.head(10)
+        try:
+            df.to_csv(output_path, index=False, encoding='utf-8-sig')
+            print(f"  ✅ [量化引擎] 成功生成明日核心股票池: {output_path} (共 {len(df)} 只标的)")
+        except Exception as e:
+            print(f"  [量化引擎] 写入股票池失败: {e}")
     else:
         print("  [量化引擎] 今日未筛选出符合条件的个股，股票池为空。")
-    return frame
+
+    return df

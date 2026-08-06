@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import json
+from typing import Any
 from pathlib import Path
 
 import numpy as np
@@ -10,6 +11,78 @@ import pandas as pd
 from .models import FetchResult, FetchStatus
 from .price_provider import PRICE_COLUMNS
 from .universe_provider import UNIVERSE_COLUMNS
+
+CRITICAL_MODULES = {"universe", "price_raw", "breadth", "limit_pool"}
+DECISION_MODULES = CRITICAL_MODULES | {"echelon", "sector", "history"}
+
+
+def build_module_quality(
+    name: str,
+    total: int = 0,
+    covered: int = 0,
+    source: str = "",
+    source_timestamp: str = "",
+    missing_fields: list[str] | None = None,
+    errors: list[str] | None = None,
+    lineage: dict[str, Any] | None = None,
+    critical: bool | None = None,
+) -> dict[str, Any]:
+    """Return the stable module-quality payload consumed by report rendering."""
+    total = max(0, int(total or 0))
+    covered = max(0, int(covered or 0))
+    if total and covered > total:
+        raise ValueError(f"covered cannot exceed total for {name}: {covered}>{total}")
+    missing = [str(item) for item in (missing_fields or []) if str(item).strip()]
+    error_list = [str(item) for item in (errors or []) if str(item).strip()]
+    coverage_pct = round(covered / total * 100, 2) if total else 0.0
+    explicit_critical = bool(critical) if critical is not None else name in CRITICAL_MODULES
+    if error_list and explicit_critical:
+        status = "blocked"
+    elif error_list or missing or (total > 0 and covered < total):
+        status = "degraded"
+    elif total == 0 and not source:
+        status = "unknown"
+    elif total == 0 and not covered:
+        status = "unavailable"
+    else:
+        status = "ok"
+    return {
+        "name": name, "status": status, "total": total, "covered": covered,
+        "coverage_pct": coverage_pct, "source": source,
+        "source_timestamp": source_timestamp, "missing_fields": missing,
+        "errors": error_list, "lineage": dict(lineage or {}),
+        "critical": explicit_critical,
+    }
+
+
+def aggregate_report_quality(modules: dict[str, dict[str, Any]] | None) -> dict[str, Any]:
+    """Aggregate module states into a publication-safe report state."""
+    modules = dict(modules or {})
+    critical_blocked = [
+        name for name, item in modules.items()
+        if name in CRITICAL_MODULES and str(item.get("status", "unknown")) in {"blocked", "unavailable", "unknown"}
+    ]
+    decision_degraded = [
+        name for name, item in modules.items()
+        if name in DECISION_MODULES and str(item.get("status", "unknown")) != "ok"
+    ]
+    errors, missing_fields = [], []
+    for name, item in modules.items():
+        errors.extend(f"{name}: {value}" for value in item.get("errors", []) or [])
+        missing_fields.extend(f"{name}: {value}" for value in item.get("missing_fields", []) or [])
+    if critical_blocked:
+        status, publication_mode = "blocked", "facts_only"
+    elif decision_degraded:
+        status, publication_mode = "degraded", "observation"
+    else:
+        status, publication_mode = "ok", "decision"
+    return {
+        "status": status, "publication_mode": publication_mode, "modules": modules,
+        "critical_blocked": critical_blocked, "decision_degraded": decision_degraded,
+        "errors": list(dict.fromkeys(errors)), "missing_fields": list(dict.fromkeys(missing_fields)),
+        "allow_strong_conclusion": status == "ok",
+    }
+
 
 
 @dataclass(frozen=True)
