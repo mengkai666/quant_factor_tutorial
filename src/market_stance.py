@@ -48,7 +48,7 @@ def _dt_series(sentiment_df, n=2):
     return [int(x) for x in pd.to_numeric(sentiment_df['dt'], errors='coerce').fillna(0).tolist()[-n:]]
 
 
-def classify_market_stance(advance_decline, sentiment_df, echelon):
+def classify_market_stance(advance_decline, sentiment_df, echelon, regime=None):
     """三信号合成档位 + 转向扳机清单。返回 dict。"""
     up = float(advance_decline.get('up', 0) or 0)
     down = float(advance_decline.get('down', 0) or 0)
@@ -93,6 +93,12 @@ def classify_market_stance(advance_decline, sentiment_df, echelon):
         stance, clr = '观望档 · 轻仓', '#d29922'
         head = f'A/D {ad} 处分歧区、梯队半死不活, 信号不干净。'
         play = '不押方向, 空仓等破位。此档最易两头挨打, 宁可等。'
+
+    if regime:
+        stance = regime.get('title') or stance
+        clr = regime.get('color') or clr
+        head = regime.get('reason') or head
+        play = regime.get('action') or play
 
     # ── 转向扳机清单 (提前判断: 预设扳机, 非预测) ──
     triggers = [
