@@ -77,3 +77,57 @@ def test_fetch_status_store_upserts_logical_key_atomically(tmp_path):
     assert latest.run_id == "run-2"
     assert len(store.read()) == 1
     assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_fetch_status_store_results_filters_datasets_and_restores_status(tmp_path):
+    path = tmp_path / "fetch_status.csv"
+    store = FetchStatusStore(path)
+
+    store.record(
+        FetchResult.failed(
+            dataset="limit_pool",
+            date="2026-08-04",
+            source="fixture",
+            message="timeout",
+            scope="SH,SZ,BJ",
+            run_id="run-limit",
+        )
+    )
+    store.record(
+        FetchResult.success(
+            dataset="prices",
+            date="2026-08-04",
+            source="fixture",
+            expected_count=3,
+            actual_count=3,
+            scope="SH,SZ,BJ",
+            run_id="run-prices",
+        )
+    )
+
+    results = store.results(datasets={"limit_pool"})
+
+    assert len(results) == 1
+    assert results[0].dataset == "limit_pool"
+    assert results[0].date == "2026-08-04"
+    assert results[0].status is FetchStatus.FAILED
+    assert results[0].run_id == "run-limit"
+
+
+def test_fetch_status_store_results_tolerates_malformed_log_fields(tmp_path):
+    path = tmp_path / "fetch_status.csv"
+    path.write_text(
+        "date,dataset,scope,status,source,expected_count,actual_count,message,"
+        "started_at,finished_at,run_id\n"
+        "2026-08-04,limit_pool,all,failed,fixture,bad,,timeout,bad,,run-1\n",
+        encoding="utf-8",
+    )
+
+    results = FetchStatusStore(path).results()
+
+    assert len(results) == 1
+    assert results[0].status is FetchStatus.FAILED
+    assert results[0].expected_count == 0
+    assert results[0].actual_count == 0
+    assert results[0].started_at.tzinfo is not None
+    assert results[0].finished_at.tzinfo is not None

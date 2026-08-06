@@ -46,7 +46,7 @@ from paths import (
     DATA_DIR,
     ZT_CACHE_FILE, PRICE_CACHE, INDUSTRY_CACHE,
     SENTIMENT_CACHE, CLS_PLATE_CACHE, OUTPUT_HTML,
-    SITE_DIR, SITE_URL, UNIVERSE_CACHE, QUALITY_REPORT, FETCH_STATUS_CACHE,
+    SITE_DIR, SITE_URL, UNIVERSE_CACHE, QUALITY_REPORT, FETCH_STATUS_CACHE, CALENDAR_CACHE,
 )
 from market_data import load_analysis_price_view
 from pipeline.data_pipeline import run_preflight_gate
@@ -3820,7 +3820,10 @@ def iter_main(limit_pool_provider=None, plate_provider=None):
     status_store = FetchStatusStore(FETCH_STATUS_CACHE)
     limit_pool_provider = limit_pool_provider or LimitPoolProvider(status_store=status_store)
     plate_provider = plate_provider or PlateProvider(status_store=status_store, max_workers=8)
-    closed_target = CalendarProvider().latest_closed_day()
+    calendar_provider = CalendarProvider(
+        cache_path=CALENDAR_CACHE, status_store=status_store
+    )
+    closed_target = calendar_provider.latest_closed_day()
     limit_pool_result = None
     ladder_review = {}
 
@@ -3842,7 +3845,10 @@ def iter_main(limit_pool_provider=None, plate_provider=None):
             fetch_zt_pool_data, analyze_lianban, refresh_latest_limit_pool,
         )
         print("\n[1/7] 更新涨停池数据...")
-        zt_data, dt_data = fetch_zt_pool_data(n_trading_days=120)
+        zt_data, dt_data = fetch_zt_pool_data(
+            n_trading_days=120, provider=limit_pool_provider,
+            calendar_provider=calendar_provider,
+        )
         limit_pool_result = refresh_latest_limit_pool(
             zt_data, dt_data, closed_target, limit_pool_provider, persist=True
         )
@@ -3874,16 +3880,13 @@ def iter_main(limit_pool_provider=None, plate_provider=None):
     print(f"\n[{datetime.now().strftime('%H:%M:%S')}] [2/7] 加载并分类涨停股票...")
     classified = load_and_classify_zt(n_days=90)
     
-    # === 新增：过滤掉非交易日（规避节假日及周末） ===
+    # === 过滤掉非交易日：复用同一个 CalendarProvider 快照 ===
     try:
-        import akshare as ak
-        trade_df = ak.tool_trade_date_hist_sina()
-        trade_dates_set = set(trade_df['trade_date'].astype(str).apply(lambda x: x.replace('-', '')).tolist())
-        
+        trade_dates_set = set(calendar_provider.trading_days("1900-01-01", closed_target))
+        trade_dates_set = {day.replace("-", "") for day in trade_dates_set}
         classified = classified[classified['日期'].isin(trade_dates_set)]
         if sentiment_df is not None and not sentiment_df.empty:
             sentiment_df = sentiment_df[sentiment_df['日期'].isin(trade_dates_set)]
-            
         print(f"  🧹 节假日剔除: 保留了 {len(classified['日期'].unique())} 个有效交易日")
     except Exception as e:
         print(f"  ⚠️ 获取交易日历失败，未能剔除非交易日数据: {e}")
@@ -3904,9 +3907,24 @@ def iter_main(limit_pool_provider=None, plate_provider=None):
             f"latest closed day {closed_target}"
         )
     print(f"\n[{datetime.now().strftime('%H:%M:%S')}] [发布前闸门] 验证沪深北统一价格缓存...")
+    # 质量闸门不仅检查最新日，也要读取本次窗口已经落盘的历史抓取状态。
+    # 这样历史连板数据的 partial/failed/stale 不会在最终报告中被静默吞掉。
+    recorded_results = status_store.results(
+        datasets={"calendar", "limit_pool", "plates"}
+    )
+    if limit_pool_result is not None:
+        # 最新日可能在本地内存中刚刚刷新过，用本次结果覆盖同日旧记录。
+        recorded_results = [
+            item for item in recorded_results
+            if not (
+                item.dataset == limit_pool_result.dataset
+                and item.date == limit_pool_result.date
+                and item.scope == limit_pool_result.scope
+            )
+        ] + [limit_pool_result]
     quality_report = run_preflight_gate(
         UNIVERSE_CACHE, PRICE_CACHE, latest_date_dt, QUALITY_REPORT,
-        fetch_results=[limit_pool_result] if limit_pool_result is not None else None,
+        fetch_results=recorded_results or None,
     )
     price_df = load_price_cache()
     print("  ✅ 数据质量闸门通过，允许进入因子计算与报告生成")
