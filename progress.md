@@ -36,3 +36,12 @@
 - 修复北交所旧代码 `920xxx.BJ` 被处理成 `920xxxBJ` 的问题；涨停、CLS、价格现统一 canonical 代码。
 - 真实主命令复跑退出码 0；LimitPoolProvider 为 `104/104 success`，PlateProvider 为 `12/26 partial` 并按可选增强项记 warning。
 - 质量规则区分核心与可选来源：价格/universe/limit_pool 失败阻断，plates 部分覆盖保留明细但不误阻断发布。
+
+## 2026-08-06（报表层优化）
+
+- 连板指标增加当前/昨日有效样本、前后日匹配样本、转移覆盖率、最高板数量、龙头集中度及样本状态。
+- 连板复盘状态分为 `ok`、`conditional`、`insufficient`、`not_ready`，晋级率继续保留真实分子/分母。
+- 数据可信度摘要补充主源、备用源、来源链、fallback/stale、新鲜度、市场前缀和可发布模块。
+- 修正主流程在 security master 不完整或证券池为空时的覆盖率计算，避免虚高覆盖率绕过质量闸门。
+- 独立看板和内嵌看板首屏提前展示数据质量；连板卡片展示样本可信度和状态原因。
+- 验证：`pytest -q` 通过，230 passed。

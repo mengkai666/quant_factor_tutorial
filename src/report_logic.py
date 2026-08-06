@@ -914,6 +914,15 @@ def compute_ladder_metrics(
     current_by_code = {_row_code(item): item for item in items if _row_code(item)}
     previous_items = [item for item in (previous_echelon or []) if _height(item) > 0]
     previous_by_code = {_row_code(item): item for item in previous_items if _row_code(item)}
+    current_sample_size = len(heights)
+    current_code_count = len(current_by_code)
+    previous_sample_size = len(previous_heights)
+    previous_code_count = len(previous_by_code)
+    transition_match_count = sum(1 for code in previous_by_code if code in current_by_code)
+    transition_coverage_pct = (
+        round(transition_match_count / previous_code_count * 100, 2)
+        if previous_code_count else None
+    )
     transition_rows = []
     for code, previous in previous_by_code.items():
         current = current_by_code.get(code)
@@ -943,6 +952,24 @@ def compute_ladder_metrics(
         len(transition_rows),
         "昨日涨停池次日再板率",
     )
+
+    highest_board_count = sum(1 for height in heights if height == max_height) if max_height else 0
+    leader_concentration_pct = (
+        round(highest_board_count / current_sample_size * 100, 2)
+        if current_sample_size else None
+    )
+    if not current_sample_size:
+        sample_status = "not_ready"
+        sample_reason = "当前有效梯队为空"
+    elif not previous_code_count:
+        sample_status = "insufficient"
+        sample_reason = "昨日梯队缺少可匹配证券代码"
+    elif transition_match_count < 3 or (transition_coverage_pct or 0) < 80:
+        sample_status = "conditional"
+        sample_reason = "前后日匹配样本不足或覆盖率低于80%"
+    else:
+        sample_status = "ok"
+        sample_reason = "前后日梯队匹配样本和覆盖率满足最低要求"
 
     bomb_total = 0
     bomb_count = 0
@@ -1017,6 +1044,17 @@ def compute_ladder_metrics(
         "progression_denominator": "今日有效梯队个股数",
         "progression_text": (f"{progressed}/{len(heights)}" if previous_heights else "样本不足"),
         "progressed_count": progressed, "previous_count": len(previous_heights),
+        "current_sample_size": current_sample_size,
+        "current_code_count": current_code_count,
+        "previous_sample_size": previous_sample_size,
+        "previous_code_count": previous_code_count,
+        "transition_match_count": transition_match_count,
+        "transition_coverage_pct": transition_coverage_pct,
+        "transition_status": sample_status,
+        "sample_status": sample_status,
+        "sample_reason": sample_reason,
+        "highest_board_count": highest_board_count,
+        "leader_concentration_pct": leader_concentration_pct,
         "broken_count": broken_count, "isolated_leader": isolated_leader,
         "advancement_rates": advancement,
         "first_board_to_second": first_board,
@@ -1072,7 +1110,22 @@ def build_lianban_review(metrics: dict[str, Any] | None) -> dict[str, Any]:
     streak_trials = _int(streak_pool.get("trials", metrics.get("streak_pool_trials", metrics.get("streak_pool_sample_size"))))
     streak_observed = _int(metrics.get("streak_pool_observed_sample_size", streak_trials))
     streak_current_count = _int(metrics.get("streak_pool_current_count"))
-    status = "ok" if first_trials > 0 and streak_trials > 0 else "insufficient"
+    current_sample_size = _int(metrics.get("current_sample_size", metrics.get("height_count")))
+    previous_sample_size = _int(metrics.get("previous_sample_size", metrics.get("previous_count")))
+    transition_match_count = _int(metrics.get("transition_match_count"))
+    previous_code_count = _int(metrics.get("previous_code_count"))
+    transition_coverage_pct = metrics.get("transition_coverage_pct")
+    sample_status = str(metrics.get("sample_status") or metrics.get("transition_status") or "").lower()
+    if sample_status not in {"ok", "conditional", "insufficient", "not_ready"}:
+        if current_sample_size <= 0:
+            sample_status = "not_ready"
+        elif first_trials > 0 or streak_trials > 0:
+            sample_status = "conditional"
+        else:
+            sample_status = "insufficient"
+    if sample_status == "ok" and not (first_trials > 0 and streak_trials > 0):
+        sample_status = "insufficient"
+    status = sample_status
     first_text = first_board.get("text") if first_trials else "样本不足"
     streak_text = streak_pool.get("text") if streak_trials else "样本不足"
     negative_feedback = {
@@ -1085,12 +1138,30 @@ def build_lianban_review(metrics: dict[str, Any] | None) -> dict[str, Any]:
             for item in (metrics.get("broken_rate") or {}, metrics.get("bomb_rate") or {})
         ) or "样本不足",
     }
-    if status == "insufficient":
+    if status == "not_ready":
+        conclusion = "连板复盘：当前梯队数据未就位，暂不输出结构性结论。"
+    elif status == "insufficient":
         conclusion = "连板复盘：样本不足，不能外推晋级率或连板池强弱。"
+    elif status == "conditional":
+        conclusion = f"首板→二板 {first_text}；昨日连板池晋级率 {streak_text}。前后日匹配覆盖不足，仅作条件性观察。"
     else:
         conclusion = f"首板→二板 {first_text}；昨日连板池晋级率 {streak_text}。"
     return {
         "status": status,
+        "status_label": {
+            "ok": "可用", "conditional": "条件性可用",
+            "insufficient": "样本不足", "not_ready": "数据未就位",
+        }.get(status, "待核验"),
+        "current_sample_size": current_sample_size,
+        "previous_sample_size": previous_sample_size,
+        "transition_sample_size": transition_match_count,
+        "transition_match_count": transition_match_count,
+        "previous_code_count": previous_code_count,
+        "transition_coverage_pct": transition_coverage_pct,
+        "highest_board_count": _int(metrics.get("highest_board_count")),
+        "leader_concentration_pct": metrics.get("leader_concentration_pct"),
+        "sample_status": status,
+        "sample_reason": metrics.get("sample_reason") or "未提供样本质量说明",
         "first_board_count": first_count,
         "second_board_count": second_count,
         "board_counts": {int(k): _int(v) for k, v in board_counts.items()} if board_counts else {},
@@ -1124,10 +1195,17 @@ def build_data_credibility_summary(
     degraded: list[str] = []
     unavailable: list[str] = []
     blocked: list[str] = []
+    publishable: list[str] = []
     reasons: list[str] = []
     source_failure = 0
     stale = 0
     missing = 0
+    used_fallback = bool(quality.get("used_fallback"))
+    used_stale = bool(quality.get("used_stale"))
+    source_chain = list(quality.get("source_chain") or []) if isinstance(quality.get("source_chain"), (list, tuple)) else []
+    freshness_levels: list[str] = []
+    market_prefixes = set(str(value).lower().strip() for value in (quality.get("market_prefixes") or ()) if str(value).strip())
+    required_market_prefixes = set(str(value).lower().strip() for value in (quality.get("required_market_prefixes") or ()) if str(value).strip())
     for name, raw in (quality.get("modules") or {}).items():
         if not isinstance(raw, dict):
             continue
@@ -1138,6 +1216,16 @@ def build_data_credibility_summary(
         raw_pct = round(covered / total * 100, 2) if total else 0.0
         status = str(item.get("status") or ("unavailable" if covered == 0 else "ok")).lower()
         lineage = item.get("lineage") if isinstance(item.get("lineage"), dict) else {}
+        used_fallback = used_fallback or bool(item.get("used_fallback") or lineage.get("used_fallback"))
+        used_stale = used_stale or bool(item.get("used_stale") or lineage.get("stale") or lineage.get("used_stale"))
+        if lineage.get("source_chain") and isinstance(lineage.get("source_chain"), (list, tuple)):
+            source_chain.extend(str(value) for value in lineage.get("source_chain") if str(value).strip())
+        freshness = str(item.get("freshness_level") or lineage.get("freshness_level") or "").lower()
+        if freshness:
+            freshness_levels.append(freshness)
+        for value in item.get("market_prefixes") or lineage.get("market_prefixes") or ():
+            if str(value).strip():
+                market_prefixes.add(str(value).lower().strip())
         price_basis = str(lineage.get("price_basis") or "")
         legacy_mixed = price_basis == "legacy_mixed"
         effective_covered = covered
@@ -1162,6 +1250,8 @@ def build_data_credibility_summary(
             stale += 1
         if status == "degraded" or legacy_mixed: degraded.append(module_name)
         if status == "ok": available.append(module_name)
+        if status in {"ok", "degraded", "stale"}:
+            publishable.append(module_name)
         for message in list(missing_fields if isinstance(missing_fields, (list, tuple, set)) else [missing_fields]):
             if str(message).strip(): reasons.append(f"{module_name}: {message}")
         for message in list(errors if isinstance(errors, (list, tuple, set)) else [errors]):
@@ -1172,12 +1262,34 @@ def build_data_credibility_summary(
     if blocked: overall = "blocked"
     elif unavailable or degraded or source_failure or stale:
         overall = "degraded" if overall not in {"blocked", "non_trading_day"} else overall
+    freshness_level = str(quality.get("freshness_level") or "").lower()
+    if not freshness_level:
+        freshness_level = next((level for level in ("stale", "delayed", "unknown", "fresh") if level in freshness_levels), "unknown")
+    missing_market_prefixes = sorted(required_market_prefixes - market_prefixes)
+    primary_source = quality.get("primary_source") or quality.get("source")
+    fallback_source = quality.get("fallback_source")
+    if primary_source and primary_source not in source_chain:
+        source_chain.insert(0, str(primary_source))
+    if fallback_source and fallback_source not in source_chain:
+        source_chain.append(str(fallback_source))
     return {
         "report_date": report_date or quality.get("report_date") or "",
         "report_generated_at": report_generated_at or quality.get("report_generated_at"),
         "market_scope": quality.get("market_scope") or "沪深北全A",
         "market_total": max(0, _int(quality.get("market_total"))),
         "market_covered": max(0, _int(quality.get("market_covered"))),
+        "primary_source": primary_source,
+        "fallback_source": fallback_source,
+        "source_chain": list(dict.fromkeys(source_chain)),
+        "used_fallback": used_fallback,
+        "used_stale": used_stale,
+        "freshness_level": freshness_level,
+        "freshness_reason": quality.get("freshness_reason") or "未提供可核验的新鲜度说明",
+        "source_timestamp": quality.get("source_timestamp") or "",
+        "data_timestamp": quality.get("data_timestamp") or "",
+        "market_prefixes": sorted(market_prefixes),
+        "required_market_prefixes": sorted(required_market_prefixes),
+        "missing_market_prefixes": missing_market_prefixes,
         "publication_mode": quality.get("publication_mode"),
         "status": overall,
         "modules": modules,
@@ -1185,6 +1297,7 @@ def build_data_credibility_summary(
         "degraded_modules": degraded,
         "unavailable_modules": unavailable,
         "blocked_modules": blocked,
+        "publishable_modules": list(dict.fromkeys(publishable)),
         "missing": missing,
         "source_failure": source_failure,
         "stale": stale,

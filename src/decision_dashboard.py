@@ -936,6 +936,7 @@ def _quality_html(ctx: dict, prefix: str = '') -> str:
         <span>市场范围：{scope}</span>
         <span>代码前缀：{prefixes}</span>
         <span>覆盖率：{_esc(coverage_text)}</span>
+        <span>报告日期：{_esc(quality.get('report_date') or '未提供')}</span>
         <span>备用源启用：{fallback_used}</span>
         <span>stale：{stale}</span>
         <span>新鲜度：{_esc(freshness_text)}</span>
@@ -1217,6 +1218,10 @@ def _data_credibility_html(ctx: dict, prefix: str = '') -> str:
     if legacy_limit_source:
         reasons.append(f'涨停池来源 {legacy_limit_source}')
     reasons.extend(_esc(str(x)) for x in legacy_notes[:3] if str(x).strip())
+    source_chain = summary.get('source_chain') or []
+    source_chain_text = ' → '.join(str(x) for x in source_chain if str(x).strip()) or '未声明'
+    missing_prefixes = summary.get('missing_market_prefixes') or []
+    publishable = summary.get('publishable_modules') or []
     reason_text = '；'.join(reasons) if reasons else '未发现额外质量告警'
     return f'''
     <div class="{cls}">
@@ -1226,11 +1231,16 @@ def _data_credibility_html(ctx: dict, prefix: str = '') -> str:
         <span>市场范围：{_esc(summary.get('market_scope') or '沪深北全A')}</span>
         <span>市场覆盖：{_esc(str(covered) if covered is not None else '—')} / {_esc(str(total) if total is not None else '—')}（{_esc(coverage)}）</span>
         <span>可发布范围：{_esc(summary.get('publication_mode') or '—')}</span>
+        <span>主源：{_esc(summary.get('primary_source') or '未声明')}</span>
+        <span>来源链：{_esc(source_chain_text)}</span>
+        <span>备用源启用：{'是' if summary.get('used_fallback') else '否'}</span>
+        <span>报告日期：{_esc(summary.get('report_date') or '未提供')}</span>
+        <span>可发布模块：{_esc(','.join(str(x) for x in publishable) or '无')}</span>
         <span>源失败模块：{_esc(str(summary.get('source_failure', 0)))}</span>
         <span>陈旧模块：{_esc(str(summary.get('stale', 0)))}</span>
         <span>缺失字段：{_esc(str(summary.get('missing', 0)))}</span>
       </div>
-      <div class="{note}">{'；'.join(module_items) if module_items else '模块状态未提供'}<br/>原因：{reason_text}</div>
+      <div class="{note}">{'；'.join(module_items) if module_items else '模块状态未提供'}<br/>缺失市场前缀：{_esc(','.join(str(x) for x in missing_prefixes) or '无')}；原因：{reason_text}</div>
     </div>'''
 
 
@@ -1258,7 +1268,14 @@ def _lianban_review_html(ctx: dict, prefix: str = '') -> str:
             elif row.get('progression_text'):
                 streak = {'text': str(row['progression_text'])}
     negative = review.get('negative_feedback') if isinstance(review.get('negative_feedback'), dict) else {}
-    status = '样本充分' if str(review.get('status')) == 'ok' else '样本不足'
+    status = {
+        'ok': '可用', 'conditional': '条件性可用',
+        'insufficient': '样本不足', 'not_ready': '数据未就位',
+    }.get(str(review.get('status') or '').lower(), '待核验')
+    coverage = review.get('transition_coverage_pct')
+    coverage_text = f'{float(coverage):.1f}%' if isinstance(coverage, (int, float)) else '样本不足'
+    concentration = review.get('leader_concentration_pct')
+    concentration_text = f'{float(concentration):.1f}%' if isinstance(concentration, (int, float)) else '样本不足'
     return f'''
     <div class="{cls}">
       <div class="{title}">连板复盘</div>
@@ -1271,10 +1288,15 @@ def _lianban_review_html(ctx: dict, prefix: str = '') -> str:
         <span>昨日连板池样本/分母：{_esc(str(review.get('streak_pool_trials', review.get('streak_pool_sample_size', 0))))}</span>
         <span>今日仍连板：{_esc(str(review.get('streak_pool_current_count', 0)))}</span>
         <span>昨日连板池晋级率：{_esc(streak.get('text') or '样本不足')}</span>
+        <span>当前有效梯队样本：{_esc(str(review.get('current_sample_size', '样本不足')))}</span>
+        <span>前后日匹配样本：{_esc(str(review.get('transition_match_count', '样本不足')))}</span>
+        <span>转移覆盖率：{_esc(coverage_text)}</span>
+        <span>最高板数量：{_esc(str(review.get('highest_board_count', '样本不足')))}</span>
+        <span>龙头集中度：{_esc(concentration_text)}</span>
         <span>负反馈：{_esc(negative.get('text') or '样本不足')}</span>
         <span>状态：{_esc(status)}</span>
       </div>
-      <div class="{note}">{_esc(review.get('conclusion') or '连板复盘结论未就位')}；所有晋级率均展示真实前后交易日匹配分母。</div>
+      <div class="{note}">{_esc(review.get('conclusion') or '连板复盘结论未就位')}；样本说明：{_esc(review.get('sample_reason') or '未提供')}；所有晋级率均展示真实前后交易日匹配分母。</div>
     </div>'''
 
 
@@ -1961,9 +1983,10 @@ def generate_dashboard_html(ctx: dict) -> str:
 
   {scenario_block}
 
+  {quality_html}
+
   <div class="section-title">{"股票池未发布" if policy['facts_only'] else "观察名单（非推荐）" if policy['observation_only'] else "明日核心股票池"}<span class="st-sub">{"数据阻断" if policy['facts_only'] else "仅供观察 · 条件触发" if policy['observation_only'] else "具体标的 · 入场条件 · 防守位"}</span></div>
   {focus_rows_html}
-  {quality_html}
   {ladder_quality_html}
   {data_credibility_html}
   {lianban_review_html}
@@ -2464,9 +2487,10 @@ def generate_dashboard_section(ctx: dict) -> str:
 
   {scenario_block}
 
+  {quality_html}
+
   <div class="dbd-section-title">{"股票池未发布" if policy['facts_only'] else "观察名单（非推荐）" if policy['observation_only'] else "明日核心股票池"} · {"数据阻断" if policy['facts_only'] else "仅供观察 · 条件触发" if policy['observation_only'] else "具体标的与入场条件"}</div>
   {focus_rows_inline}
-  {quality_html}
   {ladder_quality_html}
   {data_credibility_html}
   {lianban_review_html}

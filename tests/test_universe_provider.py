@@ -43,6 +43,23 @@ def test_universe_fetch_contains_all_three_exchanges_and_canonical_schema(tmp_pa
     assert set(result.data["list_status"]) == {"listed"}
 
 
+@pytest.mark.parametrize("frame", [
+    pd.DataFrame({"代码": [None], "名称": ["坏代码"]}),
+    pd.DataFrame({"代码": ["000001"], "名称": ["错误市场"]}),
+])
+def test_universe_rejects_empty_or_wrong_exchange_codes(frame):
+    provider = UniverseProvider(
+        sources={"SH": lambda: frame, "SZ": lambda: _source_frames()["SZ"],
+                 "BJ": lambda: _source_frames()["BJ"]},
+        retry=1,
+    )
+
+    result = provider.fetch()
+
+    assert result.status is FetchStatus.FAILED
+    assert "SH" in result.message
+
+
 def test_universe_refresh_preserves_prior_delisted_rows_and_replaces_atomically(tmp_path):
     path = tmp_path / "stock_universe.csv"
     prior = pd.DataFrame([{
