@@ -14,7 +14,7 @@ ctx 字段约定 (缺失字段自动降级为 '—'):
   level           : '强进攻 (高潮期)'
   color           : '#ff4444'      场景主色
   position        : '7-9成仓位'
-  win_rate        : float | None   当前历史缓存动态计算的 T+3 新高率
+  win_rate        : 0.71           历史 T+3 破新高胜率
   desc            : 场景一句话说明
   # 三因子
   curr_h          : 6              空间板
@@ -37,11 +37,24 @@ import re
 from datetime import datetime
 from typing import Any
 
+from report_logic import (
+    assess_data_quality,
+    build_market_state,
+    build_scenario_probabilities,
+    build_data_credibility_summary,
+    build_lianban_review,
+    build_mainline_review,
+    compute_ladder_metrics,
+    compute_market_ratios,
+    compute_mainline_concentration,
+    normalize_catalyst,
+    sanitize_html_for_policy,
+)
+
 
 def build_dashboard_ctx(timing=None, advance_decline=None, sentiment_df=None,
-                        echelon=None, report_date=None, focus_df=None,
-                        focus_catalysts=None, regime=None, data_quality=None,
-                        ladder_review=None) -> dict:
+                        echelon=None, previous_echelon=None, report_date=None, focus_df=None,
+                        focus_catalysts=None, report_context=None) -> dict:
     """从 timing + 盘面 + focus_pool + 催化归因结果组装看板 ctx.
 
     focus_catalysts: {股票名: {catalyst: {tag, text, url} | None, raw: {...}}}
@@ -54,7 +67,7 @@ def build_dashboard_ctx(timing=None, advance_decline=None, sentiment_df=None,
     """
     timing = timing or {}
     advance_decline = advance_decline or {}
-    regime = regime or {}
+    unified_context = report_context if isinstance(report_context, dict) else {}
     try:
         from timing_signal import (
             _compute_ad_ratio, _compute_ladder, _get_5day_pressure, _to_int,
@@ -84,62 +97,161 @@ def build_dashboard_ctx(timing=None, advance_decline=None, sentiment_df=None,
     dt = _to_int(advance_decline.get('dt', 0))
     zt_prev = _to_int(advance_decline.get('zt_prev', 0))
     ad_val, _up, _dn = _compute_ad_ratio(advance_decline)
-    ladder, h3, h4, h5, h6p = _compute_ladder(echelon)
-    pressure = _get_5day_pressure(sentiment_df, prev_h if prev_h > 0 else curr_h)
-    try:
-        from data_sources.focus_pool_stats import build_scenario_stats
-        scenario_stats = build_scenario_stats(sentiment_df)
-    except Exception:
-        scenario_stats = {}
-
-    timing_scene = str(timing.get('scene') or '')
-    if timing_scene.startswith(('A+', 'A_')):
-        sample_key = 'breakout'
-    elif timing_scene.startswith('E_'):
-        sample_key = 'continuation'
-    elif timing_scene.startswith('C_'):
-        sample_key = 'divergence'
-    elif timing_scene.startswith(('B_', 'F_')):
-        sample_key = 'breakdown'
-    else:
-        sample_key = None
-    sample = scenario_stats.get(sample_key, {}) if sample_key else {}
-    sample_count = int(sample.get('sample_count', 0) or 0)
-    sample_minimum = int(sample.get('min_samples', 5) or 5)
-    sample_rate = sample.get('win_rate')
-    dynamic_win_rate = (
-        sample_rate if sample_count >= sample_minimum
-        and isinstance(sample_rate, (int, float)) else None
+    ratios = compute_market_ratios(
+        advance_decline.get('up', _up),
+        advance_decline.get('down', _dn),
+        advance_decline.get('market_total'),
     )
+    ladder, h3, h4, h5, h6p = _compute_ladder(echelon)
+    ladder_metrics = compute_ladder_metrics(
+        echelon, previous_echelon=previous_echelon,
+    )
+    concentration_rows = []
+    for group in echelon or ():
+        if not isinstance(group, dict):
+            continue
+        height = group.get('height')
+        for stock in group.get('stock_details') or ():
+            if not isinstance(stock, dict):
+                continue
+            concentration_rows.append({
+                'mainline': stock.get('ml') or stock.get('sub'),
+                'height': height,
+            })
+    mainline_concentration = compute_mainline_concentration(concentration_rows)
+    if ladder_metrics.get('height_count'):
+        ladder = ladder_metrics.get('ladder', ladder)
+        h3 = ladder_metrics.get('h3', h3)
+        h4 = ladder_metrics.get('h4', h4)
+        h5 = ladder_metrics.get('h5', h5)
+        h6p = ladder_metrics.get('h6p', h6p)
+    pressure = _get_5day_pressure(sentiment_df, prev_h if prev_h > 0 else curr_h)
 
-    date_key = str(report_date) if report_date else datetime.now().strftime('%Y-%m-%d')
+    context_report_date = unified_context.get('report_date') if unified_context else None
+    date_key = str(report_date or context_report_date) if (report_date or context_report_date) else datetime.now().strftime('%Y-%m-%d')
     if len(date_key) == 8 and date_key.isdigit():
         date_key = f'{date_key[:4]}-{date_key[4:6]}-{date_key[6:]}'
 
-    regime_title = regime.get('title') or timing.get('scene')
-    regime_action = regime.get('action') or timing.get('action')
-    regime_color = regime.get('color') or timing.get('color')
-    regime_desc = regime.get('reason', '')
+    quality_args = dict(
+        report_date=date_key,
+        trade_day=advance_decline.get('trade_day', True),
+        market_total=advance_decline.get('market_total', ratios.get('market_total', 0)),
+        market_covered=advance_decline.get('market_covered', ratios.get('observed', 0)),
+        primary_source=advance_decline.get('primary_source', advance_decline.get('source')),
+        fallback_source=advance_decline.get('fallback_source'),
+        used_fallback=advance_decline.get('used_fallback', False),
+        used_stale=advance_decline.get('used_stale', False),
+        ad_incomplete=advance_decline.get('ad_incomplete', False),
+        ad_up=advance_decline.get('up'),
+        ad_down=advance_decline.get('down'),
+        ad_flat=advance_decline.get('flat'),
+        ad_reconciliation_enabled=advance_decline.get(
+            'ad_reconciliation_enabled', False
+        ),
+        market_scope=advance_decline.get('market_scope', '沪深北全A'),
+        missing_fields=advance_decline.get('missing_fields', []),
+        errors=advance_decline.get('errors', []),
+        data_timestamp=advance_decline.get('data_timestamp'),
+        source_timestamp=advance_decline.get('source_timestamp'),
+        report_generated_at=advance_decline.get('report_generated_at'),
+        max_delay_minutes=advance_decline.get('max_delay_minutes', 30),
+        stale_after_minutes=advance_decline.get('stale_after_minutes', 180),
+    )
+    # 旧调用方没有该字段时保持兼容；生产入口会显式提供真实前缀集合.
+    if 'market_prefixes' in advance_decline:
+        quality_args['market_prefixes'] = advance_decline.get('market_prefixes') or ()
+    historical_samples = advance_decline.get('historical_samples', timing.get('historical_samples', 0))
+    historical_stats = advance_decline.get('historical_stats', timing.get('historical_stats'))
+    if unified_context:
+        quality = dict(unified_context.get('quality') or {})
+        market_state = dict((unified_context.get('facts') or {}).get('market_state') or {})
+        market_state.setdefault('publication_mode', unified_context.get('publication_mode', 'facts_only'))
+        scenario_probabilities = list(unified_context.get('scenarios') or [])
+    else:
+        quality = assess_data_quality(**quality_args)
+        market_state = build_market_state(
+            quality, scene=timing.get('scene'), historical_samples=historical_samples,
+        )
+        scenario_probabilities = build_scenario_probabilities(
+            scene=timing.get('scene'), ad_ratio=ratios.get('breadth_ratio'),
+            zt=zt, dt=dt, curr_h=curr_h, pressure_5d=pressure,
+            ladder=ladder, h5=h5, data_quality=quality,
+            historical_samples=historical_samples,
+            historical_stats=historical_stats,
+        )
+    facts = unified_context.get('facts') if isinstance(unified_context.get('facts'), dict) else {}
+    # 主报告已经计算过一套带前后交易日匹配的梯队指标；看板必须复用这套
+    # canonical facts，不能再次用可能被裁剪/变形的 echelon 重新计算，
+    # 否则会出现同一份报告里“样本不足 0/0”和“真实 10/29”并存。
+    canonical_ladder_metrics = facts.get('ladder_metrics')
+    if isinstance(canonical_ladder_metrics, dict) and canonical_ladder_metrics:
+        ladder_metrics = canonical_ladder_metrics
+        ladder = ladder_metrics.get('ladder', ladder)
+        h3 = ladder_metrics.get('h3', h3)
+        h4 = ladder_metrics.get('h4', h4)
+        h5 = ladder_metrics.get('h5', h5)
+        h6p = ladder_metrics.get('h6p', h6p)
+    data_credibility = facts.get('data_credibility') if isinstance(facts.get('data_credibility'), dict) else None
+    if data_credibility is None:
+        data_credibility = build_data_credibility_summary(
+            quality, report_date=date_key,
+            report_generated_at=unified_context.get('generated_at') if unified_context else None,
+        )
+    lianban_review = facts.get('lianban_review') if isinstance(facts.get('lianban_review'), dict) else None
+    if lianban_review is None:
+        lianban_review = build_lianban_review(ladder_metrics)
+    mainline_review = facts.get('mainline_review') if isinstance(facts.get('mainline_review'), dict) else None
+    if mainline_review is None:
+        mainline_review = build_mainline_review(
+            mainline_concentration, limit_up_count=advance_decline.get('zt'),
+            attribution_source=(advance_decline.get('sector_source') or 'CLS+Eastmoney concepts'),
+        )
+
+    scenarios = _default_scenarios(curr_h, prev_h, focus_df=focus_df)
+    by_code = {row['code']: row for row in scenario_probabilities}
+    for scenario, code in zip(scenarios, ('A', 'B', 'C', 'D')):
+        if code in by_code:
+            scenario.update(by_code[code])
+    _mark_base_scenario(scenarios)
+
     return {
         'date_str': date_key,
-        'scene': regime_title,
-        'action': regime_action,
+        'scene': timing.get('scene'),
+        'action': timing.get('action'),
         'level': timing.get('level'),
-        'color': regime_color,
+        'color': timing.get('color'),
         'position': timing.get('position'),
-        'win_rate': dynamic_win_rate,
-        'desc': ' · '.join(x for x in (regime_desc, timing.get('desc')) if x),
-        'timing_scene': timing.get('scene'),
-        'regime': regime,
-        'scenario_stats': scenario_stats,
-        'data_quality': data_quality or {},
-        'ladder_review': ladder_review or {},
+        'win_rate': timing.get('win_rate'),
+        'desc': timing.get('desc'),
         'curr_h': curr_h, 'prev_h': prev_h, 'pressure_5d': pressure,
         'zt': zt, 'dt': dt, 'zt_prev': zt_prev,
-        'ad_ratio': ad_val,
+        # 兼容旧调用方, 但新展示必须区分两个指标。
+        'ad_ratio': ratios.get('breadth_ratio', ad_val),
+        'breadth_ratio': ratios.get('breadth_ratio'),
+        'advance_decline_ratio': ratios.get('advance_decline_ratio'),
+        'up': ratios.get('up', _up), 'down': ratios.get('down', _dn),
         'ladder': ladder, 'h3': h3, 'h4': h4, 'h5': h5, 'h6p': h6p,
+        'ladder_metrics': ladder_metrics,
+        'mainline_concentration': mainline_concentration,
+        'data_credibility': data_credibility,
+        'lianban_review': lianban_review,
+        'mainline_review': mainline_review,
+        'data_quality': quality,
+        'market_state': market_state,
+        'historical_samples': historical_samples,
+        'historical_stats': historical_stats,
+        'win_rate_sample_size': timing.get('win_rate_sample_size', 0),
+        'win_rate_confidence_interval': timing.get('win_rate_confidence_interval'),
+        'scenario_probabilities': scenario_probabilities,
+        'scenarios': scenarios,
         'focus_df': focus_df,
         'focus_catalysts': focus_catalysts or {},
+        'publication_mode': unified_context.get('publication_mode', market_state.get('publication_mode')),
+        'report_context': unified_context,
+        'daily_delta': unified_context.get('daily_delta', {}),
+        'prediction_review': unified_context.get('prediction_review', {}),
+        'lineage': unified_context.get('lineage', {}),
+        'progression_chain': (unified_context.get('facts') or {}).get('progression_chain', {}),
     }
 
 
@@ -151,57 +263,6 @@ def _fmt(v: Any, default: str = '—') -> str:
     return str(v)
 
 
-def _render_quality_summary(data_quality: dict | None, prefix: str = "") -> str:
-    quality = data_quality or {}
-    ok = bool(quality.get("ok", False))
-    color = "#3fb950" if ok else "#ff8800"
-    status = "通过" if ok else "待确认"
-    conflicts = int(quality.get("name_conflicts", 0) or 0)
-    limit_status = str(quality.get("limit_pool_status") or "unknown")
-    source = str(quality.get("limit_pool_source") or "未记录")
-    notes = quality.get("notes") or []
-    note_text = "；".join(str(note) for note in notes) or "无额外异常"
-    cls = f"{prefix}quality"
-    return (
-        f'<div class="{cls}" style="border:1px solid {color};border-left:4px solid {color};'
-        f'background:rgba(22,27,34,.78);padding:12px 16px;margin:0 0 18px;'
-        f'border-radius:6px;display:flex;gap:18px;flex-wrap:wrap;align-items:center;">'
-        f'<b style="color:{color};">数据可信度: {status}</b>'
-        f'<span>名称冲突 {conflicts}</span>'
-        f'<span>limit_pool: {_esc(limit_status)}</span>'
-        f'<span style="color:#8b949e;">来源 {_esc(source)}</span>'
-        f'<span style="color:#8b949e;">{_esc(note_text)}</span>'
-        f'</div>'
-    )
-
-
-def _render_ladder_review(review: dict | None, prefix: str = "") -> str:
-    review = review or {}
-    distribution = review.get("distribution") or {}
-    promotions = review.get("promotions") or {}
-    if not distribution and not promotions:
-        return ""
-    ladder = " / ".join(f"{height}板 {count}" for height, count in distribution.items())
-    promotion = " / ".join(
-        f"{height}→{height + 1} {item.get('rate', 0) * 100:.1f}%"
-        f" ({item.get('advanced', 0)}/{item.get('eligible', 0)})"
-        for height, item in promotions.items()
-    ) or "无上一交易日样本"
-    gaps = review.get("missing_heights") or []
-    gap_text = "/".join(str(height) for height in gaps) if gaps else "无"
-    return (
-        f'<div class="{prefix}ladder-review" style="display:grid;grid-template-columns:'
-        f'repeat(auto-fit,minmax(220px,1fr));gap:10px;margin:0 0 18px;">'
-        f'<div style="background:#161b22;border:1px solid #30363d;padding:10px 12px;border-radius:6px;">'
-        f'<b style="color:#ffcc00;">梯队</b><div>{_esc(ladder)}</div></div>'
-        f'<div style="background:#161b22;border:1px solid #30363d;padding:10px 12px;border-radius:6px;">'
-        f'<b style="color:#58a6ff;">晋级率</b><div>{_esc(promotion)}</div></div>'
-        f'<div style="background:#161b22;border:1px solid #30363d;padding:10px 12px;border-radius:6px;">'
-        f'<b style="color:#ff8800;">负反馈</b><div>高位断板 {int(review.get("high_break_count", 0) or 0)} · '
-        f'缺档 {_esc(gap_text)}</div></div></div>'
-    )
-
-
 def _win_rate_color(wr: float | None) -> str:
     if wr is None:
         return '#8b949e'
@@ -210,6 +271,19 @@ def _win_rate_color(wr: float | None) -> str:
     if wr >= 0.45:
         return '#d29922'
     return '#ff4444'
+
+
+def _pick_base_scenario(scenarios: list[dict]) -> tuple[dict | None, int]:
+    """从情形列表里挑"概率最高"的作为基准情形 (供重点提炼带高亮).
+    prob 字段为动态概率文本；无法解析按 0 处理，平票取先出现者。
+    """
+    best, best_p = None, -1
+    for s in scenarios or []:
+        m = re.search(r'(\d+)\s*%', str(s.get('prob', '')))
+        p = int(m.group(1)) if m else 0
+        if p > best_p:
+            best, best_p = s, p
+    return best, max(best_p, 0)
 
 
 def _sentiment_temp(ad, zt, dt, curr_h, pressure_5d) -> tuple[int, str, str]:
@@ -246,7 +320,7 @@ def _split_focus_pool(focus_df) -> dict:
       midcore: 中军低吸 (核心中军低吸池, 用于 D 或 C 换车)
     每个元素形如 {'name': '爱丽家居', 'plate': '并购重组50%', 'cond': '...', 'stop': '...'}
     """
-    buckets = {'space': [], 'low_level': [], 'midcore': []}
+    buckets = {'space': [], 'midcore': []}
     if focus_df is None:
         return buckets
     try:
@@ -267,8 +341,6 @@ def _split_focus_pool(focus_df) -> dict:
                 continue
             if '空间博弈' in pool or '主升接力' in pool:
                 buckets['space'].append(entry)
-            elif '补涨' in pool:
-                buckets['low_level'].append(entry)
             elif '中军' in pool or '低吸' in pool:
                 buckets['midcore'].append(entry)
     except Exception:
@@ -311,17 +383,18 @@ def _render_catalyst_cell(name: str, catalysts: dict | None) -> str:
     cat = item.get('catalyst') if isinstance(item, dict) else None
     if not cat:
         return '<td class="fp-cat" style="color:#6e7681;">无近期催化</td>'
-    tag = cat.get('tag', '')
-    text = cat.get('text', '')
-    url = cat.get('url', '')
-    body = _esc(text)
+    cat = normalize_catalyst(cat)
+    tag = cat['tag']
+    text = cat['text']
+    url = cat['url']
+    body = _esc(text) or _esc(tag)
     if url:
         body = f'<a href="{_esc(url)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline dotted;">{body}</a>'
     return (f'<td class="fp-cat"><span class="fp-cat-tag">{_esc(tag)}</span>'
             f'<div class="fp-cat-text">{body}</div></td>')
 
 
-def _render_focus_table(buckets: dict, catalysts: dict | None = None) -> str:
+def _render_focus_table(buckets: dict, catalysts: dict | None = None, mode: str = 'decision') -> str:
     """把 focus_pool 拆好的 space/midcore 两桶渲染成两张表 (独立看板用).
 
     catalysts: {股票名: {catalyst: {tag, text, url}, raw: ...}}, 来自
@@ -329,10 +402,13 @@ def _render_focus_table(buckets: dict, catalysts: dict | None = None) -> str:
     空表则整个 section 省略, 避免占版面显示空表。
     """
     space = buckets.get('space', [])
-    low_level = buckets.get('low_level', [])
     midcore = buckets.get('midcore', [])
-    if not space and not low_level and not midcore:
-        return ''
+    if mode == 'facts_only':
+        return '<div class="fp-empty" style="color:#d29922;padding:12px 4px;">股票池未发布（数据阻断）</div>'
+    observation_only = mode == 'observation'
+    if not space and not midcore:
+        return ('<div class="fp-empty" style="color:#6e7681;padding:12px 4px;">'
+                '暂无核心股票池 · 无近期催化</div>' if catalysts else '')
 
     def _row(entry: dict) -> str:
         name = entry.get('name', '')
@@ -351,28 +427,18 @@ def _render_focus_table(buckets: dict, catalysts: dict | None = None) -> str:
         space_rows = ''.join(_row(x) for x in space)
         parts.append(f'''
         <div class="fp-block fp-space">
-          <div class="fp-block-title">🚀 空间博弈 / 主升接力池 · {len(space)} 只
-            <span class="fp-block-sub">高连板追打 · 对应 A / B / C 场景</span></div>
+          <div class="fp-block-title">🚀 {"观察名单（非推荐）" if observation_only else "空间博弈 / 主升接力池"} · {len(space)} 只
+            <span class="fp-block-sub">{"仅供观察 · 条件触发" if observation_only else "高连板追打 · 对应 A / B / C 场景"}</span></div>
           <table class="fp-table"><thead><tr>
             <th>标的</th><th>主线</th><th>近期催化</th><th>入场条件</th><th>防守位</th>
           </tr></thead><tbody>{space_rows}</tbody></table>
-        </div>''')
-    if low_level:
-        low_rows = ''.join(_row(x) for x in low_level)
-        parts.append(f'''
-        <div class="fp-block fp-low">
-          <div class="fp-block-title">低位补涨池 · {len(low_level)} 只
-            <span class="fp-block-sub">首板/二板确认 · 与空间龙头互斥</span></div>
-          <table class="fp-table"><thead><tr>
-            <th>标的</th><th>主线</th><th>近期催化</th><th>入场条件</th><th>防守位</th>
-          </tr></thead><tbody>{low_rows}</tbody></table>
         </div>''')
     if midcore:
         mid_rows = ''.join(_row(x) for x in midcore)
         parts.append(f'''
         <div class="fp-block fp-midcore">
-          <div class="fp-block-title">🛡️ 核心中军低吸池 · {len(midcore)} 只
-            <span class="fp-block-sub">深蹲抄底 · 对应 D 场景或 C 场景换车备胎</span></div>
+          <div class="fp-block-title">🛡️ {"观察名单（非推荐）" if observation_only else "核心中军低吸池"} · {len(midcore)} 只
+            <span class="fp-block-sub">{"仅供观察 · 条件触发" if observation_only else "深蹲抄底 · 对应 D 场景或 C 场景换车备胎"}</span></div>
           <table class="fp-table"><thead><tr>
             <th>标的</th><th>周期</th><th>近期催化</th><th>入场条件</th><th>防守位</th>
           </tr></thead><tbody>{mid_rows}</tbody></table>
@@ -381,8 +447,7 @@ def _render_focus_table(buckets: dict, catalysts: dict | None = None) -> str:
     return f'''<div class="fp-wrap">{''.join(parts)}</div>'''
 
 
-def _default_scenarios(curr_h: int, prev_h: int, focus_df=None,
-                       scenario_stats=None) -> list[dict]:
+def _default_scenarios(curr_h: int, prev_h: int, focus_df=None) -> list[dict]:
     """T+1 4 情形树的默认模板. 从 focus_df 挂具体标的:
     - A (双龙一字): 空间池最强 2 只锁仓
     - B (空间一字+接力分歧): 换车 space 池第 2-3 只
@@ -414,7 +479,7 @@ def _default_scenarios(curr_h: int, prev_h: int, focus_df=None,
         b_items = [
             '前排减仓 30-50% · 兑现主升',
             f'低吸换车: {switch_targets}',
-            '不追高位孤峰，等待梯队补齐再确认',
+            '不追高位孤峰 (胜率 <40%)',
             '警惕孤峰塌陷',
         ]
     else:
@@ -439,20 +504,14 @@ def _default_scenarios(curr_h: int, prev_h: int, focus_df=None,
     else:
         d_items.append('全线离场观望')
 
-    from data_sources.focus_pool_stats import format_sample_label
-    stats = scenario_stats or {}
     return [
-        {'kind': 'attack', 'name': 'A · 双龙一字',
-         'prob': format_sample_label(stats.get('breakout')),
+        {'kind': 'attack', 'name': 'A · 双龙一字', 'prob': '概率待质量校验',
          'items': a_items, 'pos': '仓位 · 7-8 成'},
-        {'kind': 'moderate', 'name': 'B · 空间一字 + 接力分歧',
-         'prob': format_sample_label(stats.get('continuation')),
+        {'kind': 'moderate', 'name': 'B · 空间一字 + 接力分歧', 'prob': '概率待质量校验',
          'items': b_items, 'pos': '仓位 · 4-5 成'},
-        {'kind': 'attack', 'name': 'C · 高开分歧 + 二三进阶',
-         'prob': format_sample_label(stats.get('divergence')),
+        {'kind': 'attack', 'name': 'C · 高开分歧 + 二三进阶', 'prob': '概率待质量校验',
          'items': c_items, 'pos': '仓位 · 8-9 成 ⭐'},
-        {'kind': 'defense', 'name': 'D · 龙头炸板',
-         'prob': format_sample_label(stats.get('breakdown')),
+        {'kind': 'defense', 'name': 'D · 龙头炸板', 'prob': '概率待质量校验',
          'items': d_items, 'pos': '仓位 · 1-2 成'},
     ]
 
@@ -471,12 +530,48 @@ def _factor_row(name: str, value: str, ok: str, hint: str) -> str:
 
 def _scen_card(s: dict) -> str:
     items = ''.join(f'<li>{_esc(x)}</li>' for x in s.get('items', []))
-    return (f'<div class="scen-card {s.get("kind", "moderate")}">'
-            f'<div class="head"><span class="name">{_esc(s.get("name", ""))}</span>'
+    base_cls = ' scen-base' if s.get('is_base') else ''
+    base_badge = '<span class="scen-base-badge">基准</span>' if s.get('is_base') else ''
+    stat_text = _scenario_stat_text(s)
+    return (f'<div class="scen-card {s.get("kind", "moderate")}{base_cls}">'
+            f'<div class="head"><span class="name">{_esc(s.get("name", ""))}{base_badge}</span>'
             f'<span class="prob">{_esc(s.get("prob", ""))}</span></div>'
+            f'<div class="scen-stat">{_esc(stat_text)}</div>'
             f'<ul>{items}</ul>'
             f'<div class="pos">{_esc(s.get("pos", ""))}</div>'
             f'</div>')
+
+
+def _scenario_stat_text(s: dict) -> str:
+    """把场景的历史样本与区间压成一行可读摘要。"""
+    sample_size = s.get('sample_size')
+    try:
+        sample_size = int(sample_size or 0)
+    except (TypeError, ValueError):
+        sample_size = 0
+    ci_text = str(s.get('confidence_interval_text') or '').strip()
+    if sample_size <= 0:
+        return '样本不足 · 暂无置信区间'
+    if not ci_text or ci_text == '样本不足':
+        return f'样本 {sample_size} · 暂无置信区间'
+    estimated = ' · 由历史比例反推' if s.get('confidence_interval_estimated') else ''
+    return f'样本 {sample_size} · {ci_text}{estimated}'
+
+
+def _win_rate_stat_text(ctx: dict, win_rate: Any) -> str:
+    """返回独立/内嵌 KPI 共用的历史命中率证据摘要。"""
+    sample_size = ctx.get('win_rate_sample_size', 0)
+    try:
+        sample_size = int(sample_size or 0)
+    except (TypeError, ValueError):
+        sample_size = 0
+    ci = ctx.get('win_rate_confidence_interval')
+    ci_text = ci.get('text') if isinstance(ci, dict) else None
+    if not isinstance(win_rate, (int, float)):
+        return '样本不足 · 暂无置信区间'
+    if not ci_text:
+        return f'样本 {sample_size} · 暂无置信区间' if sample_size else '暂无置信区间'
+    return f'样本 {sample_size} · {ci_text}'
 
 
 def _history_row(c: dict) -> str:
@@ -528,17 +623,334 @@ def _sentiment_score(ad, curr_h, pressure_5d, zt, dt, zt_prev) -> tuple[int, str
     return score, '冰点 · 空仓观望', '#ff4444'
 
 
-def _build_playbook(curr_h, zt, ad, h5, date_str) -> list[dict]:
-    """基于当日盘面结构挑出命中的"今日操作口令"。
+def _mark_base_scenario(scenarios: list[dict]) -> dict | None:
+    """从场景列表挑概率最高的作为'基准情形', 打 is_base 标记并返回它本身。
+    概率解析失败时退回第一个。"""
+    if not scenarios:
+        return None
+    def _p(s):
+        m = re.search(r'(\d+)', str(s.get('prob', '')))
+        return int(m.group(1)) if m else -1
+    scored = [(s, _p(s)) for s in scenarios]
+    if not any(score >= 0 for _, score in scored):
+        for s in scenarios:
+            s.pop('is_base', None)
+        return None
+    base = max(scored, key=lambda item: item[1])[0]
+    for s in scenarios:
+        s['is_base'] = (s is base)
+    return base
 
-    这里只输出可验证的结构与动作，不复用旧回测中的固定概率。动态样本结果
-    由情形决策树单独展示，样本不足时明确标记。
+
+def _prepare_scenarios(ctx: dict, curr_h: int, prev_h: int, focus_df, *,
+                       breadth_ratio, zt, dt, pressure_5d, ladder, h5) -> list[dict]:
+    """统一生成渲染层情形树，避免独立看板/内嵌看板回退到固定概率模板。"""
+    scenarios = ctx.get('scenarios') or _default_scenarios(curr_h, prev_h, focus_df=focus_df)
+    scenarios = [dict(row) for row in scenarios]
+    if len(scenarios) < 4:
+        defaults = _default_scenarios(curr_h, prev_h, focus_df=focus_df)
+        scenarios.extend(defaults[len(scenarios):])
+    dynamic = build_scenario_probabilities(
+        scene=ctx.get('scene'), ad_ratio=breadth_ratio,
+        zt=zt, dt=dt, curr_h=curr_h, pressure_5d=pressure_5d,
+        ladder=ladder, h5=h5,
+        data_quality=ctx.get('data_quality'),
+        historical_samples=ctx.get('historical_samples', 0),
+        historical_stats=ctx.get('historical_stats'),
+    )
+    by_code = {row['code']: row for row in dynamic}
+    for scenario, code in zip(scenarios[:4], ('A', 'B', 'C', 'D')):
+        # 保留股票池话术，仅覆盖概率/名称/类型等由统一逻辑负责的字段。
+        scenario.update({key: by_code[code].get(key) for key in (
+            'code', 'name', 'kind', 'probability', 'probability_pct', 'prob',
+            'confidence', 'sample_size', 'probability_kind', 'historical_rate',
+            'confidence_interval', 'confidence_interval_text',
+            'confidence_interval_estimated')})
+    scenarios = scenarios[:4]
+    _mark_base_scenario(scenarios)
+    return scenarios
+
+
+def _ladder_view(ctx: dict, curr_h: int, h3: Any, h4: Any, h5: Any, h6p: Any) -> dict[str, Any]:
+    """把真实梯队指标整理成渲染层统一字段，并兼容旧 ctx。"""
+    raw = ctx.get('ladder_metrics')
+    if isinstance(raw, dict) and raw:
+        metrics = dict(raw)
+    else:
+        metrics = compute_ladder_metrics([
+            {'height': 3, 'count': h3}, {'height': 4, 'count': h4},
+            {'height': 5, 'count': h5}, {'height': 6, 'count': h6p},
+        ])
+        # 旧 ctx 只有各高度数量时，上面的通用解析无法识别 count，手动修正。
+        counts = {3: int(h3 or 0), 4: int(h4 or 0), 5: int(h5 or 0), 6: int(h6p or 0)}
+        heights = [height for height, count in counts.items() for _ in range(max(0, count))]
+        metrics = compute_ladder_metrics([{'height': height} for height in heights])
+    counts = metrics.get('counts') or {
+        3: int(metrics.get('h3', h3) or 0),
+        4: int(metrics.get('h4', h4) or 0),
+        5: int(metrics.get('h5', h5) or 0),
+        6: int(metrics.get('h6p', h6p) or 0),
+    }
+    gap_heights = metrics.get('gap_heights') or []
+    metrics.setdefault('height', curr_h)
+    metrics.setdefault('ladder', ctx.get('ladder'))
+    metrics['counts'] = counts
+    metrics.setdefault('gap_text', '、'.join(f'缺{x}板' for x in gap_heights) if gap_heights else '无明显断层')
+    metrics.setdefault('gap_risk', bool(gap_heights))
+    metrics.setdefault('gap_risk_label', '高' if metrics['gap_risk'] else '低')
+    metrics.setdefault('progression_label', '突破昨日最高高度占比')
+    metrics.setdefault(
+        'progression_definition',
+        '今日梯队中高度超过昨日最高板的个股数 / 今日有效梯队个股数',
+    )
+    metrics.setdefault('progression_denominator', '今日有效梯队个股数')
+    metrics.setdefault('progressed_count', 0)
+    metrics.setdefault('previous_count', 0)
+    metrics.setdefault('broken_count', 0)
+    metrics.setdefault('isolated_leader', False)
+    if not metrics.get('progression_text'):
+        metrics['progression_text'] = (
+            f"{metrics.get('progressed_count', 0)}/{metrics.get('height_count', 0)}"
+            if metrics.get('previous_count') else '样本不足'
+        )
+    return metrics
+
+
+def _quality_view(ctx: dict) -> dict[str, Any]:
+    quality = ctx.get('data_quality')
+    return quality if isinstance(quality, dict) else assess_data_quality()
+
+
+def _publication_policy(ctx: dict) -> dict[str, bool | str]:
+    """把数据质量状态映射成报表可发布范围。"""
+    state = ctx.get('market_state') if isinstance(ctx.get('market_state'), dict) else build_market_state(ctx.get('data_quality'))
+    mode = str(state.get('publication_mode') or '').lower()
+    if mode not in {'facts_only', 'observation', 'decision'}:
+        quality = _quality_view(ctx)
+        status = str(quality.get('status') or 'unknown').lower()
+        mode = 'facts_only' if status in {'blocked', 'non_trading_day'} else ('decision' if status == 'ok' else 'observation')
+    return {
+        'mode': mode,
+        'facts_only': mode == 'facts_only',
+        'observation_only': mode == 'observation',
+        'decision_ready': mode == 'decision',
+        'allow_focus_pool': mode == 'decision',
+    }
+
+
+def _sanitize_scenarios_for_publication(scenarios: list[dict], mode: str) -> list[dict]:
+    """根据发布模式过滤场景，避免质量不足时输出伪决策。"""
+    if mode == 'decision':
+        return scenarios
+    if mode == 'facts_only':
+        return [{
+            'code': 'FACTS',
+            'name': '事实层',
+            'probability': None,
+            'probability_pct': None,
+            'prob': None,
+            'items': [
+                '仅展示当前事实与数据质量问题',
+                '待沪深北全A数据通过校验后再评估情形',
+                '当前仅展示已校验事实',
+            ],
+            'pos': '仅事实层',
+            'is_base': False,
+        }]
+    items = [
+        '仅观察数据新鲜度、覆盖率和涨跌家数',
+        '数据重新通过质量校验后才评估该情形',
+        '当前展示条件性观察',
+    ]
+    pos = '条件性观察'
+    return [dict(row, items=list(items), pos=pos, is_base=False) for row in scenarios]
+
+
+_MODULE_DISPLAY_ORDER = (
+    'universe', 'price_raw', 'breadth', 'limit_pool', 'sector',
+    'echelon', 'history', 'price_qfq', 'ai',
+)
+_MODULE_LABELS = {
+    'universe': '证券主数据',
+    'price_raw': '报告日价格',
+    'breadth': '市场宽度',
+    'limit_pool': '涨停事实池',
+    'sector': '题材归因',
+    'echelon': '连板梯队',
+    'history': '历史情绪',
+    'price_qfq': '前复权价格',
+    'ai': 'AI 研判',
+}
+_MODULE_STATUS_LABELS = {
+    'ok': '正常',
+    'degraded': '降级',
+    'blocked': '阻断',
+    'unavailable': '不可用',
+    'unknown': '未评估',
+}
+
+
+def _module_sort_key(key: str, modules: dict) -> tuple[int, int, str]:
+    module = modules.get(key) if isinstance(modules.get(key), dict) else {}
+    status = str(module.get('status') or 'unknown').lower()
+    priority = _MODULE_DISPLAY_ORDER.index(key) if key in _MODULE_DISPLAY_ORDER else len(_MODULE_DISPLAY_ORDER)
+    return (0 if status != 'ok' else 1, priority, key)
+
+
+def _module_coverage_text(module: dict) -> str:
+    total = module.get('total')
+    covered = module.get('covered')
+    coverage = module.get('coverage_pct')
+    if total is not None:
+        detail = f'{_fmt(covered, "0")}/{_fmt(total, "0")}'
+        if coverage is not None:
+            detail += f'（{_fmt(coverage)}%）'
+        return detail
+    if coverage is not None:
+        return f'{_fmt(coverage)}%'
+    return ''
+
+
+def _find_limit_pool_reconciliation(modules: dict, lineage: dict) -> dict:
+    candidates = (
+        ((modules.get('limit_pool') or {}).get('lineage') if isinstance(modules.get('limit_pool'), dict) else {}),
+        ((lineage.get('limit_pool') or {}).get('lineage') if isinstance(lineage.get('limit_pool'), dict) else {}),
+        ((modules.get('sector') or {}).get('lineage') if isinstance(modules.get('sector'), dict) else {}),
+        ((lineage.get('sector') or {}).get('lineage') if isinstance(lineage.get('sector'), dict) else {}),
+        modules.get('limit_pool'),
+        lineage.get('limit_pool'),
+    )
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        reconciliation = candidate.get('reconciliation')
+        if isinstance(reconciliation, dict) and reconciliation:
+            return reconciliation
+    return {}
+
+
+def _quality_scope_summary(quality: dict, publication_label: str, prefix: str) -> str:
+    modules = quality.get('modules') if isinstance(quality.get('modules'), dict) else {}
+    passed = []
+    limited = []
+    for key in _MODULE_DISPLAY_ORDER:
+        module = modules.get(key) if isinstance(modules.get(key), dict) else None
+        if not module:
+            continue
+        label = _MODULE_LABELS.get(key, key)
+        status = str(module.get('status') or 'unknown').lower()
+        if status == 'ok':
+            passed.append(label)
+            continue
+        coverage = module.get('coverage_pct')
+        coverage_text = f' {_fmt(coverage)}%' if coverage is not None else f' {_MODULE_STATUS_LABELS.get(status, "未评估")}'
+        limited.append(f'{label}{coverage_text}')
+    passed_text = '、'.join(passed) if passed else '暂无模块通过完整校验'
+    limited_text = '、'.join(limited) if limited else '无'
+    return (
+        f'<div class="{prefix}quality-scope"><b>当前可用范围：{_esc(publication_label)}</b>'
+        f'<span>事实层已通过：{_esc(passed_text)}</span>'
+        f'<span>限制项：{_esc(limited_text)}</span></div>'
+    )
+
+def _quality_html(ctx: dict, prefix: str = '') -> str:
+    """渲染统一的数据质量摘要，避免把内部字段或 Python None 泄漏到 HTML。"""
+    quality = _quality_view(ctx)
+    status = str(quality.get('status') or 'unknown').lower()
+    status_text = {
+        'ok': '数据正常', 'degraded': '数据降级', 'blocked': '数据阻断',
+        'non_trading_day': '非交易日',
+    }.get(status, '未评估')
+    total = quality.get('market_total')
+    covered = quality.get('market_covered')
+    coverage = quality.get('coverage_pct')
+    if total:
+        try:
+            coverage_value = float(coverage or 0)
+            coverage_display = (f'{coverage_value:.0f}%' if coverage_value.is_integer()
+                                else f'{coverage_value:.1f}%')
+            coverage_text = f'{covered or 0} / {total}（{coverage_display}）'
+        except (TypeError, ValueError):
+            coverage_text = f'{covered or 0} / {total}（未计算）'
+    else:
+        coverage_text = '未声明/未提供'
+    primary = _esc(quality.get('primary_source') or '未声明')
+    fallback = _esc(quality.get('fallback_source') or '未配置')
+    scope = _esc(quality.get('market_scope') or '沪深北全A')
+    prefixes = _esc(','.join(quality.get('market_prefixes') or ()) or '未获取')
+    fallback_used = '是' if quality.get('used_fallback') else '否'
+    stale = '是' if quality.get('used_stale') else '否'
+    missing = quality.get('missing_fields') or []
+    errors = quality.get('errors') or []
+    issue_text = ''
+    if missing:
+        issue_text += f'缺字段：{"、".join(map(str, missing))}'
+    if errors:
+        issue_text += f'{"；" if issue_text else ""}错误：{"；".join(map(str, errors))}'
+    state = ctx.get('market_state') if isinstance(ctx.get('market_state'), dict) else build_market_state(quality)
+    reason = _esc(state.get('reason') or '质量检查通过')
+    freshness_labels = {
+        'fresh': '新鲜', 'delayed': '延迟', 'stale': '陈旧',
+        'blocked': '阻断', 'unknown': '未知',
+    }
+    freshness_level = str(quality.get('freshness_level') or 'unknown').lower()
+    freshness_text = freshness_labels.get(freshness_level, '未知')
+    freshness_reason = _esc(quality.get('freshness_reason') or '未提供可核验的数据时间戳')
+    data_timestamp = _esc(quality.get('data_timestamp') or '未提供')
+    source_timestamp = _esc(quality.get('source_timestamp') or '未提供')
+    report_generated_at = _esc(quality.get('report_generated_at') or '未提供')
+    publication_label = {'facts_only': '仅事实层', 'observation': '观察与条件触发', 'decision': '完整决策'}.get(str(state.get('publication_mode') or ''), '待核验')
+    scope_summary = _quality_scope_summary(quality, publication_label, prefix)
+    data_layer = state.get('data_layer') or {}
+    statistics_layer = state.get('statistics_layer') or {}
+    decision_layer = state.get('decision_layer') or {}
+    quality_cls = f'{prefix}quality-card'
+    return f"""
+    <div class="{quality_cls}">
+      <div class="{prefix}quality-title">数据质量：<b>{_esc(status_text)}</b></div>
+      {scope_summary}
+      <div class="{prefix}quality-items">
+        <span>数据源：{primary}</span>
+        <span>备用源：{fallback}</span>
+        <span>市场范围：{scope}</span>
+        <span>代码前缀：{prefixes}</span>
+        <span>覆盖率：{_esc(coverage_text)}</span>
+        <span>备用源启用：{fallback_used}</span>
+        <span>stale：{stale}</span>
+        <span>新鲜度：{_esc(freshness_text)}</span>
+        <span>报告可用范围：{_esc(publication_label)}</span>
+      </div>
+      <div class="{prefix}quality-layers">
+        <span>行情时间：{data_timestamp}</span>
+        <span>源时间：{source_timestamp}</span>
+        <span>生成时间：{report_generated_at}</span>
+        <span>数据层：{_esc(data_layer.get('label') or status_text)}</span>
+        <span>统计层：{_esc(statistics_layer.get('label') or '统计待核验')}</span>
+        <span>决策层：{_esc(decision_layer.get('label') or '仅条件性结论')}</span>
+      </div>
+      <div class="{prefix}quality-issues">新鲜度原因：{freshness_reason} · {_esc(issue_text) if issue_text else '字段完整性与来源状态已记录'} · {reason}</div>
+    </div>"""
+
+
+def _ratio_text(value: Any, *, inf_text: str = '∞') -> str:
+    if isinstance(value, (int, float)):
+        if value == float('inf'):
+            return inf_text
+        return f'{value:.3f}'
+    return '未取到'
+
+
+def _build_playbook(curr_h, zt, breadth, h5, date_str) -> list[dict]:
+    """基于当日盘面, 从三条实证规律挑出命中的"今日操作口令"。
+
+    阈值来自可维护的盘面规则配置；历史命中率由预测回顾模块动态注入，
+    不在看板文案中硬编码固定胜率。
 
     返回 [{tone, icon, text}], tone ∈ hot|cold|warn|ok|neutral 决定配色。
     只输出命中的口令; 数据是论据, 口令是动作。
     """
     cmds: list[dict] = []
-    ad_is = isinstance(ad, (int, float))
+    breadth_is = isinstance(breadth, (int, float))
     ZT_HOT, ZT_COLD = 126, 46
 
     # ① 情绪极值逆向 (最高优先级)
@@ -546,17 +958,17 @@ def _build_playbook(curr_h, zt, ad, h5, date_str) -> list[dict]:
         cmds.append({'tone': 'hot', 'icon': '🔥',
             'text': f'涨停 {zt} 家破高潮线 — 明天别追高。过热不一定崩(缓慢消化), '
                     f'但收益已到头, 该止盈的分批走。'})
-    elif zt <= ZT_COLD or (ad_is and ad < 0.2):
-        _r = f'红盘率 {ad:.0%} ' if ad_is else ''
+    elif zt <= ZT_COLD or (breadth_is and breadth < 0.2):
+        _r = f'上涨占比 {breadth:.0%} ' if breadth_is else ''
         cmds.append({'tone': 'cold', 'icon': '🥶',
-            'text': f'涨停 {zt} 家 {_r}冰点 — 等止跌与前排转强确认后逢低试错，'
-                    f'不要在恐慌加速段直接抢反弹。'})
+            'text': f'涨停 {zt} 家 {_r}冰点 — 明天优先观察情绪修复, '
+                    f'仅在承接确认后逢低加, 不做无条件抄底。'})
 
     # ② 孤峰预警 (最高板 ≥6 且 5 板断档)
     if curr_h >= 6 and h5 == 0:
         cmds.append({'tone': 'warn', 'icon': '⚠️',
             'text': f'空间板 {curr_h}板孤峰、5板断档 — 龙一独一档没接力, '
-                    f'高低断代风险上升，手里高位股先出别恋战。'})
+                    f'高位股先看承接与补位，未确认前不追高。'})
     elif curr_h >= 6:
         cmds.append({'tone': 'ok', 'icon': '🪜',
             'text': f'空间板 {curr_h}板且阶梯连续 — 主升情绪健康, '
@@ -564,8 +976,8 @@ def _build_playbook(curr_h, zt, ad, h5, date_str) -> list[dict]:
 
     # ③ 连板 2 板陷阱 (常驻提醒)
     cmds.append({'tone': 'neutral', 'icon': '📉',
-        'text': '手里首板/2板 → 观察封单与次日竞价，不满足确认条件则减仓；'
-                '3板以上 → 只留前排，按当日晋级率和断板反馈动态处理。'})
+        'text': '首板/2板 → 观察封单、换手和次日承接；'
+                '3-6板 → 重点看是否突破昨日最高高度，并结合承接决定去留。'})
 
     # ④ 日历脾气 (T+1 前瞻)
     try:
@@ -574,16 +986,15 @@ def _build_playbook(curr_h, zt, ad, h5, date_str) -> list[dict]:
         wd = -1
     if wd == 3:  # 今天周四 → 明天周五
         cmds.append({'tone': 'warn', 'icon': '📅',
-            'text': '今天周四 — 临近周末优先控制高位隔夜风险，'
-                    '高位股明天开盘冲高先减, 别裸奔过周末。'})
+            'text': '今天周四 — 临近周末先检查高位股承接与兑现压力, '
+                    '高位股明天冲高先做减仓预案。'})
     elif wd == 2:  # 今天周三 → 明天周四(全周最危险)
         cmds.append({'tone': 'warn', 'icon': '📅',
-            'text': '明天周四 — 预留仓位应对高位分歧，'
-                    '今天尾盘别加满, 给明天留减仓空间。'})
-    elif wd == 4 and (zt <= ZT_COLD or (ad_is and ad < 0.35)):  # 今天周五冰点 → 周一
+            'text': '明天周四 — 今天尾盘不追满仓, 给明天的波动和减仓留空间。'})
+    elif wd == 4 and (zt <= ZT_COLD or (breadth_is and breadth < 0.35)):  # 今天周五冰点 → 周一
         cmds.append({'tone': 'cold', 'icon': '📅',
-            'text': '周五冰点收盘 — 周末仅留可承受波动的底仓，'
-                    '周一等待竞价与前排修复确认。'})
+            'text': '周五冰点收盘 — 周一优先观察修复信号, '
+                    '不在恐慌盘中机械割肉，也不预设必然反弹。'})
 
     return cmds
 
@@ -600,14 +1011,417 @@ def _render_playbook(cmds: list[dict], p: str = '') -> str:
     )
     return (f'<div class="{p}playbook">'
             f'<div class="{p}pb-title">今日操作口令'
-            f'<span class="{p}pb-sub">结构信号 · 看到什么做什么</span></div>'
+            f'<span class="{p}pb-sub">命中实证规律 · 看到什么做什么</span></div>'
             f'{rows}</div>')
 
 
+def _metric_rate_text(value: Any, *, default: str = '样本不足') -> str:
+    """将比例字段安全渲染；缺少分母或比例时不伪造 0%。"""
+    if isinstance(value, dict):
+        value = value.get('rate')
+    if value is None:
+        return default
+    try:
+        return f'{float(value):.0%}'
+    except (TypeError, ValueError):
+        return default
+
+
+def _ladder_quality_html(ctx: dict, prefix: str = '') -> str:
+    metrics = ctx.get('ladder_metrics')
+    cls = f'{prefix}quality-metrics'
+    card = f'{prefix}metric-card'
+    grid = f'{prefix}metric-grid'
+    title = f'{prefix}metric-title'
+    note = f'{prefix}metric-note'
+    if not isinstance(metrics, dict) or not metrics:
+        return (f'<div class="{cls}"><div class="{card}"><b>连板质量</b>'
+                f'<span>数据未就位</span></div></div>')
+    rates = metrics.get('advancement_rates') or metrics.get('progression_rates') or {}
+
+    def _rate(key):
+        row = rates.get(key)
+        if row is None:
+            try:
+                row = rates.get(int(key.split('_')[0]))
+            except (TypeError, ValueError):
+                row = None
+        return _metric_rate_text(row)
+
+    broken = _metric_rate_text(metrics.get('broken_rate'))
+    bomb = _metric_rate_text(metrics.get('bomb_rate') or metrics.get('explosion_rate'))
+    reclose = _metric_rate_text(metrics.get('reclose_rate') or metrics.get('re封_rate'))
+    board = metrics.get('board_structure') or {}
+    one_word = board.get('one_word_count', metrics.get('one_word_count'))
+    turnover = board.get('turnover_count', metrics.get('turnover_count'))
+    score = metrics.get('quality_score')
+    score_text = f'{float(score):.1f}/100' if isinstance(score, (int, float)) else str(metrics.get('quality_text') or '数据未就位')
+    sample = metrics.get('quality_sample_size') or metrics.get('height_count') or metrics.get('sample_size')
+
+    def _rate_detail(key):
+        row = metrics.get(key)
+        text = _metric_rate_text(row)
+        if isinstance(row, dict):
+            successes = row.get('successes', row.get('numerator'))
+            trials = row.get('trials', row.get('denominator'))
+            if successes is not None and trials is not None:
+                return f'{text}（{successes}/{trials}）'
+        return text
+
+    first_board = _rate_detail('first_board_to_second')
+    streak_promotion = _rate_detail('streak_pool_promotion')
+    all_limit_up = _rate_detail('all_limit_up_reclose')
+    return f'''
+    <div class="{cls}">
+      <div class="{title}">连板质量</div>
+      <div class="{grid}">
+        <span>首板→二板晋级率：{first_board}</span>
+        <span>昨日连板池晋级率（高度≥2）：{streak_promotion}</span>
+        <span>昨日涨停池次日再板率：{all_limit_up}</span>
+        <span>二板→三板晋级率：{_rate('2_to_3')}</span>
+        <span>三板→四板晋级率：{_rate('3_to_4')}</span>
+        <span>四板→五板晋级率：{_rate('4_to_5')}</span>
+        <span>五板→六板晋级率：{_rate('5_to_6')}</span>
+        <span>昨日连板池断板率：{broken}</span>
+        <span>炸板率：{bomb}</span>
+        <span>炸板后回封率：{reclose}</span>
+        <span>一字板：{_esc(one_word if one_word is not None else '样本不足')}</span>
+        <span>换手板：{_esc(turnover if turnover is not None else '样本不足')}</span>
+        <span>连板质量分：{_esc(score_text)}</span>
+        <span>样本数：{_esc(sample if sample is not None else '样本不足')}</span>
+      </div>
+      <div class="{note}">统计口径：首板、昨日连板池、昨日涨停池分别使用独立分母；真实前后交易日证券代码匹配，缺少样本时不推断晋级率。</div>
+    </div>'''
+
+
+def _mainline_concentration_html(ctx: dict, prefix: str = '') -> str:
+    metrics = ctx.get('mainline_concentration')
+    cls = f'{prefix}quality-metrics'
+    card = f'{prefix}metric-card'
+    grid = f'{prefix}metric-grid'
+    title = f'{prefix}metric-title'
+    note = f'{prefix}metric-note'
+    if not isinstance(metrics, dict) or not metrics:
+        return (f'<div class="{cls}"><div class="{card}"><b>主线集中度</b>'
+                f'<span>数据未就位</span></div></div>')
+    top = _esc(metrics.get('top_mainline') or '数据未就位')
+    share = _metric_rate_text(metrics.get('top_share'), default='数据未就位')
+    attributed_share = _metric_rate_text(metrics.get('top_share_attributed_sample'), default='数据未就位')
+    conservative_share = _metric_rate_text(metrics.get('top_share_authoritative_pool'), default='数据未就位')
+    coverage_pct = metrics.get('attribution_coverage_pct')
+    coverage = _metric_rate_text(
+        float(coverage_pct) / 100 if isinstance(coverage_pct, (int, float)) else None,
+        default='数据未就位',
+    )
+    conclusion_label = {
+        'strong': '强结论',
+        'conditional': '条件性结论',
+        'insufficient': '覆盖不足',
+    }.get(str(metrics.get('conclusion_level') or 'insufficient'), '覆盖不足')
+    hhi = metrics.get('hhi')
+    hhi_text = f'{float(hhi):.3f}' if isinstance(hhi, (int, float)) else '数据未就位'
+    sample = metrics.get('sample_size')
+    sample_text = str(sample) if isinstance(sample, int) and sample > 0 else '数据未就位'
+    distribution = metrics.get('distribution') or {}
+    if isinstance(distribution, list):
+        parts = []
+        for item in distribution[:5]:
+            if isinstance(item, dict):
+                parts.append(f"{_esc(item.get('name') or item.get('mainline') or '')} {_metric_rate_text(item.get('share'))}")
+        dist_text = '、'.join(parts) or '数据未就位'
+    elif isinstance(distribution, dict):
+        dist_text = '、'.join(f'{_esc(name)} {value}' for name, value in list(distribution.items())[:5]) or '数据未就位'
+    else:
+        dist_text = '数据未就位'
+    return f'''
+    <div class="{cls}">
+      <div class="{title}">主线集中度</div>
+      <div class="{grid}">
+        <span>领先方向：{top}</span>
+        <span>已归因样本内占比：{attributed_share if attributed_share != '数据未就位' else share}</span>
+        <span>归因覆盖率：{coverage}</span>
+        <span>全事实池保守占比：{conservative_share}</span>
+        <span>结论等级：{_esc(conclusion_label)}</span>
+        <span>HHI：{_esc(hhi_text)}</span>
+        <span>有效样本数：{_esc(sample_text)}</span>
+        <span>主线分布：{dist_text}</span>
+      </div>
+      <div class="{note}">统计口径：按有效连板样本归属主线统计；覆盖不足时只表述为已归因样本中的领先方向，不外推为全事实池结论。</div>
+    </div>'''
+
+
+def _data_credibility_html(ctx: dict, prefix: str = '') -> str:
+    summary = ctx.get('data_credibility') if isinstance(ctx.get('data_credibility'), dict) else {}
+    cls = f'{prefix}quality-metrics'
+    card = f'{prefix}metric-card'
+    grid = f'{prefix}metric-grid'
+    title = f'{prefix}metric-title'
+    note = f'{prefix}metric-note'
+    if not summary:
+        return f'<div class="{cls}"><div class="{card}"><b>数据可信度</b><span>数据未就位</span></div></div>'
+    status = str(summary.get('status') or 'unknown').lower()
+    status_label = {
+        'ok': '正常', 'degraded': '降级', 'blocked': '阻断',
+        'unavailable': '不可用', 'non_trading_day': '非交易日',
+    }.get(status, '未评估')
+    total = summary.get('market_total')
+    covered = summary.get('market_covered')
+    coverage = (f'{float(covered) / float(total) * 100:.2f}%'
+                if isinstance(total, (int, float)) and total > 0 and isinstance(covered, (int, float))
+                else '数据未就位')
+    labels = _MODULE_LABELS
+    modules = summary.get('modules') if isinstance(summary.get('modules'), dict) else {}
+    module_items = []
+    for name, item in modules.items():
+        if not isinstance(item, dict):
+            continue
+        state = str(item.get('status') or 'unknown').lower()
+        state_label = _MODULE_STATUS_LABELS.get(state, '未评估')
+        effective = item.get('effective_coverage_pct', item.get('coverage_pct'))
+        coverage_text = f'{float(effective):.2f}%' if isinstance(effective, (int, float)) else '—'
+        module_items.append(f'{_esc(labels.get(name, name))}：{_esc(state_label)} {coverage_text}')
+    reasons = [_esc(str(x)) for x in (summary.get('reasons') or [])[:3] if str(x).strip()]
+    reason_text = '；'.join(reasons) if reasons else '未发现额外质量告警'
+    return f'''
+    <div class="{cls}">
+      <div class="{title}">数据可信度</div>
+      <div class="{grid}">
+        <span>状态：{_esc(status_label)}</span>
+        <span>市场范围：{_esc(summary.get('market_scope') or '沪深北全A')}</span>
+        <span>市场覆盖：{_esc(str(covered) if covered is not None else '—')} / {_esc(str(total) if total is not None else '—')}（{_esc(coverage)}）</span>
+        <span>可发布范围：{_esc(summary.get('publication_mode') or '—')}</span>
+        <span>源失败模块：{_esc(str(summary.get('source_failure', 0)))}</span>
+        <span>陈旧模块：{_esc(str(summary.get('stale', 0)))}</span>
+        <span>缺失字段：{_esc(str(summary.get('missing', 0)))}</span>
+      </div>
+      <div class="{note}">{'；'.join(module_items) if module_items else '模块状态未提供'}<br/>原因：{reason_text}</div>
+    </div>'''
+
+
+def _lianban_review_html(ctx: dict, prefix: str = '') -> str:
+    review = ctx.get('lianban_review') if isinstance(ctx.get('lianban_review'), dict) else {}
+    cls = f'{prefix}quality-metrics'
+    card = f'{prefix}metric-card'
+    grid = f'{prefix}metric-grid'
+    title = f'{prefix}metric-title'
+    note = f'{prefix}metric-note'
+    if not review:
+        return f'<div class="{cls}"><div class="{card}"><b>连板复盘</b><span>数据未就位</span></div></div>'
+    counts = review.get('board_counts') if isinstance(review.get('board_counts'), dict) else {}
+    first = review.get('first_board_to_second') if isinstance(review.get('first_board_to_second'), dict) else {}
+    streak = review.get('streak_pool_promotion') if isinstance(review.get('streak_pool_promotion'), dict) else {}
+    negative = review.get('negative_feedback') if isinstance(review.get('negative_feedback'), dict) else {}
+    status = '样本充分' if str(review.get('status')) == 'ok' else '样本不足'
+    return f'''
+    <div class="{cls}">
+      <div class="{title}">连板复盘</div>
+      <div class="{grid}">
+        <span>首板：{_esc(str(review.get('first_board_count', counts.get(1, 0))))}</span>
+        <span>二板：{_esc(str(review.get('second_board_count', counts.get(2, 0))))}</span>
+        <span>三板：{_esc(str(counts.get(3, 0)))}</span>
+        <span>四板：{_esc(str(counts.get(4, 0)))}</span>
+        <span>首板→二板：{_esc(first.get('text') or '样本不足')}</span>
+        <span>昨日连板池样本/分母：{_esc(str(review.get('streak_pool_trials', review.get('streak_pool_sample_size', 0))))}</span>
+        <span>今日仍连板：{_esc(str(review.get('streak_pool_current_count', 0)))}</span>
+        <span>昨日连板池晋级率：{_esc(streak.get('text') or '样本不足')}</span>
+        <span>负反馈：{_esc(negative.get('text') or '样本不足')}</span>
+        <span>状态：{_esc(status)}</span>
+      </div>
+      <div class="{note}">{_esc(review.get('conclusion') or '连板复盘结论未就位')}；所有晋级率均展示真实前后交易日匹配分母。</div>
+    </div>'''
+
+
+def _mainline_review_from_ctx(ctx: dict) -> dict:
+    """Return the unified mainline review, with a legacy concentration fallback."""
+    review = ctx.get('mainline_review') if isinstance(ctx.get('mainline_review'), dict) else None
+    if review:
+        return review
+    metrics = ctx.get('mainline_concentration') if isinstance(ctx.get('mainline_concentration'), dict) else None
+    if metrics:
+        return build_mainline_review(
+            metrics,
+            limit_up_count=ctx.get('zt'),
+            attribution_source=ctx.get('sector_source') or '未声明',
+        )
+    return {}
+
+
+def _mainline_review_html(ctx: dict, prefix: str = '') -> str:
+    review = _mainline_review_from_ctx(ctx)
+    cls = f'{prefix}quality-metrics'
+    card = f'{prefix}metric-card'
+    grid = f'{prefix}metric-grid'
+    title = f'{prefix}metric-title'
+    note = f'{prefix}metric-note'
+    if not review:
+        return f'<div class="{cls}"><div class="{card}"><b>主线复盘</b><span>数据未就位</span></div></div>'
+    top3 = []
+    for row in review.get('top3') or []:
+        if isinstance(row, dict) and row.get('name'):
+            share = _metric_rate_text(row.get('share'), default='—')
+            top3.append(f'{_esc(row.get("name"))} {share}')
+    hhi = review.get('hhi')
+    hhi_text = f'{float(hhi):.3f}' if isinstance(hhi, (int, float)) else '—'
+    coverage = review.get('attribution_coverage_pct')
+    coverage_text = f'{float(coverage):.2f}%' if isinstance(coverage, (int, float)) else '—'
+    level = {'strong': '强结论', 'conditional': '条件性结论', 'insufficient': '覆盖不足'}.get(
+        str(review.get('conclusion_level') or 'insufficient'), '覆盖不足')
+    return f'''
+    <div class="{cls}">
+      <div class="{title}">主线复盘 · 主线集中度</div>
+      <div class="{grid}">
+        <span>领先方向：{_esc(review.get('top1') or '数据未就位')}</span>
+        <span>Top 3：{'、'.join(top3) if top3 else '数据未就位'}</span>
+        <span>HHI：{_esc(hhi_text)}</span>
+        <span>权威涨停事实池：{_esc(str(review.get('authoritative_count') if review.get('authoritative_count') is not None else review.get('limit_up_count') if review.get('limit_up_count') is not None else '—'))}</span>
+        <span>已归因样本：{_esc(str(review.get('attributed_count') if review.get('attributed_count') is not None else review.get('lianban_count') if review.get('lianban_count') is not None else '—'))}</span>
+        <span>未归因样本：{_esc(str(review.get('unattributed_count') if review.get('unattributed_count') is not None else '—'))}</span>
+        <span>归因覆盖率：{_esc(coverage_text)}</span>
+        <span>结论等级：{_esc(level)}</span>
+        <span>归因来源：{_esc(review.get('attribution_source') or '未声明')}</span>
+      </div>
+      <div class="{note}">{_esc(review.get('conclusion') or '主线复盘结论未就位')}；覆盖不足时不可外推全市场。</div>
+    </div>'''
+
+
+def _review_closure_html(ctx: dict, prefix: str = '') -> str:
+    """Render the daily review loop from the shared ReportContext."""
+    daily_delta = ctx.get('daily_delta') if isinstance(ctx.get('daily_delta'), dict) else {}
+    progression = ctx.get('progression_chain') if isinstance(ctx.get('progression_chain'), dict) else {}
+    prediction = ctx.get('prediction_review') if isinstance(ctx.get('prediction_review'), dict) else {}
+    lineage = ctx.get('lineage') if isinstance(ctx.get('lineage'), dict) else {}
+    quality = ctx.get('data_quality') if isinstance(ctx.get('data_quality'), dict) else {}
+    modules = quality.get('modules') if isinstance(quality.get('modules'), dict) else {}
+
+    panel_style = ('background:rgba(22,27,34,.72);border:1px solid rgba(48,54,61,.85);'
+                   'border-radius:12px;padding:14px 16px;min-width:0')
+    title_style = 'font-size:14px;font-weight:800;color:#f0f6fc;margin-bottom:10px'
+    muted_style = 'color:#8b949e;font-size:12px;line-height:1.6'
+    item_style = 'color:#c9d1d9;font-size:12.5px;line-height:1.65'
+    warning_style = 'color:#d29922;font-size:12px;line-height:1.65;margin-top:7px'
+
+    delta_items = []
+    for row in list(daily_delta.get('highlights') or [])[:5]:
+        if not isinstance(row, dict):
+            continue
+        label = _esc(row.get('label') or '指标')
+        current = _esc(_fmt(row.get('current')))
+        previous = _esc(_fmt(row.get('previous')))
+        delta = row.get('delta')
+        delta_text = f'（{delta:+g}）' if isinstance(delta, (int, float)) else ''
+        delta_items.append(
+            f'<div style="{item_style}"><b>{label}</b>：{previous} → {current}{_esc(delta_text)}</div>'
+        )
+    if not delta_items:
+        delta_items.append(
+            f'<div style="{muted_style}">缺少上一交易日结构化快照；历史 HTML 不作为计算源。</div>'
+        )
+
+    status_labels = {
+        'promoted': '晋级',
+        'broken_positive': '断板收红',
+        'broken_negative': '断板收跌',
+        'limit_down': '跌停反馈',
+        'suspended': '停牌',
+        'missing': '当日状态缺失',
+    }
+    progression_items = []
+    for row in list(progression.get('rows') or [])[:12]:
+        if not isinstance(row, dict):
+            continue
+        name = _esc(row.get('name') or row.get('code') or '未知标的')
+        previous_height = row.get('previous_height')
+        current_height = row.get('current_height')
+        status = status_labels.get(str(row.get('status') or ''), str(row.get('status') or '待核验'))
+        height_text = f'{_fmt(previous_height)}板 → {_fmt(current_height)}板' if current_height else f'{_fmt(previous_height)}板'
+        progression_items.append(
+            f'<div style="{item_style}"><b>{name}</b> · {_esc(status)} · {_esc(height_text)}</div>'
+        )
+    if not progression_items:
+        progression_items.append(f'<div style="{muted_style}">昨日梯队暂无跟踪样本。</div>')
+
+    lineage_items = []
+    lineage_keys = sorted(set(lineage) | set(modules), key=lambda key: _module_sort_key(key, modules))
+    for key in lineage_keys[:12]:
+        meta = lineage.get(key) if isinstance(lineage.get(key), dict) else {}
+        module = modules.get(key) if isinstance(modules.get(key), dict) else {}
+        display = dict(meta)
+        display.update(module)
+        source = meta.get('source') or module.get('source') or '未声明'
+        status = str(module.get('status') or meta.get('status') or 'unknown').lower()
+        status_text = _MODULE_STATUS_LABELS.get(status, '未评估')
+        coverage_text = _module_coverage_text(display)
+        coverage_suffix = f' · {coverage_text}' if coverage_text else ''
+        label = _MODULE_LABELS.get(key, key)
+        lineage_items.append(
+            f'<div style="{item_style}"><b>{_esc(label)}</b>：{_esc(source)} · {_esc(status_text)}{_esc(coverage_suffix)}</div>'
+        )
+    if not lineage_items:
+        lineage_items.append(f'<div style="{muted_style}">本次产物未附带模块血缘。</div>')
+
+    prediction_count = prediction.get('prediction_count', prediction.get('total', 0))
+    matured_count = prediction.get('matured_count', prediction.get('matured', 0))
+    pending_count = prediction.get('pending_count', prediction.get('pending', 0))
+    brier = prediction.get('brier_score')
+    brier_text = f' · Brier {_fmt(brier)}' if brier is not None else ''
+    prediction_html = (
+        f'<div style="{item_style}">历史记录 {_esc(_fmt(prediction_count, "0"))} 条 · '
+        f'已到期 {_esc(_fmt(matured_count, "0"))} 条 · 待验证 {_esc(_fmt(pending_count, "0"))} 条'
+        f'{_esc(brier_text)}</div>'
+    )
+
+    extra_panels = []
+    reconciliation = _find_limit_pool_reconciliation(modules, lineage)
+    authoritative = reconciliation.get('authoritative_count')
+    matched = reconciliation.get('matched_count')
+    if authoritative is not None and matched is not None:
+        coverage = reconciliation.get('classification_coverage_pct')
+        if coverage is None and authoritative:
+            coverage = round(float(matched) * 100 / float(authoritative), 2)
+        reconciliation_html = (
+            f'<div style="{item_style}">涨停事实池：{_esc(_fmt(authoritative, "0"))} 只</div>'
+            f'<div style="{item_style}">题材归因命中：{_esc(_fmt(matched, "0"))} / {_esc(_fmt(authoritative, "0"))}'
+            f'（{_esc(_fmt(coverage, "0"))}%）</div>'
+            f'<div style="{item_style}">尚未归因：{_esc(_fmt(reconciliation.get("fupan_only_count"), "0"))} 只</div>'
+            f'<div style="{item_style}">分类池独有：{_esc(_fmt(reconciliation.get("cls_only_count"), "0"))} 只</div>'
+            f'<div style="{warning_style}">事实池完整不等于题材归因完整；题材结论按已命中样本降级解释。</div>'
+        )
+        extra_panels.append(
+            f'<div style="{panel_style}"><div style="{title_style}">涨停事实与题材归因</div>{reconciliation_html}</div>'
+        )
+
+    ai_module = modules.get('ai') if isinstance(modules.get('ai'), dict) else {}
+    ai_meta = lineage.get('ai') if isinstance(lineage.get('ai'), dict) else {}
+    ai_status = str(ai_module.get('status') or ai_meta.get('status') or '').lower()
+    if ai_status and ai_status != 'ok':
+        ai_errors = ai_module.get('errors') or ai_meta.get('errors') or []
+        ai_reason = ai_errors[0] if ai_errors else (ai_module.get('reason') or ai_meta.get('reason') or '未返回可核验的结构化结果')
+        ai_html = (
+            f'<div style="{item_style}"><b>AI 研判未生成</b>：{_esc(ai_reason)}。</div>'
+            f'<div style="{warning_style}">本页保留规则计算与事实复盘，不以规则文本冒充 AI 输出。</div>'
+        )
+        extra_panels.append(
+            f'<div style="{panel_style}"><div style="{title_style}">AI 研判状态</div>{ai_html}</div>'
+        )
+
+    block = f'{prefix}review-closure'
+    return f'''
+    <div class="{block}" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;margin:16px 0 20px">
+      <div style="{panel_style}"><div style="{title_style}">今日相对昨日</div>{''.join(delta_items)}</div>
+      <div style="{panel_style}"><div style="{title_style}">昨日连板反馈</div>{''.join(progression_items)}</div>
+      <div style="{panel_style}"><div style="{title_style}">数据来源与质量</div>{''.join(lineage_items)}</div>
+      <div style="{panel_style}"><div style="{title_style}">历史预测复盘</div>{prediction_html}</div>
+      {''.join(extra_panels)}
+    </div>'''
 def generate_dashboard_html(ctx: dict) -> str:
     """把 ctx 渲染成一份完整的看板 HTML (single-file, 无外部依赖)."""
     # 数据取值 + 兜底
     date_str = ctx.get('date_str') or datetime.now().strftime('%Y-%m-%d')
+    state = ctx.get('market_state') if isinstance(ctx.get('market_state'), dict) else build_market_state(ctx.get('data_quality'))
+    policy = _publication_policy(ctx)
+    mode = str(policy['mode'])
+    blocked = bool(policy['facts_only'])
+    observation_only = bool(policy['observation_only'])
     scene = ctx.get('scene', '中性震荡')
     action = ctx.get('action', '结构博弈 / 主线为纲')
     level = ctx.get('level', '中性')
@@ -615,74 +1429,129 @@ def generate_dashboard_html(ctx: dict) -> str:
     position = ctx.get('position', '5成仓位')
     win_rate = ctx.get('win_rate')
     desc = ctx.get('desc', '')
+    if blocked:
+        scene = state.get('label', '数据阻断')
+        action = '数据待核验，仅展示事实'
+        level = f"低置信度 · {state.get('label', '数据待核验')}"
+        color = '#8b949e'
+        position = '仅事实层'
+        win_rate = None
+        desc = f"{state.get('reason', '核心数据未通过质量校验')}。当前仅展示已校验事实。"
+    elif observation_only:
+        scene = state.get('label', '数据降级')
+        action = '仅观察与条件触发'
+        level = f"条件模式 · {state.get('label', '数据降级')}"
+        color = '#d29922'
+        position = '条件性观察'
+        win_rate = None
+        desc = f"{state.get('reason', '数据处于降级状态')}。当前展示条件性观察。"
 
     curr_h = int(ctx.get('curr_h', 0) or 0)
     prev_h = int(ctx.get('prev_h', 0) or 0)
     pressure_5d = int(ctx.get('pressure_5d', 0) or 0)
     zt = int(ctx.get('zt', 0) or 0)
     dt = int(ctx.get('dt', 0) or 0)
-    ad = ctx.get('ad_ratio')
-    ad_str = f'{ad:.3f}' if isinstance(ad, (int, float)) else '未取到'
+    breadth = ctx.get('breadth_ratio', ctx.get('ad_ratio'))
+    ad_ratio = ctx.get('advance_decline_ratio')
+    breadth_str = _ratio_text(breadth)
+    ad_str = _ratio_text(ad_ratio)
     ladder = ctx.get('ladder')
     h3 = ctx.get('h3', 0)
     h4 = ctx.get('h4', 0)
     h5 = ctx.get('h5', 0)
     h6p = ctx.get('h6p', 0)
+    ladder_metrics = _ladder_view(ctx, curr_h, h3, h4, h5, h6p)
+    h3 = ladder_metrics.get('h3', h3)
+    h4 = ladder_metrics.get('h4', h4)
+    h5 = ladder_metrics.get('h5', h5)
+    h6p = ladder_metrics.get('h6p', h6p)
+    ladder = ladder_metrics.get('ladder', ladder)
 
     zt_prev = int(ctx.get('zt_prev', 0) or 0)
     zt_boom = (zt / zt_prev) if zt_prev > 0 else None
-    focus_df = ctx.get('focus_df')
-    quality_html = _render_quality_summary(ctx.get('data_quality'))
-    ladder_review_html = _render_ladder_review(ctx.get('ladder_review'))
+    focus_df = ctx.get('focus_df') if policy['allow_focus_pool'] else None
 
-    scenarios = ctx.get('scenarios') or _default_scenarios(
-        curr_h, prev_h, focus_df=focus_df,
-        scenario_stats=ctx.get('scenario_stats'),
+    scenarios = _prepare_scenarios(
+        ctx, curr_h, prev_h, focus_df,
+        breadth_ratio=breadth, zt=zt, dt=dt, pressure_5d=pressure_5d,
+        ladder=ladder, h5=h5,
     )
+    scenarios = _sanitize_scenarios_for_publication(scenarios, mode)
     history_cases = ctx.get('history_cases') or []
 
     # 三因子交叉表
-    ap_ad_ok = '✅ 达标' if isinstance(ad, (int, float)) and ad > 0.65 else (
-        '⚠️ 中档' if isinstance(ad, (int, float)) and ad >= 0.5 else '❌ 未达')
+    ap_ad_ok = '✅ 达标' if isinstance(breadth, (int, float)) and breadth > 0.65 else (
+        '⚠️ 中档' if isinstance(breadth, (int, float)) and breadth >= 0.5 else '❌ 未达')
     ap_ladder_ok = '✅ 达标' if isinstance(ladder, (int, float)) and ladder >= 12 else '❌ 未达'
     breakout_ok = '✅ 达标' if curr_h > pressure_5d else '❌ 未达'
     factor_rows = ''.join([
         _factor_row('① 空间板突破 5 日压力',
                     f'{curr_h}板 vs 前压力 {pressure_5d}板', breakout_ok,
                     f'昨断 {curr_h - prev_h:+d} 板'),
-        _factor_row('② 情绪 A/D > 0.65 (A+ 门槛)',
-                    ad_str, ap_ad_ok,
-                    f'涨停 {zt}, 跌停 {dt}'),
+        _factor_row('② 上涨占比 > 0.65 (A+ 门槛)',
+                    breadth_str, ap_ad_ok,
+                    f'涨停 {zt}, 跌停 {dt} · 涨跌比 {ad_str}'),
         _factor_row('③ 梯队分 ≥ 12 (A+ 门槛)',
                     f'{ladder}分' if ladder is not None else '—', ap_ladder_ok,
                     f'3板 {h3} / 4板 {h4} / 5板 {h5} / 6+板 {h6p}'),
     ])
 
+    base_scen = _mark_base_scenario(scenarios)
     scen_cards = ''.join(_scen_card(s) for s in scenarios)
     hist_rows = ''.join(_history_row(c) for c in history_cases) or (
         '<tr><td colspan="8" style="color:#6e7681;padding:20px;">暂无历史同型样本 (需累计更多回测)</td></tr>')
 
     # 明日核心股票池表 (从 focus_df 拆桶后逐只列出, 附真实催化)
-    focus_buckets = _split_focus_pool(focus_df)
+    focus_buckets = _split_focus_pool(focus_df) if policy['allow_focus_pool'] else {'space': [], 'midcore': []}
+    # observation/facts_only 不接收主流程新拉取的催化；
+    # 若调用方传入已有催化，仍显示其可追溯状态。
     focus_catalysts = ctx.get('focus_catalysts') or {}
-    focus_rows_html = _render_focus_table(focus_buckets, catalysts=focus_catalysts)
+    focus_rows_html = _render_focus_table(focus_buckets, catalysts=focus_catalysts, mode=mode)
+    quality_html = _quality_html(ctx)
+    ladder_quality_html = _ladder_quality_html(ctx)
+    data_credibility_html = _data_credibility_html(ctx)
+    lianban_review_html = _lianban_review_html(ctx)
+    mainline_review_html = _mainline_review_html(ctx)
+    review_closure_html = _review_closure_html(ctx)
+    scenario_heading = '观察与条件触发' if policy['observation_only'] else '明日 T+1 · 4 情形决策树'
+    scenario_sub = '满足条件后再评估，不构成无条件动作' if policy['observation_only'] else '概率最高者为基准情形'
+    scenario_block = '' if policy['facts_only'] else (
+        f'<div class="section-title">{scenario_heading}<span class="st-sub">{scenario_sub}</span></div>'
+        f'<div class="scenario-tree">{scen_cards}</div>'
+    )
+    footer_note = (
+        '数据质量未通过校验，仅展示事实与来源状态。'
+        if policy['facts_only']
+        else '数据基于 173 天历史回测, 胜率为经验统计, 仅供研究参考, 不构成投资建议'
+    )
 
     # 情绪温度计 (0-100) — 顶部一眼读盘面冷热
     senti_score, senti_label, senti_color = _sentiment_score(
-        ad, curr_h, pressure_5d, zt, dt, zt_prev)
+        breadth, curr_h, pressure_5d, zt, dt, zt_prev)
 
-    # 重点提炼带 — 当前策略与首选标的，不把历史结果率冒充明日发生概率。
+    # 重点提炼带 — 把"明天最可能发生 + 该干什么 + 首选标的"压成一句,
+    # 左箱=基准决策, 右箱=情绪温度计, 一眼看结论。
     top_pick = ''
     _sp = focus_buckets.get('space', [])
     if _sp:
         top_pick = _fmt_stock(_sp[0])
-    pick_html = f' — <span class="pk">首选 {_esc(top_pick)}</span>' if top_pick else ''
+    base_name = _esc(base_scen.get('name', '')) if base_scen else '—'
+    base_prob = _esc(base_scen.get('prob', '')) if base_scen else ''
+    base_pos = _esc(base_scen.get('pos', '')) if base_scen else _esc(position)
+    base_first = _esc(base_scen['items'][0]) if (base_scen and base_scen.get('items')) else _esc(action)
+    pick_html = f' — <span class="pk">首选 {_esc(top_pick)}</span>' if top_pick and policy['decision_ready'] else ''
+    if policy['facts_only']:
+        headline_label, headline_value, headline_sub = '可用范围', '仅事实层', '当前仅展示已校验事实'
+    elif policy['observation_only']:
+        headline_label, headline_value, headline_sub = '可用范围', '观察与条件触发', '当前展示条件性观察'
+    else:
+        headline_label, headline_value, headline_sub = f'重点 · 明日基准情形 {base_prob}', base_name, f'{base_first} · 建议仓位 {base_pos}'
     headline_html = f'''
     <div class="headline">
       <div class="box primary">
-        <div class="lbl">重点 · 当前策略</div>
-        <div class="big">{_esc(scene)}{pick_html}</div>
-        <div class="sub2">{_esc(action)} · 建议仓位 {_esc(position)}</div>
+        <div class="lbl">{headline_label}</div>
+        <div class="big">{headline_value}{pick_html}</div>
+        <div class="sub2">{headline_sub}</div>
       </div>
       <div class="box gauge-wrap">
         <div class="lbl">盘面情绪温度</div>
@@ -694,10 +1563,16 @@ def generate_dashboard_html(ctx: dict) -> str:
     </div>'''
 
     # 今日操作口令 — 从三条实证规律里挑当日命中的动作项
-    playbook_html = _render_playbook(_build_playbook(curr_h, zt, ad, h5, date_str))
+    if policy['facts_only']:
+        playbook_html = '<div class="quality-blocked-note">数据待核验：当前仅展示已校验事实。</div>'
+    elif policy['observation_only']:
+        playbook_html = '<div class="quality-blocked-note">数据降级：当前展示条件性观察。</div>'
+    else:
+        playbook_html = _render_playbook(_build_playbook(curr_h, zt, breadth, h5, date_str))
 
     wr_color = _win_rate_color(win_rate)
-    wr_str = f'{win_rate * 100:.0f}%' if isinstance(win_rate, (int, float)) else '样本不足'
+    wr_str = f'{win_rate * 100:.0f}%' if isinstance(win_rate, (int, float)) else '—'
+    wr_evidence = _win_rate_stat_text(ctx, win_rate)
 
     # KPI 板块
     boom_str = f'×{zt_boom:.2f}' if zt_boom else '—'
@@ -719,9 +1594,14 @@ def generate_dashboard_html(ctx: dict) -> str:
         <div class="hint">亏钱效应阈值: > 15 转防守</div>
       </div>
       <div class="card">
-        <h3>情绪 A/D</h3>
+        <h3>上涨占比</h3>
+        <div class="kpi yellow">{breadth_str}</div>
+        <div class="hint">上涨 {ctx.get('up', '—')} / 下跌 {ctx.get('down', '—')} · A+ 门槛 &gt; 0.65</div>
+      </div>
+      <div class="card">
+        <h3>涨跌比</h3>
         <div class="kpi yellow">{ad_str}</div>
-        <div class="hint">A+ 门槛 &gt; 0.65 · E 主升 &gt; 0.65</div>
+        <div class="hint">上涨家数 ÷ 下跌家数</div>
       </div>
       <div class="card">
         <h3>梯队分</h3>
@@ -729,9 +1609,19 @@ def generate_dashboard_html(ctx: dict) -> str:
         <div class="hint">h3×1 + h4×2 + h5×3 + h6+×4</div>
       </div>
       <div class="card">
-        <h3>动态样本 (T+3 新高)</h3>
-        <div class="kpi" style="color:{wr_color};">{wr_str}</div>
-        <div class="hint">{_esc(level)}</div>
+        <h3>{_esc(ladder_metrics.get('progression_label', '突破昨日最高高度占比'))}</h3>
+        <div class="kpi blue">{_esc(ladder_metrics.get('progression_text', '样本不足'))}</div>
+        <div class="hint">分子：突破昨日最高板的个股数 · 分母：今日有效梯队个股数</div>
+      </div>
+      <div class="card">
+        <h3>高度断层</h3>
+        <div class="kpi" style="color:{'#ff4444' if ladder_metrics.get('gap_risk') else '#3fb950'};">{_esc(ladder_metrics.get('gap_text', '无明显断层'))}</div>
+        <div class="hint">风险等级：{_esc(ladder_metrics.get('gap_risk_label', '低'))} · 最高 {ladder_metrics.get('height', curr_h)}板</div>
+      </div>
+      <div class="card">
+        <h3>同型历史命中率 (T+3)</h3>
+        <div class="kpi" style="color:{wr_color};">{wr_str if wr_str != '—' else '样本不足'}</div>
+        <div class="hint">{_esc(wr_evidence)} · {_esc(level)}</div>
       </div>
     </div>'''
 
@@ -742,8 +1632,7 @@ def generate_dashboard_html(ctx: dict) -> str:
       font-family: 'Microsoft YaHei', 'PingFang SC', -apple-system, sans-serif;
       padding: 24px; line-height: 1.6; min-height: 100vh;
     }
-    .wrap { max-width: 1200px; width: 100%; min-width: 0; margin: 0 auto; }
-    .quality { overflow-wrap: anywhere; }
+    .wrap { max-width: 1200px; margin: 0 auto; }
     .back {
       display: inline-block; padding: 6px 14px; margin-bottom: 12px;
       background: #161b22; color: #58a6ff; text-decoration: none;
@@ -797,6 +1686,13 @@ def generate_dashboard_html(ctx: dict) -> str:
     .kpi.yellow { color: #ffcc00; }
     .kpi.blue { color: #58a6ff; }
     .hint { color: #8b949e; font-size: 12px; margin-top: 4px; }
+    .quality-card { margin: 10px 0 24px; padding: 12px 16px; border: 1px solid rgba(48,54,61,0.8);
+      border-radius: 10px; background: rgba(22,27,34,0.65); }
+    .quality-title { color: #c9d1d9; font-size: 13px; margin-bottom: 8px; }
+    .quality-title b { color: #3fb950; }
+    .quality-items { display: flex; flex-wrap: wrap; gap: 8px 18px; color: #8b949e; font-size: 12px; }
+    .quality-layers { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 7px; color: #c9d1d9; font-size: 12px; }
+    .quality-issues { margin-top: 7px; color: #d29922; font-size: 12px; line-height: 1.5; }
 
     /* 重点提炼带: 一眼看结论 */
     .headline {
@@ -860,6 +1756,10 @@ def generate_dashboard_html(ctx: dict) -> str:
     details.evidence > summary:hover { color: #c9d1d9; }
     details.evidence .evidence-body { padding: 0 18px 16px; }
     /* 基准场景高亮 */
+    .scen-card.scen-base { box-shadow: 0 0 0 1px currentColor, 0 0 24px color-mix(in srgb, var(--sc) 28%, transparent); }
+    .scen-base-badge { display: inline-block; font-size: 10px; font-weight: 700;
+      background: var(--sc); color: #0d1117; padding: 1px 7px; border-radius: 4px;
+      margin-left: 8px; vertical-align: middle; }
     table.factor, table.history {
       width: 100%; background: rgba(22, 27, 34, 0.7);
       border-radius: 12px; border-collapse: separate;
@@ -899,6 +1799,7 @@ def generate_dashboard_html(ctx: dict) -> str:
     }
     .scen-card .name { font-size: 15px; font-weight: 700; }
     .scen-card .prob { font-size: 12px; color: #8b949e; }
+    .scen-card .scen-stat { margin: -4px 0 7px; color: #8b949e; font-size: 11px; line-height: 1.45; }
     .scen-card ul { margin-left: 18px; font-size: 13px; color: #e6edf3; line-height: 1.7; }
     .scen-card .pos {
       margin-top: 10px; padding: 6px 10px; border-radius: 6px;
@@ -917,7 +1818,7 @@ def generate_dashboard_html(ctx: dict) -> str:
     .critical .name, .critical .pos { color: #ff8800; }
     .critical .pos { background: rgba(255, 136, 0, 0.15); }
 
-    /* 明日核心股票池 (fp-*) */
+    /* focus pool styles (fp-*) */
     .fp-block { margin-bottom: 20px; }
     .fp-block-title {
       font-size: 15px; font-weight: 700; color: #e6edf3;
@@ -963,22 +1864,10 @@ def generate_dashboard_html(ctx: dict) -> str:
       .hero { flex-direction: column; align-items: stretch; }
       .hero .right { text-align: left; }
       .fp-plate, .fp-stop { width: auto; }
-      table.factor, table.history { display: block; max-width: 100%; overflow-x: auto; }
-      table.fp-table, table.fp-table tbody, table.fp-table tr { display: block; width: 100%; }
-      table.fp-table thead { display: none; }
-      table.fp-table tr { margin-bottom: 10px; border: 1px solid #30363d; border-radius: 6px; overflow: hidden; }
-      table.fp-table td { display: grid; grid-template-columns: 76px minmax(0, 1fr); width: auto;
-        gap: 8px; text-align: left; overflow-wrap: anywhere; }
-      table.fp-table td::before { color: #8b949e; font-size: 11px; font-weight: 600; }
-      table.fp-table td:nth-child(1)::before { content: '标的'; }
-      table.fp-table td:nth-child(2)::before { content: '板块'; }
-      table.fp-table td:nth-child(3)::before { content: '催化'; }
-      table.fp-table td:nth-child(4)::before { content: '入场'; }
-      table.fp-table td:nth-child(5)::before { content: '防守'; }
     }
     '''
 
-    return f'''<!DOCTYPE html>
+    html = f'''<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -996,26 +1885,28 @@ def generate_dashboard_html(ctx: dict) -> str:
       <div class="date">报告日期 {_esc(date_str)}</div>
     </div>
     <div class="right">
-      <div class="pos-label">建议仓位</div>
-      <div class="pos-value">{_esc(position)}</div>
-      <div class="win">动态样本 T+3 新高 {wr_str}</div>
+      <div class="pos-label">{"建议仓位" if policy['decision_ready'] else "报告可用范围"}</div>
+      <div class="pos-value">{_esc(position if policy['decision_ready'] else ("仅事实层" if policy['facts_only'] else "观察与条件触发"))}</div>
+      <div class="win">{("历史 T+3 破新高 " + wr_str) if policy['decision_ready'] else "历史验证暂不展示"}</div>
     </div>
     <div class="hero-desc">{_esc(desc)}</div>
   </div>
 
-  {quality_html}
-
-  {ladder_review_html}
-
   {headline_html}
+
+  {review_closure_html}
 
   {playbook_html}
 
-  <div class="section-title">明日 T+1 · 4 情形决策树<span class="st-sub">历史结果标签 · 不代表明日发生概率</span></div>
-  <div class="scenario-tree">{scen_cards}</div>
+  {scenario_block}
 
-  <div class="section-title">明日核心股票池<span class="st-sub">具体标的 · 入场条件 · 防守位</span></div>
+  <div class="section-title">{"股票池未发布" if policy['facts_only'] else "观察名单（非推荐）" if policy['observation_only'] else "明日核心股票池"}<span class="st-sub">{"数据阻断" if policy['facts_only'] else "仅供观察 · 条件触发" if policy['observation_only'] else "具体标的 · 入场条件 · 防守位"}</span></div>
   {focus_rows_html}
+  {quality_html}
+  {ladder_quality_html}
+  {data_credibility_html}
+  {lianban_review_html}
+  {mainline_review_html}
 
   <details class="evidence">
     <summary>数据佐证 · 盘面因子明细 与 历史同型样本</summary>
@@ -1039,11 +1930,12 @@ def generate_dashboard_html(ctx: dict) -> str:
 
   <footer>
     连板情绪分析 · 6 场景数据驱动模型 · 每日自动跑批生成
-    <br>历史样本按当前缓存动态计算，样本不足不展示概率，仅供研究参考，不构成投资建议
+    <br>{footer_note}
   </footer>
 </div>
 </body>
 </html>'''
+    return sanitize_html_for_policy(html, mode)
 
 
 def save_dashboard(ctx: dict, output_path: str) -> str:
@@ -1063,6 +1955,11 @@ def generate_dashboard_section(ctx: dict) -> str:
     片段 (含 <style>...</style> + <section class="dbd-wrap">...</section>).
     """
     date_str = ctx.get('date_str') or datetime.now().strftime('%Y-%m-%d')
+    state = ctx.get('market_state') if isinstance(ctx.get('market_state'), dict) else build_market_state(ctx.get('data_quality'))
+    policy = _publication_policy(ctx)
+    mode = str(policy['mode'])
+    blocked = bool(policy['facts_only'])
+    observation_only = bool(policy['observation_only'])
     scene = ctx.get('scene', '中性震荡')
     action = ctx.get('action', '结构博弈 / 主线为纲')
     level = ctx.get('level', '中性')
@@ -1070,14 +1967,32 @@ def generate_dashboard_section(ctx: dict) -> str:
     position = ctx.get('position', '5成仓位')
     win_rate = ctx.get('win_rate')
     desc = ctx.get('desc', '')
+    if blocked:
+        scene = state.get('label', '数据阻断')
+        action = '数据待核验，仅展示事实'
+        level = f"低置信度 · {state.get('label', '数据待核验')}"
+        color = '#8b949e'
+        position = '仅事实层'
+        win_rate = None
+        desc = f"{state.get('reason', '核心数据未通过质量校验')}。当前仅展示已校验事实。"
+    elif observation_only:
+        scene = state.get('label', '数据降级')
+        action = '仅观察与条件触发'
+        level = f"条件模式 · {state.get('label', '数据降级')}"
+        color = '#d29922'
+        position = '条件性观察'
+        win_rate = None
+        desc = f"{state.get('reason', '数据处于降级状态')}。当前展示条件性观察。"
 
     curr_h = int(ctx.get('curr_h', 0) or 0)
     prev_h = int(ctx.get('prev_h', 0) or 0)
     pressure_5d = int(ctx.get('pressure_5d', 0) or 0)
     zt = int(ctx.get('zt', 0) or 0)
     dt = int(ctx.get('dt', 0) or 0)
-    ad = ctx.get('ad_ratio')
-    ad_str = f'{ad:.3f}' if isinstance(ad, (int, float)) else '未取到'
+    breadth = ctx.get('breadth_ratio', ctx.get('ad_ratio'))
+    ad_ratio = ctx.get('advance_decline_ratio')
+    breadth_str = _ratio_text(breadth)
+    ad_str = _ratio_text(ad_ratio)
     ladder = ctx.get('ladder')
     h3 = ctx.get('h3', 0)
     h4 = ctx.get('h4', 0)
@@ -1085,19 +2000,27 @@ def generate_dashboard_section(ctx: dict) -> str:
     h6p = ctx.get('h6p', 0)
     zt_prev = int(ctx.get('zt_prev', 0) or 0)
     zt_boom = (zt / zt_prev) if zt_prev > 0 else None
-    focus_df = ctx.get('focus_df')
+    focus_df = ctx.get('focus_df') if policy['allow_focus_pool'] else None
+    # observation/facts_only 不接收主流程新拉取的催化；
+    # 若调用方传入已有催化，仍显示其可追溯状态。
     focus_catalysts = ctx.get('focus_catalysts') or {}
-    quality_html = _render_quality_summary(ctx.get('data_quality'), prefix='dbd-')
-    ladder_review_html = _render_ladder_review(ctx.get('ladder_review'), prefix='dbd-')
 
-    scenarios = ctx.get('scenarios') or _default_scenarios(
-        curr_h, prev_h, focus_df=focus_df,
-        scenario_stats=ctx.get('scenario_stats'),
+    ladder_metrics = _ladder_view(ctx, curr_h, h3, h4, h5, h6p)
+    h3 = ladder_metrics.get('h3', h3)
+    h4 = ladder_metrics.get('h4', h4)
+    h5 = ladder_metrics.get('h5', h5)
+    h6p = ladder_metrics.get('h6p', h6p)
+    ladder = ladder_metrics.get('ladder', ladder)
+    scenarios = _prepare_scenarios(
+        ctx, curr_h, prev_h, focus_df,
+        breadth_ratio=breadth, zt=zt, dt=dt, pressure_5d=pressure_5d,
+        ladder=ladder, h5=h5,
     )
+    scenarios = _sanitize_scenarios_for_publication(scenarios, mode)
 
     # 因子交叉表
-    ap_ad_ok = '✅ 达标' if isinstance(ad, (int, float)) and ad > 0.65 else (
-        '⚠️ 中档' if isinstance(ad, (int, float)) and ad >= 0.5 else '❌ 未达')
+    ap_ad_ok = '✅ 达标' if isinstance(breadth, (int, float)) and breadth > 0.65 else (
+        '⚠️ 中档' if isinstance(breadth, (int, float)) and breadth >= 0.5 else '❌ 未达')
     ap_ladder_ok = '✅ 达标' if isinstance(ladder, (int, float)) and ladder >= 12 else '❌ 未达'
     breakout_ok = '✅ 达标' if curr_h > pressure_5d else '❌ 未达'
 
@@ -1113,20 +2036,26 @@ def generate_dashboard_section(ctx: dict) -> str:
         _fr('① 空间板突破 5 日压力',
             f'{curr_h}板 vs 前压力 {pressure_5d}板', breakout_ok,
             f'昨断 {curr_h - prev_h:+d} 板'),
-        _fr('② 情绪 A/D > 0.65 (A+ 门槛)',
-            ad_str, ap_ad_ok,
-            f'涨停 {zt}, 跌停 {dt}'),
+        _fr('② 上涨占比 > 0.65 (A+ 门槛)',
+            breadth_str, ap_ad_ok,
+            f'涨停 {zt}, 跌停 {dt} · 涨跌比 {ad_str}'),
         _fr('③ 梯队分 ≥ 12 (A+ 门槛)',
             f'{ladder}分' if ladder is not None else '—', ap_ladder_ok,
             f'3板 {h3} / 4板 {h4} / 5板 {h5} / 6+板 {h6p}'),
     ])
 
+    base_scen = _mark_base_scenario(scenarios)
+
     def _sc(s):
         items = ''.join(f'<li>{_esc(x)}</li>' for x in s.get('items', []))
         kind = s.get('kind', 'moderate')
-        return (f'<div class="dbd-scen dbd-{kind}">'
-                f'<div class="dbd-scen-head"><span class="dbd-scen-name">{_esc(s.get("name", ""))}</span>'
+        base_cls = ' dbd-scen-base' if s.get('is_base') else ''
+        base_badge = '<span class="dbd-scen-base-badge">基准</span>' if s.get('is_base') else ''
+        stat_text = _scenario_stat_text(s)
+        return (f'<div class="dbd-scen dbd-{kind}{base_cls}">'
+                f'<div class="dbd-scen-head"><span class="dbd-scen-name">{_esc(s.get("name", ""))}{base_badge}</span>'
                 f'<span class="dbd-scen-prob">{_esc(s.get("prob", ""))}</span></div>'
+                f'<div class="dbd-scen-stat">{_esc(stat_text)}</div>'
                 f'<ul>{items}</ul>'
                 f'<div class="dbd-scen-pos">{_esc(s.get("pos", ""))}</div>'
                 f'</div>')
@@ -1142,17 +2071,20 @@ def generate_dashboard_section(ctx: dict) -> str:
         cat = item.get('catalyst') if isinstance(item, dict) else None
         if not cat:
             return '<td class="dbd-fp-cat" style="color:#6e7681;">无近期催化</td>'
-        body = _esc(cat.get('text', ''))
-        url = cat.get('url', '')
+        cat = normalize_catalyst(cat)
+        body = _esc(cat['text']) or _esc(cat['tag'])
+        url = cat['url']
         if url:
             body = (f'<a href="{_esc(url)}" target="_blank" rel="noopener" '
                     f'style="color:inherit;text-decoration:underline dotted;">{body}</a>')
-        return (f'<td class="dbd-fp-cat"><span class="dbd-fp-cat-tag">{_esc(cat.get("tag", ""))}</span>'
+        return (f'<td class="dbd-fp-cat"><span class="dbd-fp-cat-tag">{_esc(cat["tag"])}</span>'
                 f'<div class="dbd-fp-cat-text">{body}</div></td>')
 
     focus_rows_inline = ''
+    if policy['facts_only']:
+        focus_rows_inline = '<div class="dbd-fp-empty" style="color:#d29922;padding:10px 2px;">股票池未发布（数据阻断）</div>'
     try:
-        if focus_df is not None and hasattr(focus_df, 'empty') and not focus_df.empty:
+        if policy['allow_focus_pool'] and focus_df is not None and hasattr(focus_df, 'empty') and not focus_df.empty:
             _rows = []
             for _, r in focus_df.iterrows():
                 _name = str(r.get("股票", ""))
@@ -1167,29 +2099,57 @@ def generate_dashboard_section(ctx: dict) -> str:
                     f'</tr>'
                 )
             focus_rows_inline = (
+                '<div class="dbd-fp-list-label">' + ('观察名单（非推荐） · 条件触发' if observation_only else '股票池') + '</div>'
                 '<table class="dbd-fp-table"><thead><tr>'
                 '<th>标的</th><th>板块</th><th>策略池</th><th>近期催化</th><th>入场条件</th><th>防守位</th>'
                 '</tr></thead><tbody>' + ''.join(_rows) + '</tbody></table>'
             )
     except Exception:
         pass
+    if not focus_rows_inline and focus_catalysts:
+        focus_rows_inline = '<div class="dbd-fp-empty" style="color:#6e7681;padding:10px 2px;">暂无核心股票池 · 无近期催化</div>'
 
+    quality_html = _quality_html(ctx, prefix='dbd-')
+    ladder_quality_html = _ladder_quality_html(ctx, prefix='dbd-')
+    data_credibility_html = _data_credibility_html(ctx, prefix='dbd-')
+    lianban_review_html = _lianban_review_html(ctx, prefix='dbd-')
+    mainline_review_html = _mainline_review_html(ctx, prefix='dbd-')
+    review_closure_html = _review_closure_html(ctx, prefix='dbd-')
+    scenario_heading = '观察与条件触发' if policy['observation_only'] else '明日 T+1 · 4 情形决策树'
+    scenario_sub = '满足条件后再评估，不构成无条件动作' if policy['observation_only'] else '基准情形已高亮'
+    scenario_block = '' if policy['facts_only'] else (
+        f'<div class="dbd-section-title">{scenario_heading} <span class="dbd-st-sub">{scenario_sub}</span></div>'
+        f'<div class="dbd-tree">{scen_cards}</div>'
+    )
     wr_color = _win_rate_color(win_rate)
-    wr_str = f'{win_rate * 100:.0f}%' if isinstance(win_rate, (int, float)) else '样本不足'
+    wr_str = f'{win_rate * 100:.0f}%' if isinstance(win_rate, (int, float)) else '—'
+    wr_evidence = _win_rate_stat_text(ctx, win_rate)
     boom_str = f'×{zt_boom:.2f}' if zt_boom else '—'
 
     # 重点提炼带 + 情绪温度计 (与独立看板同源, dbd- 前缀)
     senti_score, senti_label, senti_color = _sentiment_score(
-        ad, curr_h, pressure_5d, zt, dt, zt_prev)
+        breadth, curr_h, pressure_5d, zt, dt, zt_prev)
+    if blocked:
+        senti_score, senti_label, senti_color = 50, '数据未就位 · 不下结论', '#8b949e'
     _sp = _split_focus_pool(focus_df).get('space', [])
     top_pick = _fmt_stock(_sp[0]) if _sp else ''
-    pick_html = f' — <span class="dbd-pk">首选 {_esc(top_pick)}</span>' if top_pick else ''
+    base_name = _esc(base_scen.get('name', '')) if base_scen else '—'
+    base_prob = _esc(base_scen.get('prob', '')) if base_scen else ''
+    base_pos = _esc(base_scen.get('pos', '')) if base_scen else _esc(position)
+    base_first = _esc(base_scen['items'][0]) if (base_scen and base_scen.get('items')) else _esc(action)
+    pick_html = f' — <span class="dbd-pk">首选 {_esc(top_pick)}</span>' if top_pick and policy['decision_ready'] else ''
+    if policy['facts_only']:
+        headline_label, headline_value, headline_sub = '可用范围', '仅事实层', '当前仅展示已校验事实'
+    elif policy['observation_only']:
+        headline_label, headline_value, headline_sub = '可用范围', '观察与条件触发', '当前展示条件性观察'
+    else:
+        headline_label, headline_value, headline_sub = f'重点 · 明日基准情形 {base_prob}', base_name, f'{base_first} · 建议仓位 {base_pos}'
     headline_html = f'''
     <div class="dbd-headline">
       <div class="dbd-hbox dbd-hbox-primary">
-        <div class="dbd-hlbl">重点 · 当前策略</div>
-        <div class="dbd-hbig">{_esc(scene)}{pick_html}</div>
-        <div class="dbd-hsub">{_esc(action)} · 建议仓位 {_esc(position)}</div>
+        <div class="dbd-hlbl">{headline_label}</div>
+        <div class="dbd-hbig">{headline_value}{pick_html}</div>
+        <div class="dbd-hsub">{headline_sub}</div>
       </div>
       <div class="dbd-hbox dbd-gauge-wrap">
         <div class="dbd-hlbl">盘面情绪温度</div>
@@ -1201,8 +2161,12 @@ def generate_dashboard_section(ctx: dict) -> str:
     </div>'''
 
     # 今日操作口令 (命中实证规律; dbd- 前缀)
-    playbook_html = _render_playbook(
-        _build_playbook(curr_h, zt, ad, h5, date_str), p='dbd-')
+    if policy['facts_only']:
+        playbook_html = '<div class="dbd-quality-blocked-note">数据待核验：当前仅展示已校验事实。</div>'
+    elif policy['observation_only']:
+        playbook_html = '<div class="dbd-quality-blocked-note">数据降级：当前展示条件性观察。</div>'
+    else:
+        playbook_html = _render_playbook(_build_playbook(curr_h, zt, breadth, h5, date_str), p='dbd-')
 
     kpi_html = f'''
     <div class="dbd-grid">
@@ -1212,19 +2176,24 @@ def generate_dashboard_section(ctx: dict) -> str:
         <div class="dbd-hint">昨日 {zt_prev} · {boom_str}</div></div>
       <div class="dbd-card"><h4>跌停家数</h4><div class="dbd-kpi dbd-green">{dt}</div>
         <div class="dbd-hint">阈值 &gt; 15 转防守</div></div>
-      <div class="dbd-card"><h4>情绪 A/D</h4><div class="dbd-kpi dbd-yellow">{ad_str}</div>
-        <div class="dbd-hint">A+ / E 门槛 &gt; 0.65</div></div>
+      <div class="dbd-card"><h4>上涨占比</h4><div class="dbd-kpi dbd-yellow">{breadth_str}</div>
+        <div class="dbd-hint">上涨 {ctx.get('up', '—')} / 下跌 {ctx.get('down', '—')} · A+ 门槛 &gt; 0.65</div></div>
+      <div class="dbd-card"><h4>涨跌比</h4><div class="dbd-kpi dbd-yellow">{ad_str}</div>
+        <div class="dbd-hint">上涨家数 ÷ 下跌家数</div></div>
       <div class="dbd-card"><h4>梯队分</h4><div class="dbd-kpi dbd-blue">{_fmt(ladder)}</div>
         <div class="dbd-hint">h3×1 + h4×2 + h5×3 + h6+×4</div></div>
-      <div class="dbd-card"><h4>动态样本 (T+3 新高)</h4><div class="dbd-kpi" style="color:{wr_color};">{wr_str}</div>
-        <div class="dbd-hint">{_esc(level)}</div></div>
+      <div class="dbd-card"><h4>{_esc(ladder_metrics.get('progression_label', '突破昨日最高高度占比'))}</h4>
+        <div class="dbd-kpi dbd-blue">{_esc(ladder_metrics.get('progression_text', '样本不足'))}</div>
+        <div class="dbd-hint">分子：突破昨日最高板的个股数 · 分母：今日有效梯队个股数</div></div>
+      <div class="dbd-card"><h4>高度断层</h4><div class="dbd-kpi" style="color:{'#ff4444' if ladder_metrics.get('gap_risk') else '#3fb950'};">{_esc(ladder_metrics.get('gap_text', '无明显断层'))}</div>
+        <div class="dbd-hint">风险等级：{_esc(ladder_metrics.get('gap_risk_label', '低'))} · 最高 {ladder_metrics.get('height', curr_h)}板</div></div>
+      <div class="dbd-card"><h4>同型历史命中率 (T+3)</h4><div class="dbd-kpi" style="color:{wr_color};">{wr_str if wr_str != '—' else '样本不足'}</div>
+        <div class="dbd-hint">{_esc(wr_evidence)} · {_esc(level)}</div></div>
     </div>'''
 
     css = f'''
     <style>
-    .dbd-wrap {{ --dbd-sc: {color}; width: 100%; max-width: 100%; min-width: 0;
-      overflow: hidden; font-family: inherit; margin: 24px 0 32px; }}
-    .dbd-quality {{ max-width: 100%; overflow-wrap: anywhere; }}
+    .dbd-wrap {{ --dbd-sc: {color}; font-family: inherit; margin: 24px 0 32px; }}
     .dbd-headline {{ display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; margin-bottom: 18px; }}
     .dbd-hbox {{ background: rgba(22,27,34,0.7); border: 1px solid rgba(48,54,61,0.8);
       border-radius: 12px; padding: 16px 18px; }}
@@ -1314,6 +2283,13 @@ def generate_dashboard_section(ctx: dict) -> str:
     .dbd-kpi.dbd-yellow {{ color: #ffcc00; }}
     .dbd-kpi.dbd-blue {{ color: #58a6ff; }}
     .dbd-hint {{ color: #8b949e; font-size: 11px; margin-top: 3px; }}
+    .dbd-quality-card {{ margin: 10px 0 18px; padding: 11px 14px; border: 1px solid rgba(48,54,61,0.8);
+      border-radius: 9px; background: rgba(22,27,34,0.6); }}
+    .dbd-quality-title {{ color: #c9d1d9; font-size: 12px; margin-bottom: 7px; }}
+    .dbd-quality-title b {{ color: #3fb950; }}
+    .dbd-quality-items {{ display: flex; flex-wrap: wrap; gap: 6px 14px; color: #8b949e; font-size: 11px; }}
+    .dbd-quality-layers {{ display: flex; flex-wrap: wrap; gap: 5px 14px; margin-top: 6px; color: #c9d1d9; font-size: 11px; }}
+    .dbd-quality-issues {{ margin-top: 6px; color: #d29922; font-size: 11px; line-height: 1.45; }}
     .dbd-section-title {{
       font-size: 15px; font-weight: 700; color: #ffcc00;
       margin: 20px 0 10px; padding-left: 9px;
@@ -1351,6 +2327,7 @@ def generate_dashboard_section(ctx: dict) -> str:
     }}
     .dbd-scen-name {{ font-size: 14px; font-weight: 700; }}
     .dbd-scen-prob {{ font-size: 11px; color: #8b949e; }}
+    .dbd-scen-stat {{ margin: -3px 0 6px; color: #8b949e; font-size: 10px; line-height: 1.4; }}
     .dbd-scen ul {{ margin-left: 16px; font-size: 12px; color: #e6edf3; line-height: 1.6; }}
     .dbd-scen-pos {{
       margin-top: 8px; padding: 5px 9px; border-radius: 5px;
@@ -1400,23 +2377,10 @@ def generate_dashboard_section(ctx: dict) -> str:
     @media (max-width: 640px) {{
       .dbd-hero {{ flex-direction: column; align-items: stretch; }}
       .dbd-hero .dbd-right {{ text-align: left; }}
-      .dbd-factor {{ display: block; max-width: 100%; overflow-x: auto; }}
-      .dbd-fp-table, .dbd-fp-table tbody, .dbd-fp-table tr {{ display: block; width: 100%; }}
-      .dbd-fp-table thead {{ display: none; }}
-      .dbd-fp-table tr {{ margin-bottom: 10px; border: 1px solid #30363d; border-radius: 6px; overflow: hidden; }}
-      .dbd-fp-table td {{ display: grid; grid-template-columns: 76px minmax(0, 1fr); width: auto;
-        gap: 8px; text-align: left; overflow-wrap: anywhere; }}
-      .dbd-fp-table td::before {{ color: #8b949e; font-size: 11px; font-weight: 600; }}
-      .dbd-fp-table td:nth-child(1)::before {{ content: '标的'; }}
-      .dbd-fp-table td:nth-child(2)::before {{ content: '板块'; }}
-      .dbd-fp-table td:nth-child(3)::before {{ content: '策略池'; }}
-      .dbd-fp-table td:nth-child(4)::before {{ content: '催化'; }}
-      .dbd-fp-table td:nth-child(5)::before {{ content: '入场'; }}
-      .dbd-fp-table td:nth-child(6)::before {{ content: '防守'; }}
     }}
     </style>'''
 
-    return f'''{css}
+    html = f'''{css}
 <section class="dbd-wrap">
   <div class="dbd-hero">
     <div class="dbd-left">
@@ -1424,26 +2388,28 @@ def generate_dashboard_section(ctx: dict) -> str:
       <div class="dbd-sub">{_esc(level)} · 报告日期 {_esc(date_str)}</div>
     </div>
     <div class="dbd-right">
-      <div class="dbd-pos-label">建议仓位</div>
-      <div class="dbd-pos-value">{_esc(position)}</div>
-      <div class="dbd-win">动态样本 T+3 新高 {wr_str}</div>
+      <div class="dbd-pos-label">{"建议仓位" if policy['decision_ready'] else "报告可用范围"}</div>
+      <div class="dbd-pos-value">{_esc(position if policy['decision_ready'] else ("仅事实层" if policy['facts_only'] else "观察与条件触发"))}</div>
+      <div class="dbd-win">{("历史 T+3 破新高 " + wr_str) if policy['decision_ready'] else "历史验证暂不展示"}</div>
     </div>
     <div class="dbd-desc">{_esc(desc)}</div>
   </div>
 
-  {quality_html}
-
-  {ladder_review_html}
-
   {headline_html}
+
+  {review_closure_html}
 
   {playbook_html}
 
-  <div class="dbd-section-title">明日 T+1 · 4 情形决策树 <span class="dbd-st-sub">历史结果标签 · 不代表明日发生概率</span></div>
-  <div class="dbd-tree">{scen_cards}</div>
+  {scenario_block}
 
-  <div class="dbd-section-title">明日核心股票池 · 具体标的与入场条件</div>
+  <div class="dbd-section-title">{"股票池未发布" if policy['facts_only'] else "观察名单（非推荐）" if policy['observation_only'] else "明日核心股票池"} · {"数据阻断" if policy['facts_only'] else "仅供观察 · 条件触发" if policy['observation_only'] else "具体标的与入场条件"}</div>
   {focus_rows_inline}
+  {quality_html}
+  {ladder_quality_html}
+  {data_credibility_html}
+  {lianban_review_html}
+  {mainline_review_html}
 
   <details class="dbd-evidence">
     <summary>数据佐证 · 盘面因子明细</summary>
@@ -1457,3 +2423,4 @@ def generate_dashboard_section(ctx: dict) -> str:
     </div>
   </details>
 </section>'''
+    return sanitize_html_for_policy(html, mode)
