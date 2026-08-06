@@ -57,7 +57,7 @@ class FuPanZhangTingYuanYin:
         params["Day"] = day 
         payload = "&".join([f"{k}={v}" for k, v in params.items()]) 
         try: 
-            response = requests.post(self.url, data=payload, headers=self.headers, verify=False, timeout=15) 
+            response = requests.post(self.url, data=payload, headers=self.headers, timeout=15)
             if response.status_code == 200: 
                 return self.optimize_reason(response.json()) 
         except Exception: 
@@ -68,7 +68,7 @@ class FuPanZhangTingYuanYin:
         params["Day"] = day 
         payload = "&".join([f"{k}={v}" for k, v in params.items()]) 
         try: 
-            response = requests.post(self.url, data=payload, headers=self.headers, verify=False, timeout=15) 
+            response = requests.post(self.url, data=payload, headers=self.headers, timeout=15)
             if response.status_code == 200: 
                 return self.optimize_ladder(response.json()) 
         except Exception: 

@@ -413,7 +413,7 @@ def _pick_top_catalyst(info):
     for kw in _ANN_PRIORITY:
         for a in info.get('announcements', [])[:15]:
             title = a.get('title', '') or ''
-            typ = a.get('type', '') or ''
+            typ = str(a.get('type') or '').strip()
             if kw in title or kw in typ:
                 return {'tag': f'公告 · {typ or kw}',
                         'text': f"{a.get('date', '')} {title}",
@@ -423,7 +423,8 @@ def _pick_top_catalyst(info):
     anns = info.get('announcements') or []
     if anns:
         a = anns[0]
-        return {'tag': f"公告 · {a.get('type', '公告')}",
+        typ = str(a.get('type') or '').strip()
+        return {'tag': f"公告 · {typ}" if typ else '公告',
                 'text': f"{a.get('date', '')} {a.get('title', '')}",
                 'url': a.get('url', '')}
 

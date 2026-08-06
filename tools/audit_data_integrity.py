@@ -27,7 +27,14 @@ import sys
 import pandas as pd
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'src'))
-from paths import PRICE_CACHE, ZT_CACHE_FILE, SENTIMENT_CACHE  # noqa: E402
+from paths import (  # noqa: E402
+    PRICE_CACHE, ZT_CACHE_FILE, SENTIMENT_CACHE, UNIVERSE_CACHE,
+    FETCH_STATUS_CACHE, QUALITY_REPORT,
+)
+from data_sources.fetch_status import FetchStatusStore  # noqa: E402
+from data_sources.models import FetchResult, FetchStatus  # noqa: E402
+from data_sources.price_provider import PRICE_COLUMNS  # noqa: E402
+from data_sources.quality_gate import MarketDataQualityGate  # noqa: E402
 
 try:
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')  # pyrefly: ignore [missing-attribute]
@@ -267,6 +274,49 @@ def main():
         sys.exit(f'  ❌ 价格缓存残留 git 冲突标记 (第 {marks[0][0]} 行), 先解决冲突再体检')
 
     price_df = pd.read_csv(PRICE_CACHE, dtype={'code': str})
+    # 新价格契约是正式生产口径；旧单列 close 缓存只用于迁移诊断，绝不再判“通过”。
+    if set(PRICE_COLUMNS).issubset(price_df.columns):
+        if not os.path.exists(UNIVERSE_CACHE):
+            sys.exit('  ❌ stock_universe.csv 不存在，无法证明沪深北全市场覆盖')
+        universe = pd.read_csv(UNIVERSE_CACHE, dtype=str).fillna('')
+        dates = sorted(price_df['date'].astype(str).unique())
+        if args.recent > 0:
+            dates = dates[-args.recent:]
+            price_df = price_df[price_df['date'].astype(str).isin(dates)]
+        target_date = dates[-1]
+        fetch_results = []
+        if os.path.exists(FETCH_STATUS_CACHE):
+            for _, row in FetchStatusStore(FETCH_STATUS_CACHE).read().iterrows():
+                try:
+                    fetch_results.append(FetchResult(
+                        dataset=row['dataset'], date=row['date'], source=row['source'],
+                        status=FetchStatus(row['status']),
+                        expected_count=int(row['expected_count'] or 0),
+                        actual_count=int(row['actual_count'] or 0),
+                        scope=row['scope'], message=row['message'], run_id=row['run_id'],
+                    ))
+                except (ValueError, KeyError):
+                    continue
+        report = MarketDataQualityGate().validate(
+            universe, price_df, target_date, fetch_results
+        )
+        report.write_json(QUALITY_REPORT)
+        print(f'  📊 新价格契约: {len(price_df)} 行, 目标日 {target_date}')
+        if not report.ok:
+            print(f'  ❌ 发现 {len(report.critical)} 个严重缺陷:')
+            for issue in report.critical:
+                print(f'     - [{issue.code}] {issue.message}')
+            sys.exit(1)
+        print('  ✅ 沪深北 universe、raw/qfq 价格、来源、状态与覆盖率均通过体检')
+        return
+
+    missing_contract = sorted(set(PRICE_COLUMNS) - set(price_df.columns))
+    print('  ❌ 价格缓存仍是旧单列 close 格式，禁止进入生产计算')
+    print(f'     缺少字段: {", ".join(missing_contract)}')
+    print('     请运行: python tools/rebuild_market_data.py')
+    sys.exit(1)
+
+    # 以下保留旧审计函数供迁移诊断和历史测试调用，不再作为生产 main 路径。
     price_df['date'] = price_df['date'].astype(str).str.strip()
     dates = sorted(price_df['date'].unique())
     if args.recent > 0:

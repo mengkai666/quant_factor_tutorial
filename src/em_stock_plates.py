@@ -25,6 +25,7 @@ import os
 import time
 import requests
 import pandas as pd
+from datetime import datetime
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -148,7 +149,8 @@ def _vote(names, classify_by_tags, classify_by_plate_name, mainline_names):
 
 
 def attribute_codes(codes, classify_by_tags, classify_by_plate_name,
-                    mainline_names, trade_date=None, max_workers=8):
+                    mainline_names, trade_date=None, max_workers=8,
+                    plate_provider=None):
     """为一批个股拉取东财概念板块并投票归因到 (细分板块, 大主线)。
 
     Args:
@@ -180,19 +182,24 @@ def attribute_codes(codes, classify_by_tags, classify_by_plate_name,
     print(f"  📥 东财个股板块归因: {len(to_fetch)} 只待抓 "
           f"(缓存命中 {len(positive)} 只, 负缓存跳过 {len(attempted) - len(positive)} 只)...")
 
-    # 2. 并发抓取 (绕系统代理)
-    session = requests.Session()
-    session.trust_env = False
-    session.proxies = {'http': None, 'https': None}  # type: ignore
-
-    fetched = {}
+    # 2. 统一通过 PlateProvider 抓取，Provider 负责来源、状态和代码规范。
     t0 = time.time()
-    with ThreadPoolExecutor(max_workers=max_workers) as ex:
-        futs = {ex.submit(_fetch_plates, c, session): c for c in to_fetch}
-        for f in as_completed(futs):
-            code, names = f.result()
-            if names:
-                fetched[code] = names
+    if plate_provider is None:
+        from data_sources.fetch_status import FetchStatusStore
+        from data_sources.plate_provider import PlateProvider
+        from paths import FETCH_STATUS_CACHE
+        plate_provider = PlateProvider(
+            status_store=FetchStatusStore(FETCH_STATUS_CACHE), max_workers=max_workers
+        )
+    compact_date = str(trade_date or datetime.now().strftime("%Y%m%d")).replace("-", "")
+    provider_date = f"{compact_date[:4]}-{compact_date[4:6]}-{compact_date[6:8]}"
+    provider_result = plate_provider.fetch_codes(to_fetch, provider_date)
+    fetched = {}
+    if provider_result.data is not None and not provider_result.data.empty:
+        fetched = {
+            code: group["plate_name"].dropna().astype(str).tolist()
+            for code, group in provider_result.data.groupby("code")
+        }
 
     # 3. 投票归因。取到板块的股全部写缓存: 成功归主线写 (sub, ml),
     #    无主线写空串作负缓存 (避免明天/重跑再抓)。没取到板块的不写 (可能是临时失败, 留待重试)。

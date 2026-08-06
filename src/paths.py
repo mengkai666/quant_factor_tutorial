@@ -33,8 +33,13 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # === 数据缓存 (data/) ===
 ZT_CACHE_FILE = os.path.join(DATA_DIR, '涨停历史缓存.csv')
+LIMIT_POOL_META_CACHE = os.path.join(DATA_DIR, 'limit_pool_cache_meta.csv')
 PRICE_CACHE = os.path.join(DATA_DIR, 'price_history_cache.csv')
 INDUSTRY_CACHE = os.path.join(DATA_DIR, 'industry_cache.csv')
+UNIVERSE_CACHE = os.path.join(DATA_DIR, 'stock_universe.csv')
+FETCH_STATUS_CACHE = os.path.join(DATA_DIR, 'fetch_status.csv')
+CALENDAR_CACHE = os.path.join(DATA_DIR, 'trading_calendar_cache.csv')
+QUALITY_REPORT = os.path.join(DATA_DIR, 'market_data_quality.json')
 SENTIMENT_CACHE = os.path.join(DATA_DIR, 'sentiment_history_cache.csv')
 CLS_PLATE_CACHE = os.path.join(DATA_DIR, 'cls_plate_cache.csv')
 EM_PLATE_CACHE = os.path.join(DATA_DIR, 'em_stock_plate_cache.csv')  # 东财个股所属概念板块归因缓存
