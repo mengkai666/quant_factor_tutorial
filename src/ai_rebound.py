@@ -21,6 +21,7 @@
 import os
 import json
 import time
+import hashlib
 import requests
 
 
@@ -87,6 +88,52 @@ def ai_enabled() -> bool:
     return ANTHROPIC_ENABLE and bool(ANTHROPIC_API_KEY)
 
 
+def run_guarded_ai(facts: dict, policy, *, caller=None, timeout: int = 45) -> dict:
+    """按发布策略控制 AI 调用、输出范围和审计指纹。"""
+    from report_logic import ReportPolicy, scan_forbidden_semantics
+
+    active = policy if isinstance(policy, ReportPolicy) else ReportPolicy.from_mode(policy)
+    payload = {"schema_version": "report-facts/v1", "publication_mode": active.mode, "facts": dict(facts or {})}
+    fingerprint = hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+    lineage = {"model": ANTHROPIC_MODEL, "input_fingerprint": fingerprint, "publication_mode": active.mode}
+    if not active.allow_ai:
+        return {"status": "skipped", "reason": "发布策略禁止 AI", "output": None, "lineage": lineage}
+    try:
+        diagnostics = {}
+        if caller is None:
+            raw, diagnostics = generate_ai_rebound(
+                payload["facts"], timeout=timeout, return_diagnostics=True,
+            )
+        else:
+            raw = caller(payload)
+    except Exception as exc:
+        return {"status": "failed", "reason": str(exc), "output": None, "lineage": lineage}
+    if diagnostics:
+        for key in ("attempt_count", "http_status"):
+            value = diagnostics.get(key)
+            if value is not None:
+                lineage[key] = value
+    if not isinstance(raw, dict):
+        return {
+            "status": "fallback",
+            "reason": diagnostics.get("reason") or "AI 无结构化输出",
+            "output": None,
+            "lineage": lineage,
+        }
+    output = {key: raw.get(key, [] if key != "decision" else "") for key in ("facts", "observations", "conditions", "risks", "decision")}
+    status = "ok"
+    if not active.allow_actions or not active.allow_positions or not active.allow_probabilities:
+        output["decision"] = ""
+        for key in ("observations", "conditions", "risks"):
+            values = output.get(key, [])
+            if not isinstance(values, list):
+                values = [str(values)] if values else []
+            output[key] = [str(item) for item in values if not scan_forbidden_semantics(str(item), active)]
+        status = "sanitized"
+    lineage["output_fingerprint"] = hashlib.sha256(json.dumps(output, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+    return {"status": status, "reason": "", "output": output, "lineage": lineage}
+
+
 def _build_prompt(facts: dict) -> str:
     """把结构化事实拼成给 AI 的指令。事实以 JSON 传入, 保证 AI 不臆造数据。"""
     return (
@@ -113,14 +160,24 @@ def _build_prompt(facts: dict) -> str:
     )
 
 
-def generate_ai_rebound(facts: dict, timeout: int = 45) -> dict | None:
-    """调用 Claude API 生成研判, 返回结构化 dict; 任何失败返回 None。
+def generate_ai_rebound(
+    facts: dict, timeout: int = 45, *, return_diagnostics: bool = False,
+) -> dict | None | tuple[dict | None, dict]:
+    """调用 Claude API 生成研判；可选返回失败诊断供报告审计使用。
 
-    返回字段: market_summary / active_comment / follow_comment /
-             gap_comment / evolution / operation
+    默认保持原有接口，成功返回结构化 dict，失败返回 None；当
+    ``return_diagnostics=True`` 时额外返回原因、尝试次数和 HTTP 状态。
     """
+    def finish(result, *, reason="", attempt_count=0, http_status=None):
+        if not return_diagnostics:
+            return result
+        diagnostics = {"reason": reason, "attempt_count": attempt_count}
+        if http_status is not None:
+            diagnostics["http_status"] = http_status
+        return result, diagnostics
+
     if not ai_enabled():
-        return None
+        return finish(None, reason="AI 未启用或缺少 API Key")
     try:
         payload = {
             "model": ANTHROPIC_MODEL,
@@ -138,29 +195,52 @@ def generate_ai_rebound(facts: dict, timeout: int = 45) -> dict | None:
             headers["anthropic-beta"] = ANTHROPIC_BETA
         # 中转易抽风: 429/5xx 视为临时错误, 退避重试最多 3 次
         resp = None
+        attempt_count = 0
         for attempt in range(3):
+            attempt_count = attempt + 1
             resp = requests.post(_resolve_api_url(), headers=headers, json=payload, timeout=timeout)
             if resp.status_code == 200:
                 break
             print(f"  [警告] AI 研判 API 返回 {resp.status_code} (第{attempt+1}/3次): {resp.text[:160]}")
             if resp.status_code not in (429, 500, 502, 503, 504):
-                return None
+                return finish(
+                    None,
+                    reason=f"上游接口返回 {resp.status_code}",
+                    attempt_count=attempt_count,
+                    http_status=resp.status_code,
+                )
             if attempt < 2:
                 time.sleep(2 * (attempt + 1))
         if resp is None or resp.status_code != 200:
-            return None
+            status = getattr(resp, "status_code", None)
+            reason = (
+                f"上游接口连续 {attempt_count} 次返回 {status}"
+                if status is not None else "AI 请求未获得响应"
+            )
+            return finish(None, reason=reason, attempt_count=attempt_count, http_status=status)
         data = resp.json()
         # Claude messages API: content 是 block 数组, 取 text
         blocks = data.get("content", [])
         text = "".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
         if not text:
-            return None
-        return _parse_json(text)
+            return finish(
+                None,
+                reason="AI 返回空内容",
+                attempt_count=attempt_count,
+                http_status=resp.status_code,
+            )
+        parsed = _parse_json(text)
+        if parsed is None:
+            return finish(
+                None,
+                reason="AI 返回无法解析的结构化结果",
+                attempt_count=attempt_count,
+                http_status=resp.status_code,
+            )
+        return finish(parsed, attempt_count=attempt_count, http_status=resp.status_code)
     except Exception as e:
         print(f"  [警告] AI 研判调用失败, 回退规则模板: {e}")
-        return None
-
-
+        return finish(None, reason=f"AI 调用失败：{e}")
 def _parse_json(text: str) -> dict | None:
     """从模型输出里稳健地抽出 JSON (容忍 ```json 代码块包裹)。"""
     t = text.strip()
@@ -186,8 +266,7 @@ def _parse_json(text: str) -> dict | None:
     return None
 
 
-def render_ai_rebound_html(ai: dict, facts: dict, char_clr: str,
-                           provenance: dict | None = None) -> str:
+def render_ai_rebound_html(ai: dict, facts: dict, char_clr: str, provenance=None) -> str:
     """把 AI 研判结果渲染成深色卡片, 视觉对齐既有报告风格。
 
     硬数据 (当日定性描述) 仍来自规则引擎的 facts, AI 只提供解读文字。
@@ -198,13 +277,10 @@ def render_ai_rebound_html(ai: dict, facts: dict, char_clr: str,
 
     market_char = facts.get("market_char", "")
     char_desc = facts.get("char_desc", "")
-    provenance = provenance or {"mode": "ai", "model": ANTHROPIC_MODEL}
-    if provenance.get("mode") == "rule_fallback":
-        provenance_label = "规则降级"
-        provenance_detail = str(provenance.get("reason") or "AI 不可用")
-    else:
-        provenance_label = "AI"
-        provenance_detail = str(provenance.get("model") or ANTHROPIC_MODEL)
+    provenance = provenance if isinstance(provenance, dict) else {}
+    analysis_mode = '规则降级' if provenance.get('mode') == 'rule_fallback' else 'AI'
+    reason = provenance.get('reason')
+    provenance_text = f'分析方式: {analysis_mode}' + (f'（{_esc(reason)}）' if reason else '')
 
     def _block(label, val, clr="#e6edf3"):
         if not val:
@@ -245,7 +321,7 @@ def render_ai_rebound_html(ai: dict, facts: dict, char_clr: str,
         {operation_block}
         <div style="margin-top:14px;padding-top:12px;border-top:1px dashed #30363d;
                     font-size:12px;color:#8b949e;">
-            分析方式: {_esc(provenance_label)} ({_esc(provenance_detail)}) · 基于规则引擎的客观数据，硬数据不可篡改。
+            {provenance_text} · 由 Claude ({_esc(ANTHROPIC_MODEL)}) 基于规则引擎的客观数据研判生成 · 硬数据不可篡改, AI 仅做解读与进化。
             分类框架: 主动反弹(可追) / 跟随反弹(减亏离场) / 高度断层(回避追高)。
         </div>
     </div>'''
