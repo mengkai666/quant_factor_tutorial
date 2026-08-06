@@ -6,6 +6,7 @@ from typing import Callable, Iterable
 import pandas as pd
 
 from .limit_pool_sources import EastmoneyLimitPoolSource, ThsLimitUpSource
+from .limit_pool_reconciliation import reconcile_limit_pool
 from .models import FetchResult, FetchStatus, normalize_code
 
 
@@ -16,12 +17,19 @@ SourceFetcher = tuple[str, Callable[[str], object]]
 class LimitPoolProvider:
     def __init__(self, fetch_zt=None, fetch_dt=None, status_store=None, now=None,
                  zt_fallbacks: Iterable[SourceFetcher] | None = None,
-                 dt_fallbacks: Iterable[SourceFetcher] | None = None):
+                 dt_fallbacks: Iterable[SourceFetcher] | None = None,
+                 zt_crosscheck: SourceFetcher | None = None,
+                 dt_crosscheck: SourceFetcher | None = None):
         self.status_store = status_store
         self.now = now or (lambda: datetime.now(timezone.utc))
-        self.zt_sources, self.dt_sources = self._build_sources(
+        (
+            self.zt_sources, self.dt_sources,
+            default_zt_crosscheck, default_dt_crosscheck,
+        ) = self._build_sources(
             fetch_zt, fetch_dt, zt_fallbacks, dt_fallbacks
         )
+        self.zt_crosscheck = zt_crosscheck or default_zt_crosscheck
+        self.dt_crosscheck = dt_crosscheck or default_dt_crosscheck
 
     @classmethod
     def _build_sources(cls, fetch_zt, fetch_dt, zt_fallbacks, dt_fallbacks):
@@ -41,9 +49,11 @@ class LimitPoolProvider:
         if fetch_dt is None:
             dt_sources.append(("eastmoney_push2ex", eastmoney.fetch_dt))
 
+        zt_crosscheck = ("eastmoney_push2ex", eastmoney.fetch_zt) if fetch_zt is None else None
+        dt_crosscheck = ("eastmoney_push2ex", eastmoney.fetch_dt) if fetch_dt is None else None
         zt_sources.extend(list(zt_fallbacks or []))
         dt_sources.extend(list(dt_fallbacks or []))
-        return zt_sources, dt_sources
+        return zt_sources, dt_sources, zt_crosscheck, dt_crosscheck
 
     @staticmethod
     def _default_zt(date: str):
@@ -69,12 +79,45 @@ class LimitPoolProvider:
         actual = len(data)
         errors = zt_errors + dt_errors
         source = f"ZT:{zt_source}|DT:{dt_source}"
+        reconciliation_partial = False
+        reconciliation_messages = []
+        for pool_type, frame, selected_source, checker in (
+            ("ZT", zt_frame, zt_source, self.zt_crosscheck),
+            ("DT", dt_frame, dt_source, self.dt_crosscheck),
+        ):
+            if frame.empty or checker is None or selected_source == checker[0]:
+                continue
+            check_name, check_fetcher = checker
+            source += f"|CHECK:{pool_type}:{check_name}"
+            try:
+                check_raw = check_fetcher(date)
+                check_frame = self._normalize(check_raw, date, pool_type, check_name)
+                reconciliation = reconcile_limit_pool(frame, check_frame)
+                if reconciliation.status == "partial":
+                    reconciliation_partial = True
+                    reconciliation_messages.append(
+                        f"{pool_type}/{check_name}: {reconciliation.message}"
+                    )
+                elif reconciliation.status == "unavailable":
+                    reconciliation_messages.append(
+                        f"{pool_type}/{check_name}: {reconciliation.message}"
+                    )
+            except Exception as exc:
+                reconciliation_messages.append(
+                    f"{pool_type}/{check_name}: crosscheck unavailable: {exc}"
+                )
         usable = {"success", "zero"}
         both_usable = zt_state in usable and dt_state in usable
         either_usable = zt_state in usable or dt_state in usable
-        message = "; ".join(errors)
+        message = "; ".join(errors + reconciliation_messages)
 
-        if both_usable:
+        if reconciliation_partial:
+            result = FetchResult.partial(
+                dataset="limit_pool", date=date, source=source,
+                expected_count=actual, actual_count=actual,
+                scope="SH,SZ,BJ", message=message, data=data,
+            )
+        elif both_usable:
             if data.empty:
                 result = FetchResult.zero(
                     dataset="limit_pool", date=date, source=source,

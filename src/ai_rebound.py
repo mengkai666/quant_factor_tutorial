@@ -186,7 +186,8 @@ def _parse_json(text: str) -> dict | None:
     return None
 
 
-def render_ai_rebound_html(ai: dict, facts: dict, char_clr: str) -> str:
+def render_ai_rebound_html(ai: dict, facts: dict, char_clr: str,
+                           provenance: dict | None = None) -> str:
     """把 AI 研判结果渲染成深色卡片, 视觉对齐既有报告风格。
 
     硬数据 (当日定性描述) 仍来自规则引擎的 facts, AI 只提供解读文字。
@@ -197,6 +198,13 @@ def render_ai_rebound_html(ai: dict, facts: dict, char_clr: str) -> str:
 
     market_char = facts.get("market_char", "")
     char_desc = facts.get("char_desc", "")
+    provenance = provenance or {"mode": "ai", "model": ANTHROPIC_MODEL}
+    if provenance.get("mode") == "rule_fallback":
+        provenance_label = "规则降级"
+        provenance_detail = str(provenance.get("reason") or "AI 不可用")
+    else:
+        provenance_label = "AI"
+        provenance_detail = str(provenance.get("model") or ANTHROPIC_MODEL)
 
     def _block(label, val, clr="#e6edf3"):
         if not val:
@@ -237,7 +245,7 @@ def render_ai_rebound_html(ai: dict, facts: dict, char_clr: str) -> str:
         {operation_block}
         <div style="margin-top:14px;padding-top:12px;border-top:1px dashed #30363d;
                     font-size:12px;color:#8b949e;">
-            由 Claude ({_esc(ANTHROPIC_MODEL)}) 基于规则引擎的客观数据研判生成 · 硬数据不可篡改, AI 仅做解读与进化。
+            分析方式: {_esc(provenance_label)} ({_esc(provenance_detail)}) · 基于规则引擎的客观数据，硬数据不可篡改。
             分类框架: 主动反弹(可追) / 跟随反弹(减亏离场) / 高度断层(回避追高)。
         </div>
     </div>'''

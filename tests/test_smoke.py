@@ -118,6 +118,21 @@ def test_ai_rebound_render_produces_html():
     assert '涨跌家数 2000涨/1500跌' in html  # 硬数据来自 facts
     assert '关注 AI 算力接力' in html         # AI 进化研判
     assert '半仓参与' in html                  # 操作建议
+    assert '分析方式: AI' in html
+
+
+def test_ai_rebound_render_marks_rule_fallback():
+    import ai_rebound
+
+    html = ai_rebound.render_ai_rebound_html(
+        {"market_summary": "规则结论"},
+        {"market_char": "结构震荡", "char_desc": "规则事实"},
+        '#ffa657',
+        provenance={"mode": "rule_fallback", "reason": "503"},
+    )
+
+    assert '分析方式: 规则降级' in html
+    assert '503' in html
 
 
 def test_ai_rebound_render_escapes_html():

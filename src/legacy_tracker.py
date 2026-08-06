@@ -51,6 +51,7 @@ from paths import (
 from market_data import load_analysis_price_view
 from pipeline.data_pipeline import run_preflight_gate
 from data_sources.models import normalize_code
+from data_sources.name_resolver import NameResolution, resolve_names
 CACHE_DIR = DATA_DIR  # 向后兼容: 旧代码引用 CACHE_DIR 的地方仍指向数据目录
 
 # === 缓存大小限制 ===
@@ -59,6 +60,44 @@ if IS_GITHUB_ACTIONS:
     CACHE_MAX_SIZE_MB = 10   # CI 环境: 单个缓存文件最大 10MB
 else:
     CACHE_MAX_SIZE_MB = 100  # 本地环境: 单个缓存文件最大 100MB
+
+
+def _load_name_resolution(classified=None, latest_limit=None) -> NameResolution:
+    """Load all name candidates and apply the current-name precedence once."""
+    def read_csv(path):
+        if not path or not os.path.exists(path):
+            return pd.DataFrame()
+        try:
+            return pd.read_csv(path, dtype=str).fillna("")
+        except Exception as exc:
+            print(f"  [警告] 名称缓存读取失败 {path}: {exc}")
+            return pd.DataFrame()
+
+    return resolve_names(
+        universe=read_csv(UNIVERSE_CACHE),
+        classified=classified,
+        latest_limit=latest_limit,
+        industry=read_csv(INDUSTRY_CACHE),
+    )
+
+
+def _report_quality_metadata(quality_report, name_resolution=None,
+                             limit_pool_result=None) -> dict:
+    status = getattr(getattr(limit_pool_result, 'status', None), 'value', None)
+    critical_status = status in {'partial', 'failed', 'stale', 'not_available'}
+    notes = [issue.message for issue in getattr(quality_report, 'warnings', [])]
+    if limit_pool_result is not None and getattr(limit_pool_result, 'message', ''):
+        notes.append(limit_pool_result.message)
+    conflict_count = len(getattr(name_resolution, 'conflicts', []) or [])
+    if conflict_count:
+        notes.append(f'名称冲突 {conflict_count} 个，已按当前名称优先级处理')
+    return {
+        'ok': bool(getattr(quality_report, 'ok', False)) and not critical_status,
+        'name_conflicts': conflict_count,
+        'limit_pool_status': status or 'not_recorded',
+        'limit_pool_source': getattr(limit_pool_result, 'source', '') or 'not_recorded',
+        'notes': notes,
+    }
 
 def trim_cache_file(filepath, date_col='日期', max_size_mb=CACHE_MAX_SIZE_MB, encoding='utf-8-sig'):
     """检查缓存文件大小，如超过限制则删除最老的数据直到满足限制
@@ -787,7 +826,7 @@ def rescue_others_with_em(classified, plate_provider=None):
 
 
 def build_mainline_ladder(price_df, classified, zt_today=None, ret_window=20,
-                          plate_provider=None):
+                          plate_provider=None, name_resolution=None):
     """构建主线天梯: 全市场强势股按强度分 S/B/C/D/E 级, 并归入 (大主线×细分板块) 矩阵。
 
     强度 score = ret_window 日涨幅% + 连板数×20 (连板加权突出情绪龙头)。
@@ -796,6 +835,9 @@ def build_mainline_ladder(price_df, classified, zt_today=None, ret_window=20,
     """
     if price_df is None or price_df.empty:
         return {}
+    name_resolution = name_resolution or _load_name_resolution(
+        classified=classified, latest_limit=zt_today
+    )
 
     # 1. 全市场 N 日涨幅
     p_df = price_df.pivot(index='date', columns='code', values='close').ffill()
@@ -900,7 +942,7 @@ def build_mainline_ladder(price_df, classified, zt_today=None, ret_window=20,
         if grade is None:
             continue
         ladder[grade].append({
-            'name': code_to_name.get(code, code),
+            'name': name_resolution.names.get(code, code_to_name.get(code, code)),
             'code': code, 'sub': sub, 'ml': ml,
             'score': round(score, 1),
         })
@@ -944,27 +986,19 @@ def generate_rebound_analysis(advance_decline, sentiment_df, echelon):
     分类框架: 主动反弹(可追) / 跟随反弹(减亏离场) / 高度断层(风险)。
     """
     try:
+        from data_sources.market_regime import classify_market_regime
         up = float(advance_decline.get('up', 0) or 0)
         down = float(advance_decline.get('down', 0) or 0)
         ad = up / max(down, 1)
+        regime = classify_market_regime(
+            advance_decline, sentiment_df, echelon,
+            quality_ok=not bool(advance_decline.get('ad_incomplete')),
+        )
 
         # 1. 市场定性
-        if ad > REBOUND_STRONG_AD:
-            market_char = '普涨反弹'
-            char_desc = f'涨跌家数 {int(up)}涨/{int(down)}跌, 多头明显占优, 属全面反弹。'
-            char_clr = '#f85149'
-        elif ad > REBOUND_MILD_AD:
-            market_char = '温和反弹'
-            char_desc = f'涨跌家数 {int(up)}涨/{int(down)}跌, 涨多于跌但力度有限, 结构性反弹。'
-            char_clr = '#ffa657'
-        elif ad > REBOUND_WEAK_AD:
-            market_char = '分歧整理'
-            char_desc = f'涨跌家数 {int(up)}涨/{int(down)}跌, 多空胶着, 无明确方向。'
-            char_clr = '#d29922'
-        else:
-            market_char = '普跌弱势'
-            char_desc = f'涨跌家数 {int(up)}涨/{int(down)}跌, 跌多于涨, 非反弹日, 资金避险。'
-            char_clr = '#58a6ff'
+        market_char = regime['title']
+        char_desc = f'涨跌家数 {int(up)}涨/{int(down)}跌。{regime["reason"]}。'
+        char_clr = regime['color']
 
         # 2. 情绪趋势 (近 4 日 up 走向)
         trend_desc = ''
@@ -1026,6 +1060,7 @@ def generate_rebound_analysis(advance_decline, sentiment_df, echelon):
             'follow': [
                 {'mainline': ml, 'today_zt': c} for ml, c in follow
             ],
+            'regime': regime,
         }
 
         # 6. 优先走 AI 研判 (判断+按模板填充+自行进化); 失败静默回落规则模板
@@ -1033,12 +1068,14 @@ def generate_rebound_analysis(advance_decline, sentiment_df, echelon):
             from ai_rebound import generate_ai_rebound, render_ai_rebound_html
             ai = generate_ai_rebound(facts)
             if ai:
-                return render_ai_rebound_html(ai, facts, char_clr)
+                return render_ai_rebound_html(ai, facts, char_clr,
+                                              provenance={'mode': 'ai'})
         except Exception as e:
             print(f"  [提示] AI 研判不可用, 回落规则模板: {e}")
 
         return _render_rebound_html(market_char, char_desc, char_clr,
-                                    trend_desc, gap_warn, active_html, follow_html)
+                                    trend_desc, gap_warn, active_html, follow_html,
+                                    source_label='规则降级', source_reason='AI 不可用或返回失败')
     except Exception as e:
         print(f"  [警告] 反弹分类复盘生成失败: {e}")
         return ''
@@ -1125,7 +1162,8 @@ def _analyze_active_mainlines():
 
 
 def _render_rebound_html(market_char, char_desc, char_clr,
-                         trend_desc, gap_warn, active_html='', follow_html=''):
+                         trend_desc, gap_warn, active_html='', follow_html='',
+                         source_label='规则', source_reason=''):
     """渲染反弹分类复盘 HTML 卡片 (深色主题, 对齐报告风格)。"""
     gap_clr = '#f85149' if gap_warn.startswith('⚠️') else '#8b949e'
     trend_block = (f'<div style="margin-top:8px;color:#e6edf3;font-size:14px;">'
@@ -1149,6 +1187,7 @@ def _render_rebound_html(market_char, char_desc, char_clr,
         {follow_html}
         <div style="margin-top:14px;padding-top:12px;border-top:1px dashed #30363d;
                     font-size:12px;color:#8b949e;">
+            分析方式: {source_label} · {source_reason}<br>
             分类逻辑: 主动反弹(资金主动选择、持续吸金→可追) / 跟随反弹(无梯队支撑→减亏离场) /
             高度断层(龙头孤悬→回避追高)。数据驱动, 每日自动更新。
         </div>
@@ -1185,12 +1224,14 @@ def calc_threshold(n_points, thresh1=15.0, thresh2=30.0):
         '30日阈值': [thresh2] * n_points,
     }
 
-def calc_subsector_returns(classified_df, price_df, dates, periods=[5, 10, 20, 30]):
+def calc_subsector_returns(classified_df, price_df, dates, periods=[5, 10, 20, 30],
+                           name_resolution=None):
     """
     计算细分板块的Top N平均累计涨幅 (增强补全版)
     """
     if price_df.empty:
         return {}, {}, {}, {}
+    name_resolution = name_resolution or _load_name_resolution(classified=classified_df)
 
     # 1. 准备全量股票-板块映射 (数据补全的核心)
     # 优先级: 东财概念归因 (概念级) > 涨停记录 > INDUSTRY_TO_SECTOR (行业回退, 只用于凑板块池, 不选领涨)
@@ -1213,6 +1254,7 @@ def calc_subsector_returns(classified_df, price_df, dates, periods=[5, 10, 20, 3
                     industry_sector[code] = sub  # 主业所在板块 (证监会行业)
         except Exception as e:
             print(f'  ⚠️ 行业缓存加载失败: {e}')
+    global_code_to_name.update(name_resolution.names)
 
     # (B) 从涨停分类加载映射 (覆盖行业映射，更精准, 且可作领涨股)
     #   注意: 涨停记录是"某天因某题材涨停"的一次性快照, 不等于个股当前所属主线。
@@ -1220,8 +1262,10 @@ def calc_subsector_returns(classified_df, price_df, dates, periods=[5, 10, 20, 3
     #   把无关票永久钉进主线池 —— 名字映射仍用全量 (不影响)。
     if not classified_df.empty:
         # 名字映射用全量, 板块归属只用近 N 日
-        for code, nm in classified_df.drop_duplicates('代码').set_index('代码')['名称'].items():
-            global_code_to_name[code] = nm
+        recent_names = (classified_df.assign(_name_date=classified_df['日期'].astype(str))
+                        .sort_values('_name_date').drop_duplicates('代码', keep='last'))
+        for code, nm in recent_names.set_index('代码')['名称'].items():
+            global_code_to_name.setdefault(code, nm)
         recent_dates = sorted(classified_df['日期'].unique())[-ZT_MEMBERSHIP_DAYS:]
         recent_zt = classified_df[classified_df['日期'].isin(recent_dates)]
         # 同一 code 近期多次涨停取最近一次的题材
@@ -1398,24 +1442,32 @@ def calc_subsector_returns(classified_df, price_df, dates, periods=[5, 10, 20, 3
 
     return result, leaders, leaderboard, sector_tracks
 
-def get_leaders(df, group_col='细分板块'):
+def get_leaders(df, group_col='细分板块', name_resolution=None):
+    name_resolution = name_resolution or _load_name_resolution(classified=df)
     leaders = {}
     for (date, sector), group in df.groupby(['日期', group_col]):
         top = group.loc[group['连板数'].idxmax()]
+        code = str(top.get('代码', ''))
         leaders.setdefault(date, {})[sector] = {
-            'name': top['名称'].strip(), 'lianban': int(top['连板数'])
+            'name': name_resolution.names.get(code, str(top['名称']).strip()),
+            'lianban': int(top['连板数'])
         }
     return leaders
 
-def get_nday_leaders(classified_df, price_df, group_col='细分板块'):
+def get_nday_leaders(classified_df, price_df, group_col='细分板块', name_resolution=None):
     if price_df.empty or classified_df.empty:
         return {}
+    name_resolution = name_resolution or _load_name_resolution(classified=classified_df)
     
     t0 = time.time()
     p_df = price_df.pivot(index='date', columns='code', values='close')
     p_df = p_df.ffill()
     
-    code_to_name = classified_df.drop_duplicates('代码').set_index('代码')['名称'].to_dict()
+    code_to_name = name_resolution.names.copy()
+    recent_names = (classified_df.assign(_name_date=classified_df['日期'].astype(str))
+                    .sort_values('_name_date').drop_duplicates('代码', keep='last'))
+    for code, name in recent_names.set_index('代码')['名称'].items():
+        code_to_name.setdefault(code, name)
     code_to_sector = classified_df[pd.notna(classified_df[group_col])].drop_duplicates('代码').set_index('代码')[group_col].to_dict()
     all_dates = sorted(classified_df['日期'].unique())
     all_dates_dt = [d[:4]+'-'+d[4:6]+'-'+d[6:] for d in all_dates]
@@ -2011,7 +2063,7 @@ def calc_nday_returns(price_df, periods=[5, 10, 20, 60]):
     return res_df.reset_index(drop=True)
 
 
-def build_sector_heatmap(classified_df, price_df, echelon):
+def build_sector_heatmap(classified_df, price_df, echelon, name_resolution=None):
     """板块热力矩阵: 多周期涨幅 + 动量方向 + 连板/领涨/中军角色。
 
     返回 HTML 字符串, 直接嵌入报告。
@@ -2020,11 +2072,13 @@ def build_sector_heatmap(classified_df, price_df, echelon):
     if price_df.empty:
         return ''
 
+    name_resolution = name_resolution or _load_name_resolution(classified=classified_df)
+
     PERIODS = [5, 10, 20, 30]
 
     # === 1. 板块-个股映射 (复用 calc_subsector_returns 同逻辑) ===
     code_to_sector = {}
-    code_to_name = {}
+    code_to_name = name_resolution.names.copy()
     code_to_ml = {}  # 大主线
 
     if os.path.exists(INDUSTRY_CACHE):
@@ -2032,7 +2086,7 @@ def build_sector_heatmap(classified_df, price_df, echelon):
             idf = pd.read_csv(INDUSTRY_CACHE, dtype=str)
             for _, row in idf.iterrows():
                 code, name, ind = row['code'], row['name'], row.get('industry', '')
-                code_to_name[code] = name
+                code_to_name.setdefault(code, name)
                 sub, ml = INDUSTRY_TO_SECTOR.get(ind, (None, None))
                 if sub:
                     code_to_sector[code] = sub
@@ -2042,7 +2096,7 @@ def build_sector_heatmap(classified_df, price_df, echelon):
 
     if not classified_df.empty:
         for code, nm in classified_df.drop_duplicates('代码').set_index('代码')['名称'].items():
-            code_to_name[code] = nm
+            code_to_name.setdefault(code, nm)
         recent_dates = sorted(classified_df['日期'].unique())[-ZT_MEMBERSHIP_DAYS:]
         recent_zt = classified_df[classified_df['日期'].isin(recent_dates)]
         c_map = recent_zt.sort_values('日期').drop_duplicates('代码', keep='last').set_index('代码')
@@ -2078,7 +2132,7 @@ def build_sector_heatmap(classified_df, price_df, echelon):
         codes_list = e.get('codes', [])
         for stock in codes_list:
             code = stock.get('code', '')
-            name = stock.get('name', code)
+            name = name_resolution.names.get(code, stock.get('name', code))
             lb = stock.get('lianban', 0)
             sec = code_to_sector.get(code)
             if sec and lb >= 1:
@@ -2257,7 +2311,7 @@ def build_sector_heatmap(classified_df, price_df, echelon):
     </div>''', top_sectors
 def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thresh,
                   leaders, dates, ratings, sub_ratings,
-                  echelon, top30_data, advance_decline, nday_leaders=None, wc_data=None, sentiment_df=None, plates=None, classified_df=None, return_leaders=None, mainline_ladder=None, sub_leaderboard=None, sub_tracks=None, price_df=None, focus_df=None, focus_catalysts=None):
+                  echelon, top30_data, advance_decline, nday_leaders=None, wc_data=None, sentiment_df=None, plates=None, classified_df=None, return_leaders=None, mainline_ladder=None, sub_leaderboard=None, sub_tracks=None, price_df=None, focus_df=None, focus_catalysts=None, data_quality=None, ladder_review=None, name_resolution=None):
     
     if len(dates) > 65:
         dates = dates[-65:]
@@ -2271,6 +2325,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
         sub_ma = {k: {p: vals[-65:] for p, vals in d.items()} for k, d in sub_ma.items()}
     if sentiment_df is not None:
         sentiment_df = sentiment_df.tail(65).copy()
+    name_resolution = name_resolution or _load_name_resolution(classified=classified_df)
 
     def fmt(d): return f"{d[:4]}/{d[4:6]}/{d[6:]}" if len(d) == 8 else d
     dates_fmt = [fmt(d) for d in dates]
@@ -2577,7 +2632,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     hot_sectors_html = ''
 
     ml_series: list = []
-    ml_leaders = get_leaders(classified_df, '大主线') if classified_df is not None and not classified_df.empty else {}
+    ml_leaders = get_leaders(classified_df, '大主线', name_resolution=name_resolution) if classified_df is not None and not classified_df.empty else {}
     for n in MAINLINE_NAMES:
         if n in ml_strength.columns:
             rich_data = []
@@ -2630,7 +2685,9 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     heatmap_html = ''
     heatmap_top_sectors = []
     if price_df is not None and not price_df.empty:
-        heatmap_html, heatmap_top_sectors = build_sector_heatmap(classified_df, price_df, echelon)
+        heatmap_html, heatmap_top_sectors = build_sector_heatmap(
+            classified_df, price_df, echelon, name_resolution=name_resolution
+        )
 
     sub_charts_html = ''
     # 榜单窗口切换的全局 JS (定义一次)
@@ -3379,11 +3436,19 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
         )
 
 
+    from data_sources.market_regime import classify_market_regime
+    unified_regime = classify_market_regime(
+        advance_decline, sentiment_df, echelon,
+        quality_ok=not bool(advance_decline.get('ad_incomplete')),
+    )
+
     # 数据驱动的反弹分类复盘 (每日自动更新)
     rebound_html = generate_rebound_analysis(advance_decline, sentiment_df, echelon)
 
     # 择时档位判断 + 转向扳机清单 (进攻/防御/观望, 纯规则可回溯)
-    stance = classify_market_stance(advance_decline, sentiment_df, echelon)
+    stance = classify_market_stance(
+        advance_decline, sentiment_df, echelon, regime=unified_regime
+    )
     stance_html = render_stance_html(stance)
 
     # 动态生成量化择时模块
@@ -3408,10 +3473,14 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     try:
         from decision_dashboard import build_dashboard_ctx, generate_dashboard_section
         _report_date = dates[-1] if dates else None
+        _regime = unified_regime
         _dash_ctx = build_dashboard_ctx(
             timing=timing_res, advance_decline=advance_decline,
             sentiment_df=sentiment_df, echelon=echelon, report_date=_report_date,
             focus_df=focus_df, focus_catalysts=focus_catalysts,
+            regime=_regime,
+            data_quality=data_quality,
+            ladder_review=ladder_review,
         )
         dashboard_section_html = generate_dashboard_section(_dash_ctx)
     except Exception as e:
@@ -3444,8 +3513,12 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
         padding: 40px 20px;
         line-height: 1.5;
+        max-width: 100%;
+        overflow-x: hidden;
     }}
-    .wrapper {{ max-width: 1400px; margin: 0 auto; }}
+    .wrapper {{ max-width: 1400px; width: 100%; min-width: 0; margin: 0 auto; }}
+    .wrapper, .wrapper * {{ min-width: 0; }}
+    .dashboard-header h1, .dashboard-header .subtitle {{ overflow-wrap: anywhere; }}
     
     .dashboard-header {{ text-align: center; margin-bottom: 40px; border-bottom: 1px solid var(--border-color); padding-bottom: 30px; }}
     .dashboard-header h1 {{ font-size: 32px; color: var(--accent-red-deep); display: flex; align-items: center; justify-content: center; gap: 12px; }}
@@ -3509,7 +3582,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     .rating-E, .rating-N {{ background: #333; color: #888; }}
     .rating-NA {{ background: #1a1a1a; color: #555; }}
 
-    .ml-table-wrap {{ overflow-x: auto; margin: 10px 0 20px; }}
+    .ml-table-wrap {{ max-width: 100%; overflow-x: auto; margin: 10px 0 20px; }}
     .ml-data-table {{ width: 100%; border-collapse: collapse; font-size: 12px; }}
     .ml-data-table th, .ml-data-table td {{ padding: 6px 8px; border: 1px solid #333; text-align: center; }}
     .ml-data-table .ml-header {{ font-weight: bold; font-size: 14px; }}
@@ -3535,7 +3608,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     .pct-red {{ background: #b22222; color: #fff; font-weight: bold; display: inline-block; padding: 2px 6px; border-radius: 4px; }}
     .pct-yellow {{ background: #ccaa00; color: #333; font-weight: bold; display: inline-block; padding: 2px 6px; border-radius: 4px; }}
     
-    .matrix-wrap {{ overflow-x: auto; margin: 20px 0; border-radius: 12px; border: 1px solid var(--border-color); }}
+    .matrix-wrap {{ max-width: 100%; overflow-x: auto; margin: 20px 0; border-radius: 12px; border: 1px solid var(--border-color); }}
     .matrix-table {{ font-size: 12px; }}
     .matrix-table th {{ background: #21262d; }}
     .matrix-table .sub-th {{ font-size: 10px; opacity: 0.8; background: #161b22; }}
@@ -3601,6 +3674,16 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     .glossary-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }}
     .glossary-item b {{ color: var(--accent-yellow); display: block; margin-bottom: 4px; }}
     .glossary-item p {{ font-size: 13px; color: var(--text-secondary); }}
+
+    .research-layer {{ margin: 26px 0 10px; border: 1px solid var(--border-color); border-radius: 6px; background: rgba(13,17,23,0.55); }}
+    .research-layer > summary {{ cursor: pointer; list-style: none; padding: 16px 20px; color: var(--accent-blue); font-weight: 700; }}
+    .research-layer > summary::-webkit-details-marker {{ display: none; }}
+    .research-layer > summary::before {{ content: '▸ '; color: var(--accent-yellow); }}
+    .research-layer[open] > summary::before {{ content: '▾ '; }}
+    .research-body {{ max-width: 100%; overflow-x: auto; padding: 0 18px 18px; }}
+    .research-body > * {{ max-width: 100%; overflow-wrap: anywhere; }}
+    .research-body .chart-container, .research-body .plate-section,
+    .research-body .glossary {{ overflow-x: auto; }}
     
     @media (max-width: 1000px) {{
         .r-header {{ grid-template-columns: 1fr 1fr; gap: 5px; }}
@@ -3616,12 +3699,18 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
         <div class="subtitle" style="margin-top: 15px;">数据更新时间: <span style="color: var(--accent-blue); font-weight: bold;">{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</span>  |  交易日: <span style="color: var(--accent-yellow); font-weight: bold;">{dates[-1] if dates else '---'}</span></div>
     </div>
 
-    {timing_html}
-
     {dashboard_section_html}
 
+    {rebound_html}
+
+    <details class="research-layer">
+      <summary>展开研究证据 · 择时、情绪、梯队、主线与历史排行</summary>
+      <div class="research-body">
+
+    {timing_html}
+
     <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:stretch;margin-bottom:30px;">
-        <div style="flex:1;min-width:420px;">{stance_html}</div>
+        <div style="flex:1;min-width:0;">{stance_html}</div>
         {mood_card_html}
     </div>
 
@@ -3647,9 +3736,6 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
 
     <div class="rating-bar">{rating_html}</div>
     {ad_html}
-
-    {rebound_html}
-
 
 {sentiment_charts_html}
 
@@ -3698,6 +3784,8 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
             </div>
         </div>
     </div>
+      </div>
+    </details>
 </div>
 
 
@@ -3734,6 +3822,7 @@ def iter_main(limit_pool_provider=None, plate_provider=None):
     plate_provider = plate_provider or PlateProvider(status_store=status_store, max_workers=8)
     closed_target = CalendarProvider().latest_closed_day()
     limit_pool_result = None
+    ladder_review = {}
 
     print("=" * 60)
     print("  主线强度追踪系统 V3 — 概念板块版")
@@ -3761,6 +3850,8 @@ def iter_main(limit_pool_provider=None, plate_provider=None):
         if zt_data is not None and dt_data is not None:
             print(f"  [{datetime.now().strftime('%H:%M:%S')}] 生成市场短线情绪历史...")
             sentiment_df = analyze_lianban(zt_data, dt_data)
+            from data_sources.limit_pool_metrics import build_ladder_review
+            ladder_review = build_ladder_review(zt_data, dt_data)
             
             # 安全检查: analyze_lianban 产出的 up/down 可能来自 price_cache 回退,
             # 连续2天以上相同的 up/down 值 = 陈旧数据, 清零以触发下游 API 补全
@@ -3853,14 +3944,19 @@ def iter_main(limit_pool_provider=None, plate_provider=None):
         # 当天涨停记录 (含连板数) 作为梯队高度真源; CLS continuous_limit_up 恒空
         zt_today = classified[classified['日期'] == latest_date][['代码', '名称', '连板数']].copy() \
             if not classified.empty else None
+        name_resolution = _load_name_resolution(classified=classified, latest_limit=zt_today)
         echelon = build_echelon_table(cls_today, zt_today)
         wc_data = generate_wordclouds(cls_today.get('plate_stock', []), CACHE_DIR)
 
     # 主线天梯: 全市场强势股按强度分级 (S/B/C/D/E) × 主线矩阵
     zt_for_ladder = classified[classified['日期'] == latest_date][['代码', '名称', '连板数']].copy() \
         if not classified.empty else None
+    name_resolution = locals().get('name_resolution') or _load_name_resolution(
+        classified=classified, latest_limit=zt_for_ladder
+    )
     mainline_ladder = build_mainline_ladder(
-        price_df, classified, zt_for_ladder, plate_provider=plate_provider
+        price_df, classified, zt_for_ladder, plate_provider=plate_provider,
+        name_resolution=name_resolution,
     )
     
     if f_data and f_data.get('reason'):
@@ -3985,13 +4081,17 @@ def iter_main(limit_pool_provider=None, plate_provider=None):
 
     ml_ma = calc_ma(ml_strength)
 
-    leaders = get_leaders(classified, '细分板块')
+    leaders = get_leaders(classified, '细分板块', name_resolution=name_resolution)
     
     # 计算细分板块累计涨幅 (高保真版)
     print("  📈 计算细分板块累计涨幅与领涨股...")
-    sub_returns, return_leaders, sub_leaderboard, sub_tracks = calc_subsector_returns(classified, price_df, dates)
+    sub_returns, return_leaders, sub_leaderboard, sub_tracks = calc_subsector_returns(
+        classified, price_df, dates, name_resolution=name_resolution
+    )
 
-    nday_leaders = get_nday_leaders(classified, price_df, '细分板块') if not price_df.empty else {}
+    nday_leaders = get_nday_leaders(
+        classified, price_df, '细分板块', name_resolution=name_resolution
+    ) if not price_df.empty else {}
 
     ratings = {n: rate_mainline(ml_strength[n].tail(10)) for n in MAINLINE_NAMES if n in ml_strength.columns}
     sub_ratings = {}
@@ -4019,7 +4119,9 @@ def iter_main(limit_pool_provider=None, plate_provider=None):
         
         returns_df = calc_nday_returns(price_df)
         if not returns_df.empty:
-            returns_df['name'] = returns_df['code'].map(lambda c: industry_map.get(c, {}).get('name', ''))
+            returns_df['name'] = returns_df['code'].map(
+                lambda c: name_resolution.names.get(c, industry_map.get(c, {}).get('name', ''))
+            )
             returns_df['industry'] = returns_df['code'].map(lambda c: industry_map.get(c, {}).get('industry', ''))
             # 主线直接从 INDUSTRY_TO_SECTOR 派生, 避免主线名维护成第三处真源
             returns_df['mainline'] = returns_df['industry'].map(lambda i: INDUSTRY_TO_SECTOR.get(i, ('', ''))[1])
@@ -4220,6 +4322,9 @@ def iter_main(limit_pool_provider=None, plate_provider=None):
            "quality": quality_report, "prices": price_df}
 
     print("\n[6/6] 生成可视化...")
+    report_quality_metadata = _report_quality_metadata(
+        quality_report, name_resolution, limit_pool_result
+    )
     generate_html(
         ml_strength=ml_strength, sub_strength=sub_strength,
         ml_ma=ml_ma, sub_ma=sub_returns,
@@ -4232,7 +4337,8 @@ def iter_main(limit_pool_provider=None, plate_provider=None):
         plates=plates_data, classified_df=classified, return_leaders=return_leaders,
         mainline_ladder=mainline_ladder, sub_leaderboard=sub_leaderboard,
         sub_tracks=sub_tracks, price_df=price_df, focus_df=focus_df,
-        focus_catalysts=focus_catalysts
+        focus_catalysts=focus_catalysts, data_quality=report_quality_metadata,
+        ladder_review=ladder_review, name_resolution=name_resolution,
     )
 
     yield {"legacy_stage": "report", "target_date": latest_date,
@@ -4241,10 +4347,19 @@ def iter_main(limit_pool_provider=None, plate_provider=None):
     # 7.5 站点发布: 归档当日报告 + 决策看板 + 重建首页 (产品化: 首屏先给结论 + 可翻历史)
     try:
         from publish_site import publish
-        # 首屏结论 = 择时档位 (纯规则, main 已有全部入参, 与报告内 3005 行同口径)
+        try:
+            from data_sources.market_regime import classify_market_regime
+            _regime = classify_market_regime(
+                advance_decline, sentiment_df, echelon,
+                quality_ok=not bool(advance_decline.get('ad_incomplete')),
+            )
+        except Exception:
+            _regime = {}
         try:
             from market_stance import classify_market_stance
-            _stance = classify_market_stance(advance_decline, sentiment_df, echelon)
+            _stance = classify_market_stance(
+                advance_decline, sentiment_df, echelon, regime=_regime
+            )
         except Exception:
             _stance = {}
         # 实时数据可信度: 核心输入 (涨跌家数 + 情绪序列) 是否到位, 供首屏徽标显示
@@ -4271,6 +4386,9 @@ def iter_main(limit_pool_provider=None, plate_provider=None):
                 timing=_timing, advance_decline=advance_decline,
                 sentiment_df=sentiment_df, echelon=echelon, report_date=latest_date,
                 focus_df=focus_df, focus_catalysts=focus_catalysts,
+                regime=_regime,
+                data_quality=report_quality_metadata,
+                ladder_review=ladder_review,
             )
             _dashboard_html = generate_dashboard_html(_ctx)
         except Exception as e:

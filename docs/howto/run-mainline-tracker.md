@@ -39,7 +39,7 @@ python tools/audit_data_integrity.py --quiet
 - 涨停：`akshare_em` -> `eastmoney_push2ex` -> `ths_limit_up`。
 - 跌停：`akshare_em` -> `eastmoney_push2ex`。
 
-主源返回可信非空数据后不会调用后续来源；空结果会继续尝试备用源。每行的 `source` 字段和 `data/fetch_status.csv` 中的聚合 `source`（例如 `ZT:eastmoney_push2ex|DT:akshare_em`）记录实际来源，失败原因摘要保存在状态消息中。东财请求带有限速和重试，同花顺仅用于涨停池。
+空结果会继续尝试备用源。主源返回可信非空数据后，还会用东财直连做交叉校验，但不会拼接两套股票集合。若数量差超过 `max(3, 5%)`，或二板以上股票代码/高度不一致，结果标记为 `partial` 并在报告数据可信度区域展示差异；副源不可用只记录 warning。每行的 `source` 字段和 `data/fetch_status.csv` 中的聚合 `source`（例如 `ZT:akshare_em|CHECK:ZT:eastmoney_push2ex`）记录实际来源，失败原因摘要保存在状态消息中。东财请求带有限速和重试，同花顺仅用于涨停池。
 
 若涨停或跌停任一核心池不可用，结果会标记为 `partial` 或 `failed`，不会用空值伪装成完整成功；质量闸门会阻断报告生成、站点发布和邮件发送。沪深北代码统一保存为 `shxxxxxx`、`szxxxxxx` 或 `bjxxxxxx`。
 
@@ -54,6 +54,12 @@ python src/主线强度追踪.py
 - `output/主线强度追踪.html`：可视化投研报告。
 - `data/market_data_quality.json`：统一价格缓存的质量闸门结果。
 - `*.csv`：涨停、概念分类、价格和情绪缓存。
+
+报告首屏按“统一市场状态 → 数据可信度 → 连板梯队 → 今日动作 → 明日情形 → 股票池”展示。择时雷达、主线矩阵、Top30 和历史证据折叠在“展开研究证据”区域。
+
+股票名称按“当日涨跌停池 → 沪深北 universe → 最近分类名称 → 行业缓存”解析，并在首屏展示冲突数量。股票池按代码去重，角色互斥为“空间龙头、低位补涨、趋势中军”，ST、`*ST` 和退市名称会被过滤。
+
+场景概率只从当前历史缓存动态计算；达到最小样本数才显示 `样本 N · T+3新高 xx%`，否则显示“样本不足”。规则模板不再写死历史胜率。AI 不可用时报告会明确显示“分析方式: 规则降级”和原因，不会伪装成 AI 结果。
 
 ## 配置邮件
 

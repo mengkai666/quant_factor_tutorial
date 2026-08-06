@@ -121,6 +121,28 @@ def test_limit_pool_all_sources_failed_is_failed():
     assert result.status is FetchStatus.FAILED
 
 
+def test_limit_pool_nonempty_crosscheck_marks_source_drift_partial():
+    primary = pd.DataFrame({
+        "code": [f"sz{index:06d}" for index in range(1, 101)],
+        "limit_count": [1] * 100,
+    })
+    secondary = pd.DataFrame({
+        "code": [f"sz{index:06d}" for index in range(1, 111)],
+        "limit_count": [1] * 110,
+    })
+    provider = LimitPoolProvider(
+        fetch_zt=lambda _date: primary,
+        fetch_dt=lambda _date: pd.DataFrame(),
+        zt_crosscheck=("eastmoney_push2ex", lambda _date: secondary),
+    )
+
+    result = provider.fetch_day("2026-08-05")
+
+    assert result.status is FetchStatus.PARTIAL
+    assert "count drift" in result.message
+    assert result.data["code"].nunique() == 100
+
+
 def test_limit_pool_default_chain_contains_direct_and_independent_fallbacks():
     provider = LimitPoolProvider()
 

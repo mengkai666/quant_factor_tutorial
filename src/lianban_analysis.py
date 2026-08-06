@@ -37,22 +37,26 @@ from data_sources.models import normalize_code
 import hashlib
 import requests  # type: ignore
 
-def get_trading_dates(n_days=120):
+def get_trading_dates(n_days=120, now=None):
     """生成候选日期列表"""
+    now = now or datetime.now()
     try:
         import akshare as ak
         trade_df = ak.tool_trade_date_hist_sina()
         trade_dates = trade_df['trade_date'].astype(str).apply(lambda x: x.replace('-', '')).tolist()
         
-        today_str = datetime.now().strftime('%Y%m%d')
-        past_dates = [d for d in trade_dates if d <= today_str]
+        today_str = now.strftime('%Y%m%d')
+        past_dates = [
+            d for d in trade_dates
+            if d < today_str or (d == today_str and now.hour >= 16)
+        ]
         if len(past_dates) >= n_days:
             # 返回最近 n_days 个交易日，按从新到旧排序
             return past_dates[-n_days:][::-1]
     except Exception as e:
         print(f"  ⚠️ 获取交易日历失败, 回退到工作日历: {e}")
         
-    today = datetime.now()
+    today = now if now.hour >= 16 else now - timedelta(days=1)
     dates = []
     for i in range(int(n_days * 2.0)):
         d = today - timedelta(days=i)
@@ -216,11 +220,32 @@ def _load_cache():
         return {}, {}
 
 
+def _trim_future_cache(zt_data, dt_data, latest_closed_date):
+    """Drop rows newer than the closed-day boundary before selecting history."""
+    cutoff = str(latest_closed_date).replace('-', '')
+    return (
+        {date: frame for date, frame in zt_data.items() if str(date).replace('-', '') <= cutoff},
+        {date: frame for date, frame in dt_data.items() if str(date).replace('-', '') <= cutoff},
+    )
+
+
 def fetch_zt_pool_data(n_trading_days=120):
     """获取最近 n 个交易日的涨停+跌停股池数据 (同步版)"""
     cached_zt, cached_dt = _load_cache()
     cached_dates = set(cached_zt.keys())
     candidate_dates = get_trading_dates(n_trading_days)
+    cache_changed = False
+    if candidate_dates:
+        before_zt_dates = set(cached_zt)
+        before_dt_dates = set(cached_dt)
+        cached_zt, cached_dt = _trim_future_cache(
+            cached_zt, cached_dt, candidate_dates[0]
+        )
+        cache_changed = (
+            set(cached_zt) != before_zt_dates
+            or set(cached_dt) != before_dt_dates
+        )
+        cached_dates = set(cached_zt.keys())
     dates_to_fetch = [d for d in candidate_dates if d not in cached_dates]
 
     print(f"\n📥 正在获取最近 {n_trading_days} 个交易日的涨停/跌停数据...")
@@ -274,7 +299,7 @@ def fetch_zt_pool_data(n_trading_days=120):
     except Exception as e:
         print(f"    [debug] 跌停池批量抓取异常: {e}")
 
-    if new_dates_fetched > 0:
+    if new_dates_fetched > 0 or cache_changed:
         _save_cache(zt_data, dt_data)
         print(f"\n  💾 缓存已更新: 新增 {new_dates_fetched} 天, 共 {len(zt_data)} 天")
 
