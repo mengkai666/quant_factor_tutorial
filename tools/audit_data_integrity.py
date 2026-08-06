@@ -77,6 +77,18 @@ def check_conflict_markers(path: str) -> list:
 def audit_price(price_df: pd.DataFrame, dates: list, quiet: bool) -> list:
     """价格缓存: 陈旧副本 + 覆盖缺口 + 重复/异常值。返回缺陷描述列表。"""
     defects = []
+    raw_column = 'close_raw' if 'close_raw' in price_df.columns else 'close'
+    qfq_column = 'close_qfq' if 'close_qfq' in price_df.columns else None
+    if raw_column not in price_df.columns:
+        defects.append('价格缓存缺少 close_raw（且无旧 close 兼容列）')
+        print('  ❌ 价格缓存缺少 close_raw，无法进行原始价格审计')
+        return defects
+    if 'close_raw' in price_df.columns:
+        missing_contract = [c for c in ('trade_status', 'source_raw', 'source_qfq')
+                            if c not in price_df.columns]
+        if missing_contract:
+            defects.append(f'价格缓存缺少 canonical 字段 {", ".join(missing_contract)}')
+            print(f'  ❌ canonical 字段缺失: {", ".join(missing_contract)}')
     counts = price_df['date'].value_counts()
     baseline = int(counts.median())
     print(f'\n  📊 价格缓存: {len(price_df)} 行, {len(dates)} 交易日, '
@@ -95,9 +107,12 @@ def audit_price(price_df: pd.DataFrame, dates: list, quiet: bool) -> list:
     else:
         print(f'  ✅ 覆盖率: 全部 {len(dates)} 天 ≥{MIN_COVERAGE_RATIO:.0%} 基准')
 
-    # --- 2. 陈旧副本 (逐股 close 身份比对) ---
-    close_by_date = {d: dict(zip(price_df.loc[price_df['date'] == d, 'code'],
-                                 price_df.loc[price_df['date'] == d, 'close']))
+    # --- 2. 陈旧副本 (逐股 close_raw 身份比对; close 仅为迁移期兼容) ---
+    compare_df = price_df
+    if 'trade_status' in compare_df.columns:
+        compare_df = compare_df[compare_df['trade_status'].astype(str).str.lower().eq('traded')]
+    close_by_date = {d: dict(zip(compare_df.loc[compare_df['date'] == d, 'code'],
+                                 compare_df.loc[compare_df['date'] == d, raw_column]))
                      for d in dates}
     stale, ratios = [], []
     for prev, cur in zip(dates, dates[1:]):
@@ -113,7 +128,7 @@ def audit_price(price_df: pd.DataFrame, dates: list, quiet: bool) -> list:
             stale.append((cur, prev, identical, len(common), ratio))
     if stale:
         defects.append(f'价格缓存陈旧副本 {len(stale)} 天')
-        print(f'  ❌ 陈旧副本 {len(stale)} 天 (close 与前一交易日逐股相同):')
+        print(f'  ❌ 陈旧副本 {len(stale)} 天 ({raw_column} 与前一交易日逐股相同):')
         for cur, prev, ident, tot, r in stale:
             print(f'       {cur} ≈ {prev}: {ident}/{tot} ({r:.1%})')
     else:
@@ -122,16 +137,23 @@ def audit_price(price_df: pd.DataFrame, dates: list, quiet: bool) -> list:
               f'阈值 {STALE_IDENTITY_THRESHOLD:.0%})')
 
     # --- 3. 值域与重复 ---
-    bad_close = (pd.to_numeric(price_df['close'], errors='coerce').fillna(0) <= 0).sum()
+    bad_close = (pd.to_numeric(price_df[raw_column], errors='coerce').fillna(0) <= 0).sum()
+    bad_qfq = ((pd.to_numeric(price_df[qfq_column], errors='coerce').fillna(0) <= 0).sum()
+               if qfq_column else 0)
     dup = int(price_df.duplicated(subset=['code', 'date']).sum())
     if bad_close:
-        defects.append(f'价格缓存 close<=0 或空值 {bad_close} 行')
-        print(f'  ❌ close<=0/空值: {bad_close} 行')
+        defects.append(f'价格缓存 {raw_column}<=0 或空值 {bad_close} 行')
+        print(f'  ❌ {raw_column}<=0/空值: {bad_close} 行')
+    if bad_qfq:
+        defects.append(f'价格缓存 close_qfq<=0 或空值 {bad_qfq} 行')
+        print(f'  ❌ close_qfq<=0/空值: {bad_qfq} 行')
     if dup:
         defects.append(f'价格缓存 (code,date) 重复 {dup} 行')
         print(f'  ❌ (code,date) 重复: {dup} 行')
-    if not bad_close and not dup:
-        print('  ✅ 值域与唯一性: close 全 >0, (code,date) 无重复')
+    if not bad_close and not bad_qfq and not dup:
+        print(f'  ✅ 值域与唯一性: {raw_column}'
+              + ('/close_qfq' if qfq_column else '')
+              + ' 全 >0, (code,date) 无重复')
 
     return defects
 

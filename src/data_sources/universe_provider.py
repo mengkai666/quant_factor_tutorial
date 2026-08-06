@@ -116,8 +116,22 @@ class UniverseProvider:
             _pick_column(frame, _COLUMN_ALIASES["list_date"]), errors="coerce"
         ).dt.strftime("%Y-%m-%d").fillna("")
         industries = _pick_column(frame, _COLUMN_ALIASES["industry"]).fillna("").astype(str)
-        expected_suffix = "." + exchange
-        codes = [normalize_code(value + expected_suffix) for value in raw.str.extract(r"(\d{6})", expand=False)]
+        expected_exchange = exchange.lower()
+        codes = []
+        for position, value in raw.items():
+            text = str(value).strip()
+            if not text or text.lower() in {"nan", "none"}:
+                raise ValueError(f"{exchange} row {position}: empty stock code")
+            try:
+                code = normalize_code(text)
+            except ValueError as exc:
+                raise ValueError(f"{exchange} row {position}: invalid stock code {value!r}") from exc
+            if not code.startswith(expected_exchange):
+                raise ValueError(
+                    f"{exchange} row {position}: stock code {value!r} belongs to {code[:2].upper()}, "
+                    f"not {exchange}"
+                )
+            codes.append(code)
         return pd.DataFrame({
             "code": codes,
             "raw_code": [code[2:] for code in codes],

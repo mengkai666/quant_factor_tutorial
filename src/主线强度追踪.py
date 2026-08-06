@@ -1113,6 +1113,23 @@ def is_ad_incomplete(up, down):
         return True
 
 
+def _ad_record_has_data(record):
+    """Return whether an A/D record contains a real (possibly one-sided) snapshot."""
+    if not isinstance(record, dict):
+        return False
+    try:
+        return float(record.get('up', 0) or 0) + float(record.get('down', 0) or 0) > 0
+    except (TypeError, ValueError):
+        return False
+
+
+def _ad_record_is_complete(record):
+    """Return whether an A/D record is wide enough for publication/calibration."""
+    if not _ad_record_has_data(record):
+        return False
+    return not is_ad_incomplete(record.get('up', 0), record.get('down', 0))
+
+
 def generate_rebound_analysis(advance_decline, sentiment_df, echelon, market_state=None):
     """数据驱动的反弹分类复盘: 市场定性 + 主动/跟随主线 + 高度断层预警。
 
@@ -4455,7 +4472,7 @@ def main():
                 advance_decline['used_fallback'] = True
                 advance_decline['source_chain'].append('tencent')
                 advance_decline['warnings'].extend(errors)
-                if (ad_meta.get('up', 0) or 0) > 0 and (ad_meta.get('up', 0) + ad_meta.get('down', 0)) >= MIN_MARKET_BREADTH and coverage_pct >= 90:
+                if ((ad_meta.get('up', 0) or 0) + (ad_meta.get('down', 0) or 0)) >= MIN_MARKET_BREADTH and coverage_pct >= 90:
                     advance_decline.update({
                         'up': ad_meta['up'],
                         'down': ad_meta['down'],
@@ -4489,7 +4506,7 @@ def main():
         _ad_auth = MarketSentimentFactor()._load_ad_cache() or {}
         _lk = str(latest_date).replace('-', '')
         _rec = _ad_auth.get(_lk)
-        if _rec and _rec.get('up', 0) > 0:
+        if _ad_record_is_complete(_rec):
             _old_up = advance_decline.get('up', 0)
             _old_dn = advance_decline.get('down', 0)
             if _rec['up'] != _old_up or _rec['down'] != _old_dn:
@@ -4684,7 +4701,9 @@ def main():
         latest_row_idx = sentiment_df.index[-1]
         if str(sentiment_df.at[latest_row_idx, '日期']) == str(latest_date):
             # pyrefly: ignore [bad-argument-type]
-            if float(sentiment_df.at[latest_row_idx, 'up'] or 0) == 0 and advance_decline.get('up', 0) > 0:
+            if (float(sentiment_df.at[latest_row_idx, 'up'] or 0)
+                    + float(sentiment_df.at[latest_row_idx, 'down'] or 0) == 0
+                    and _ad_record_has_data(advance_decline)):
                 sentiment_df.at[latest_row_idx, 'up'] = advance_decline['up']
                 sentiment_df.at[latest_row_idx, 'down'] = advance_decline['down']
                 sentiment_df.at[latest_row_idx, 'zt'] = advance_decline.get('zt', 0)
@@ -4725,7 +4744,7 @@ def main():
                 continue
             d_key = d_str.replace('-', '')
             res = ad_map.get(d_key)
-            if d_str == latest_key and not (res and res.get('up', 0) > 0):
+            if d_key == latest_key and not _ad_record_is_complete(res):
                 # 价格缓存还没有最新日的数据, 保留盘中 advance_decline 实时值
                 continue
             idx_list = sentiment_df.index[sentiment_df['日期'] == d_str]
@@ -4737,7 +4756,7 @@ def main():
             cur_up = float(sentiment_df.at[idx, 'up'])
             # pyrefly: ignore [bad-argument-type]
             cur_dn = float(sentiment_df.at[idx, 'down'])
-            if res and res.get('up', 0) > 0:
+            if _ad_record_is_complete(res):
                 new_up, new_dn = res['up'], res['down']
                 if new_up != cur_up or new_dn != cur_dn:
                     sentiment_df.at[idx, 'up'] = new_up
@@ -4825,10 +4844,9 @@ def main():
         if isinstance(row, dict)
     }
     _universe_codes.discard('')
-    _universe_total = len(_universe_codes) or int(market_meta.get('market_total') or 0)
-    _universe_covered = len(_universe_codes) or min(
-        int(market_meta.get('market_total') or 0), len(market_meta.get('records') or [])
-    )
+    _declared_market_total = int(market_meta.get('market_total') or 0)
+    _universe_total = max(_declared_market_total, len(_universe_codes))
+    _universe_covered = min(len(_universe_codes), _universe_total)
     _price_raw_codes = {
         normalize_stock_code(code)
         for code in (_latest_price_rows.loc[_latest_price_rows['close_raw'].notna(), 'code'].tolist()
@@ -4842,14 +4860,8 @@ def main():
     }
     _price_qfq_codes.discard('')
     _price_total = max(_universe_total, 1)
-    _price_raw_covered = (
-        len(_price_raw_codes & _universe_codes)
-        if _universe_codes else min(len(_price_raw_codes), _price_total)
-    )
-    _price_qfq_covered = (
-        len(_price_qfq_codes & _universe_codes)
-        if _universe_codes else min(len(_price_qfq_codes), _price_total)
-    )
+    _price_raw_covered = len(_price_raw_codes & _universe_codes) if _universe_codes else 0
+    _price_qfq_covered = len(_price_qfq_codes & _universe_codes) if _universe_codes else 0
     _today_limit_rows = _today_classified_base
     _classified_limit_count = int(_limit_pool_reconciliation.get('classified_count') or 0)
     _authoritative_limit_count = int(_limit_pool_reconciliation.get('authoritative_count') or 0)

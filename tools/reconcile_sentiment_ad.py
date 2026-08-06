@@ -63,14 +63,18 @@ def main():
         if d not in window_dates:
             continue
         res = ad_map.get(d)
-        if not res or res.get('up', 0) <= 0:
+        if res is None:
             if row['up'] == 0 and row['down'] == 0:
                 uncovered.append(d)
             continue
         new_up, new_dn = float(res['up']), float(res['down'])
+        if new_up + new_dn <= 0:
+            if row['up'] == 0 and row['down'] == 0:
+                uncovered.append(d)
+            continue
         # 真源本身也要过宽度体检 (价格缓存该日若只有部分股票, A/D 同样不可信)
         if new_up + new_dn < MIN_MARKET_BREADTH:
-            thin.append((d, int(new_up + new_dn)))
+            thin.append((d, int(new_up + new_dn), int(new_up), int(new_dn)))
             continue
         if new_up != row['up'] or new_dn != row['down']:
             changes.append((idx, d, row['up'], row['down'], new_up, new_dn))
@@ -83,7 +87,9 @@ def main():
     else:
         print('  ✅ 窗口内 up/down 与真源一致, 无需更新')
     if thin:
-        print(f'  ⚠️ 真源自身宽度不足, 已跳过 (需先回补价格缓存): {thin}')
+        print('  ⚠️ 真源自身宽度不足, 已跳过 (需先回补价格缓存):')
+        for d, total, up, down in thin:
+            print(f'    {d}: up={up} down={down} (合计 {total}) [thin]')
     if uncovered:
         print(f'  ⚠️ 价格缓存尚未覆盖: {uncovered}')
 
