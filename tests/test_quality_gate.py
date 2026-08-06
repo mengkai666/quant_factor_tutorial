@@ -176,3 +176,41 @@ def test_quality_gate_rejects_malformed_dates_unknown_codes_and_missing_status()
     missing_status.loc[0, "trade_status"] = ""
     with pytest.raises(DataQualityError, match="trade_status"):
         MarketDataQualityGate().enforce(_universe(), missing_status, "2026-08-05")
+
+
+
+def test_quality_gate_reports_historical_fetch_degradation_as_warning():
+    historical = FetchResult.failed(
+        dataset="limit_pool", date="2026-08-04", source="provider",
+        message="history unavailable",
+    )
+
+    report = MarketDataQualityGate().validate(
+        _universe(), _prices(), "2026-08-05", fetch_results=[historical]
+    )
+
+    assert report.ok
+    assert any(issue.code == "historical_fetch_status" for issue in report.warnings)
+
+
+def test_quality_gate_checks_limit_pool_rows_and_plate_attribution():
+    limit_pool = FetchResult.success(
+        dataset="limit_pool", date="2026-08-05", source="fixture",
+        expected_count=2, actual_count=2,
+        data=pd.DataFrame([
+            {"pool_type": "ZT", "code": "sz000001", "limit_count": 0},
+            {"pool_type": "ZT", "code": "sz000001", "limit_count": 2},
+        ]),
+    )
+    plates = FetchResult.zero(
+        dataset="plates", date="2026-08-05", source="fixture",
+    )
+
+    report = MarketDataQualityGate().validate(
+        _universe(), _prices(), "2026-08-05", [limit_pool, plates]
+    )
+
+    assert not report.ok
+    assert "limit_pool_duplicate" in {issue.code for issue in report.critical}
+    assert "limit_pool_count" in {issue.code for issue in report.critical}
+    assert "fetch_status" in {issue.code for issue in report.warnings}

@@ -146,6 +146,16 @@ class LimitPoolProvider:
             self.status_store.record(result)
         return result
 
+    def fetch_history(self, dates: Iterable[str]) -> dict[str, FetchResult]:
+        """Fetch every requested day through the same ZT/DT orchestration as the latest day."""
+        results = {}
+        for date in dates:
+            canonical = str(date).replace("/", "-")
+            if len(canonical) == 8 and canonical.isdigit():
+                canonical = f"{canonical[:4]}-{canonical[4:6]}-{canonical[6:8]}"
+            results[canonical] = self.fetch_day(canonical)
+        return results
+
     def _fetch_pool(self, sources: list[SourceFetcher], date: str, pool_type: str):
         messages = []
         had_failure = False

@@ -17,6 +17,26 @@ def test_limit_pool_successful_empty_response_is_zero():
     assert result.actual_count == 0
 
 
+def test_limit_pool_history_uses_same_provider_and_records_each_day():
+    seen = []
+
+    def fetch_zt(date):
+        seen.append(("ZT", date))
+        return pd.DataFrame({"代码": ["600000"], "名称": ["浦发银行"], "连板数": [1]})
+
+    def fetch_dt(date):
+        seen.append(("DT", date))
+        return pd.DataFrame()
+
+    provider = LimitPoolProvider(fetch_zt=fetch_zt, fetch_dt=fetch_dt)
+    history = provider.fetch_history(["2026-08-04", "2026-08-05"])
+
+    assert list(history) == ["2026-08-04", "2026-08-05"]
+    assert all(item.status is FetchStatus.SUCCESS for item in history.values())
+    assert seen == [("ZT", "2026-08-04"), ("DT", "2026-08-04"),
+                    ("ZT", "2026-08-05"), ("DT", "2026-08-05")]
+
+
 def test_limit_pool_timeout_with_other_side_zero_is_partial_not_zero():
     provider = LimitPoolProvider(
         fetch_zt=lambda _: (_ for _ in ()).throw(TimeoutError("timeout")),

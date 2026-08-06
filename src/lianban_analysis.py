@@ -37,31 +37,35 @@ from data_sources.models import normalize_code
 import hashlib
 import requests  # type: ignore
 
-def get_trading_dates(n_days=120, now=None):
-    """生成候选日期列表"""
+def get_trading_dates(n_days=120, now=None, calendar_provider=None):
+    """Return the latest closed trading days from the canonical calendar provider."""
+    from data_sources.calendar_provider import CalendarProvider
+    from paths import CALENDAR_CACHE, FETCH_STATUS_CACHE
+    from data_sources.fetch_status import FetchStatusStore
+
     now = now or datetime.now()
+    calendar = calendar_provider or CalendarProvider(
+        cache_path=CALENDAR_CACHE,
+        status_store=FetchStatusStore(FETCH_STATUS_CACHE),
+    )
     try:
-        import akshare as ak
-        trade_df = ak.tool_trade_date_hist_sina()
-        trade_dates = trade_df['trade_date'].astype(str).apply(lambda x: x.replace('-', '')).tolist()
-        
-        today_str = now.strftime('%Y%m%d')
-        past_dates = [
-            d for d in trade_dates
-            if d < today_str or (d == today_str and now.hour >= 16)
-        ]
-        if len(past_dates) >= n_days:
-            # 返回最近 n_days 个交易日，按从新到旧排序
-            return past_dates[-n_days:][::-1]
-    except Exception as e:
-        print(f"  ⚠️ 获取交易日历失败, 回退到工作日历: {e}")
-        
+        today = now.strftime("%Y-%m-%d")
+        dates = calendar.trading_days("1900-01-01", today)
+        if now.hour < calendar.close_hour and today in dates:
+            dates.remove(today)
+        if len(dates) >= n_days:
+            return [day.replace("-", "") for day in dates[-n_days:]][::-1]
+        if dates:
+            return [day.replace("-", "") for day in dates[::-1]]
+    except Exception as exc:
+        print(f"  ⚠️ 获取交易日历失败, 回退到工作日历: {exc}")
+
     today = now if now.hour >= 16 else now - timedelta(days=1)
     dates = []
     for i in range(int(n_days * 2.0)):
         d = today - timedelta(days=i)
         if d.weekday() < 5:
-            dates.append(d.strftime('%Y%m%d'))
+            dates.append(d.strftime("%Y%m%d"))
     return dates
 
 
@@ -159,6 +163,7 @@ def _fetch_multi_channel(date_str):
 # ============================================================
 # 缓存路径统一由 paths.py 定义 (单一真源)
 from paths import ZT_CACHE_FILE as CACHE_FILE
+from paths import LIMIT_POOL_META_CACHE
 IS_GITHUB_ACTIONS = os.environ.get('GITHUB_ACTIONS') == 'true'
 CACHE_MAX_SIZE_MB = 10 if IS_GITHUB_ACTIONS else 100  # CI: 10MB, 本地: 100MB
 
@@ -229,86 +234,71 @@ def _trim_future_cache(zt_data, dt_data, latest_closed_date):
     )
 
 
-def fetch_zt_pool_data(n_trading_days=120):
-    """获取最近 n 个交易日的涨停+跌停股池数据 (同步版)"""
+def fetch_zt_pool_data(n_trading_days=120, provider=None, calendar_provider=None):
+    """Fetch historical ZT/DT pools through the canonical LimitPoolProvider."""
+    from data_sources.fetch_status import FetchStatusStore
+    from data_sources.limit_pool_provider import LimitPoolProvider
+    from data_sources.models import FetchStatus
+    from paths import FETCH_STATUS_CACHE
+
     cached_zt, cached_dt = _load_cache()
-    cached_dates = set(cached_zt.keys())
-    candidate_dates = get_trading_dates(n_trading_days)
+    if calendar_provider is None:
+        candidate_dates = get_trading_dates(n_trading_days)
+    else:
+        candidate_dates = get_trading_dates(n_trading_days, calendar_provider=calendar_provider)
     cache_changed = False
     if candidate_dates:
         before_zt_dates = set(cached_zt)
         before_dt_dates = set(cached_dt)
-        cached_zt, cached_dt = _trim_future_cache(
-            cached_zt, cached_dt, candidate_dates[0]
-        )
-        cache_changed = (
-            set(cached_zt) != before_zt_dates
-            or set(cached_dt) != before_dt_dates
-        )
-        cached_dates = set(cached_zt.keys())
-    dates_to_fetch = [d for d in candidate_dates if d not in cached_dates]
+        cached_zt, cached_dt = _trim_future_cache(cached_zt, cached_dt, candidate_dates[0])
+        cache_changed = set(cached_zt) != before_zt_dates or set(cached_dt) != before_dt_dates
 
-    print(f"\n📥 正在获取最近 {n_trading_days} 个交易日的涨停/跌停数据...")
-    
+    provider = provider or LimitPoolProvider(status_store=FetchStatusStore(FETCH_STATUS_CACHE))
+    dates_to_fetch = [d for d in candidate_dates if d not in cached_zt]
     zt_data = dict(cached_zt)
     dt_data = dict(cached_dt)
     new_dates_fetched = 0
-    
-    if dates_to_fetch:
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        max_workers = min(10, len(dates_to_fetch))
-        print(f"  🚀 启动多渠道并发获取，需要抓取 {len(dates_to_fetch)} 天...")
-        
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_date = {executor.submit(_fetch_multi_channel, d): d for d in dates_to_fetch}
-            for future in as_completed(future_to_date):
-                date_str = future_to_date[future]
-                try:
-                    d_str, zt_df, dt_df, success = future.result(timeout=15)
-                    if success and zt_df is not None:
-                        zt_data[d_str] = zt_df  # type: ignore
-                        new_dates_fetched += 1
-                        
-                        max_lb = int(zt_df['连板数'].max()) if '连板数' in zt_df.columns else 0
-                        max_name = ''
-                        if max_lb > 0:
-                            max_row = zt_df.loc[zt_df['连板数'].idxmax()]
-                            max_name = max_row.get('名称', '')
-                        zt_count = len(zt_df)
-                        print(f"  🆕 {d_str} | 涨停{zt_count:>3} | 最高{max_lb}板({max_name})")
-                    else:
-                        print(f"  ⚠️ {d_str} | 无数据或获取失败")
-                except Exception as e:
-                    print(f"  ⚠️ {date_str} | 并发获取异常: {e}")
+    fetched_results = []
 
-    # 补充跌停数据 (仅akshare最近~30天可用)
-    try:
-        import akshare as ak
-        dates_need_dt = [d for d in sorted(zt_data.keys(), reverse=True)[:30] 
-                         if d not in dt_data or dt_data[d].empty]
-        if dates_need_dt:
-            print(f"\n  📉 补充跌停数据 ({len(dates_need_dt)} 天)...")
-            for d in dates_need_dt:
-                try:
-                    df_dt = ak.stock_zt_pool_dtgc_em(date=d)
-                    if df_dt is not None and not df_dt.empty:
-                        dt_data[d] = df_dt  # type: ignore
-                except Exception as e:
-                    print(f"    [debug] 跌停池抓取失败 {d}: {e}")
-                time.sleep(0.3)
-    except Exception as e:
-        print(f"    [debug] 跌停池批量抓取异常: {e}")
+    print(f"\n📥 正在获取最近 {n_trading_days} 个交易日的涨停/跌停数据...")
+    if dates_to_fetch:
+        results = provider.fetch_history([f"{d[:4]}-{d[4:6]}-{d[6:8]}" for d in dates_to_fetch])
+        for date_str, result in results.items():
+            fetched_results.append(result)
+            canonical = date_str.replace("-", "")
+            data = result.data
+            if data is None:
+                print(f"  ⚠️ {canonical} | {result.status.value}: {result.message}")
+                continue
+            data = data.copy()
+            zt_part = data[data["pool_type"] == "ZT"] if "pool_type" in data.columns else pd.DataFrame()
+            dt_part = data[data["pool_type"] == "DT"] if "pool_type" in data.columns else pd.DataFrame()
+            if result.status in {FetchStatus.SUCCESS, FetchStatus.ZERO} or not zt_part.empty:
+                zt_data[canonical] = pd.DataFrame({
+                    "代码": zt_part["code"].astype(str).str[2:].tolist(),
+                    "名称": zt_part["name"].astype(str).tolist(),
+                    "连板数": pd.to_numeric(zt_part["limit_count"], errors="coerce").fillna(1).astype(int).tolist(),
+                })
+            if result.status in {FetchStatus.SUCCESS, FetchStatus.ZERO} or not dt_part.empty:
+                dt_data[canonical] = pd.DataFrame({
+                    "代码": dt_part["code"].astype(str).str[2:].tolist(),
+                    "名称": dt_part["name"].astype(str).tolist(),
+                })
+            if result.status in {FetchStatus.SUCCESS, FetchStatus.ZERO, FetchStatus.PARTIAL}:
+                new_dates_fetched += 1
+                print(f"  🆕 {canonical} | {result.status.value} | {result.actual_count} 条 | {result.source}")
+            else:
+                print(f"  ⚠️ {canonical} | {result.status.value}: {result.message}")
+
+        _save_limit_pool_metadata(fetched_results)
 
     if new_dates_fetched > 0 or cache_changed:
         _save_cache(zt_data, dt_data)
         print(f"\n  💾 缓存已更新: 新增 {new_dates_fetched} 天, 共 {len(zt_data)} 天")
 
-    # 筛选需要的日期范围
-    all_dates = sorted(zt_data.keys(), reverse=True)
-    selected_dates = set(all_dates[:n_trading_days])
-    final_zt = {d: zt_data[d] for d in zt_data if d in selected_dates}
-    final_dt = {d: dt_data.get(d, pd.DataFrame()) for d in final_zt}
-
+    selected_dates = [d for d in candidate_dates if d in zt_data][:n_trading_days]
+    final_zt = {d: zt_data[d] for d in selected_dates}
+    final_dt = {d: dt_data.get(d, pd.DataFrame()) for d in selected_dates}
     return final_zt, final_dt
 
 
@@ -381,6 +371,46 @@ def _save_cache(zt_data, dt_data):
         cache_df = cache_df.drop_duplicates()
         cache_df.to_csv(CACHE_FILE, index=False, encoding='utf-8-sig')
         _trim_cache(CACHE_FILE, date_col='日期')
+
+
+def _save_limit_pool_metadata(results):
+    """Persist source/status provenance without changing the legacy cache schema."""
+    if not results:
+        return
+    columns = [
+        'date', 'pool_type', 'source', 'status', 'expected_count',
+        'actual_count', 'fetched_at', 'fallback_level', 'message', 'run_id',
+    ]
+    existing = pd.DataFrame(columns=columns)
+    if os.path.exists(LIMIT_POOL_META_CACHE):
+        try:
+            existing = pd.read_csv(LIMIT_POOL_META_CACHE, dtype=str).fillna('')
+        except Exception:
+            existing = pd.DataFrame(columns=columns)
+    rows = []
+    for result in results:
+        data = result.data if isinstance(result.data, pd.DataFrame) else pd.DataFrame()
+        for pool_type in ('ZT', 'DT'):
+            part = data[data.get('pool_type', pd.Series(dtype=str)).astype(str) == pool_type]
+            source = result.source or ''
+            fallback_level = 'primary'
+            if '|CHECK:' in source or 'eastmoney_push2ex' in source or 'ths_limit_up' in source:
+                fallback_level = 'fallback_or_crosscheck'
+            rows.append({
+                'date': str(result.date),
+                'pool_type': pool_type,
+                'source': source,
+                'status': result.status.value,
+                'expected_count': str(result.expected_count),
+                'actual_count': str(len(part)),
+                'fetched_at': result.finished_at.isoformat(),
+                'fallback_level': fallback_level,
+                'message': result.message,
+                'run_id': result.run_id,
+            })
+    merged = pd.concat([existing, pd.DataFrame(rows, columns=columns)], ignore_index=True)
+    merged = merged.drop_duplicates(['date', 'pool_type'], keep='last')
+    merged.to_csv(LIMIT_POOL_META_CACHE, index=False, encoding='utf-8-sig')
 
 
 def judge_sentiment(ad_ratio):

@@ -68,7 +68,7 @@ class MarketSentimentFactor:
         }
         payload = "&".join([f"{k}={v}" for k, v in params.items()])
         try:
-            response = requests.post(self.api_url, data=payload, headers=self.headers, verify=False, timeout=10)
+            response = requests.post(self.api_url, data=payload, headers=self.headers, timeout=10)
             res_json = response.json()
             nums = res_json.get("nums", {})
             if not nums:

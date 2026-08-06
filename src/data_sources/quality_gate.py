@@ -247,12 +247,53 @@ class MarketDataQualityGate:
     def _append_fetch_issues(self, report: QualityReport,
                              fetch_results: list[FetchResult] | None) -> QualityReport:
         for result in fetch_results or []:
-            if result.date == report.target_date and result.status in self.CRITICAL_FETCH_STATUS:
-                severity = "warning" if result.dataset == "plates" else "critical"
+            is_target = result.date == report.target_date
+            status_needs_attention = result.status in self.CRITICAL_FETCH_STATUS
+            # A successful HTTP response with no plate rows is still not useful
+            # for attribution, so surface it explicitly instead of treating it
+            # as an invisible ZERO result.
+            if result.dataset == "plates" and result.status == FetchStatus.ZERO:
+                status_needs_attention = True
+            if status_needs_attention:
+                severity = "warning" if result.dataset == "plates" or not is_target else "critical"
+                code = "fetch_status" if is_target else "historical_fetch_status"
                 report.issues.append(QualityIssue(
-                    severity, "fetch_status",
-                    f"{result.dataset} is {result.status.value}: {result.message}",
+                    severity, code,
+                    f"{result.dataset} on {result.date} is {result.status.value}: {result.message}",
                 ))
+
+            if result.dataset == "limit_pool" and isinstance(result.data, pd.DataFrame):
+                data = result.data
+                if not data.empty and {"pool_type", "code"}.issubset(data.columns):
+                    duplicate_count = int(data.duplicated(["pool_type", "code"]).sum())
+                    if duplicate_count:
+                        severity = "critical" if is_target else "warning"
+                        report.issues.append(QualityIssue(
+                            severity, "limit_pool_duplicate",
+                            f"limit_pool on {result.date} has duplicate pool/code rows {duplicate_count}",
+                            duplicate_count,
+                        ))
+                if "limit_count" in data.columns and not data.empty:
+                    counts = pd.to_numeric(data["limit_count"], errors="coerce")
+                    invalid_count = int((counts.isna() | (counts < 1)).sum())
+                    if invalid_count:
+                        severity = "critical" if is_target else "warning"
+                        report.issues.append(QualityIssue(
+                            severity, "limit_pool_count",
+                            f"limit_pool on {result.date} has invalid limit_count rows {invalid_count}",
+                            invalid_count,
+                        ))
+
+            if result.dataset == "plates" and isinstance(result.data, pd.DataFrame):
+                data = result.data
+                if not data.empty and "plate_name" in data.columns:
+                    missing_names = int(data["plate_name"].fillna("").astype(str).str.strip().eq("").sum())
+                    if missing_names:
+                        report.issues.append(QualityIssue(
+                            "warning", "plate_attribution",
+                            f"plates on {result.date} has missing plate names {missing_names}",
+                            missing_names,
+                        ))
         return report
 
     def enforce(self, universe: pd.DataFrame, prices: pd.DataFrame, target_date: str,

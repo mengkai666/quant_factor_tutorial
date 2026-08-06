@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from datetime import datetime, timezone
 from pathlib import Path
 import os
 import tempfile
@@ -59,6 +60,49 @@ class FetchStatusStore:
             message=row["message"], started_at=pd.Timestamp(row["started_at"]).to_pydatetime(),
             finished_at=pd.Timestamp(row["finished_at"]).to_pydatetime(), run_id=row["run_id"],
         )
+
+    def results(self, datasets=None) -> list[FetchResult]:
+        """Return recorded statuses as FetchResult objects for quality reporting."""
+        df = self.read()
+        if datasets is not None:
+            df = df[df["dataset"].isin(set(datasets))]
+        results = []
+        for _, row in df.iterrows():
+            try:
+                status = FetchStatus(row["status"])
+            except ValueError:
+                continue
+            started_at = self._parse_datetime(row["started_at"])
+            finished_at = self._parse_datetime(row["finished_at"]) or started_at
+            results.append(FetchResult(
+                dataset=row["dataset"], date=row["date"], source=row["source"],
+                status=status, expected_count=self._parse_int(row["expected_count"]),
+                actual_count=self._parse_int(row["actual_count"]), scope=row["scope"],
+                message=row["message"],
+                started_at=started_at, finished_at=finished_at,
+                run_id=row["run_id"],
+            ))
+        return results
+
+    @staticmethod
+    def _parse_int(value) -> int:
+        try:
+            return int(float(value)) if str(value).strip() else 0
+        except (TypeError, ValueError):
+            return 0
+
+    @staticmethod
+    def _parse_datetime(value) -> datetime:
+        try:
+            parsed = pd.to_datetime(value, errors="coerce")
+            if pd.isna(parsed):
+                return datetime.now(timezone.utc)
+            result = parsed.to_pydatetime()
+            if result.tzinfo is None:
+                return result.replace(tzinfo=timezone.utc)
+            return result
+        except (TypeError, ValueError, OverflowError):
+            return datetime.now(timezone.utc)
 
     def _atomic_write(self, df: pd.DataFrame) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
