@@ -21,11 +21,14 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 # 缓存文件路径 (集中在 paths.py, 单一真源)
-from paths import ZT_CACHE_FILE, PRICE_CACHE as PRICE_CACHE_FILE
+from paths import (
+    SECURITY_MASTER_CACHE,
+    ZT_CACHE_FILE,
+    PRICE_CACHE as PRICE_CACHE_FILE,
+)
+from report_logic import normalize_stock_code
 
 
-# up+down 低于该值时，A/D 只能作为低置信观察，不能覆盖完整本地行情。
-# 该阈值与主流程、审计脚本保持同义，覆盖沪深北全 A 股。
 MIN_MARKET_BREADTH = 4000
 
 
@@ -78,13 +81,31 @@ class MarketSentimentFactor:
             if not nums:
                 return None
 
+            def _count(key):
+                value = nums.get(key)
+                if value in (None, ""):
+                    return None
+                try:
+                    return int(value)
+                except (TypeError, ValueError):
+                    return None
+
+            up = _count("SZJS")
+            down = _count("XDJS")
+            if up is None or down is None:
+                return None
+            total = up + down
             return {
                 "date": day.replace('-', ''),
-                "up": int(nums.get("SZJS", 0)),
-                "down": int(nums.get("XDJS", 0)),
-                "zt": int(nums.get("ZT", 0)),
-                "dt": int(nums.get("DT", 0)),
-                "ad_ratio": float(nums.get("SZJS", 0)) / (int(nums.get("SZJS", 0)) + int(nums.get("XDJS", 0))) if (int(nums.get("SZJS", 0)) + int(nums.get("XDJS", 0))) > 0 else 0.5
+                "up": up,
+                "down": down,
+                "flat": None,
+                "zt": _count("ZT") or 0,
+                "dt": _count("DT") or 0,
+                "ad_ratio": up / total if total > 0 else None,
+                "ad_available": total > 0,
+                "ad_status": "api" if total > 0 else "empty",
+                "source": "longhu_api",
             }
         except Exception as e:
             print(f"  ⚠️ LongHu API 请求失败: {e}")
@@ -115,12 +136,7 @@ class MarketSentimentFactor:
             return {}
 
     def _load_ad_cache(self):
-        """从 canonical 价格缓存计算 A/D 家数比。
-
-        A/D 必须使用未复权收盘价 ``close_raw``，并排除停牌行；``close``
-        仅作为旧缓存迁移期的兼容字段，不能覆盖新契约。结果额外保留
-        eligible/flat，供报表判断覆盖宽度和降级状态。
-        """
+        """从价格缓存计算A/D家数比 (带内部内存缓存)"""
         if self._ad_cache is not None:
             return self._ad_cache
 
@@ -129,54 +145,161 @@ class MarketSentimentFactor:
             return {}
 
         try:
+            # 性能优化：避免 pivot (在大数据集上极慢), 改用 groupby + shift。
+            # 价格缓存可能同时存在 raw/qfq/legacy 三种历史口径；这里先按
+            # code/date 折叠成一条“可计算价格”，并明确记录实际口径，避免
+            # legacy_mixed 被误报成 raw/qfq 权威数据。
             df = pd.read_csv(PRICE_CACHE_FILE, dtype={'code': str, 'date': str})
             df = filter_completed_rows(df, 'date')
-            if 'code' not in df.columns or 'date' not in df.columns:
-                raise ValueError('价格缓存缺少 code/date')
+            if df.empty or 'code' not in df.columns or 'date' not in df.columns:
+                self._ad_cache = {}
+                return {}
 
-            # 新缓存的正式字段。旧 close 只用于兼容历史缓存，不作为生产写入口径。
-            price_col = 'close_raw' if 'close_raw' in df.columns else 'close'
-            if price_col not in df.columns:
-                raise ValueError('价格缓存缺少 close_raw（且无旧 close 兼容列）')
-            df[price_col] = pd.to_numeric(df[price_col], errors='coerce')
-            df['code'] = df['code'].astype(str).str.strip()
-            df = df[df['code'].ne('') & df[price_col].gt(0)].copy()
+            df['code'] = df['code'].map(normalize_stock_code)
+            df['date_clean'] = (
+                df['date'].astype(str).str.strip().str.replace('-', '', regex=False).str[:8]
+            )
+            df = df[
+                df['code'].ne('')
+                & df['date_clean'].str.fullmatch(r'\d{8}', na=False)
+            ].copy()
+            if df.empty:
+                self._ad_cache = {}
+                return {}
+
+            # 若缓存明确提供交易状态，只允许实际成交证券进入市场宽度。
+            # 旧缓存没有该列时保持兼容，避免把停牌股的静态价格误算为上涨/下跌。
             if 'trade_status' in df.columns:
                 status = df['trade_status'].fillna('').astype(str).str.lower().str.strip()
-                # 只将明确 traded 计入涨跌统计；旧缓存没有状态列时兼容为全量可交易。
                 df = df[status.eq('traded')].copy()
 
-            df['date_clean'] = df['date'].str.replace('-', '')
-            df = df[df['date_clean'].str.fullmatch(r'\d{8}', na=False)]
-            df = (df.sort_values(['code', 'date_clean'])
-                    .drop_duplicates(['code', 'date_clean'], keep='last'))
+            universe_codes = set()
+            market_scope_source = 'price_cache'
+            scope_inferred = True
+            same_cache_dir = (
+                os.path.dirname(os.path.abspath(SECURITY_MASTER_CACHE))
+                == os.path.dirname(os.path.abspath(PRICE_CACHE_FILE))
+            )
+            if same_cache_dir and os.path.exists(SECURITY_MASTER_CACHE):
+                try:
+                    master = pd.read_csv(SECURITY_MASTER_CACHE, dtype=str)
+                    if 'code' in master.columns:
+                        universe_codes = {
+                            normalize_stock_code(code)
+                            for code in master['code'].tolist()
+                            if normalize_stock_code(code)
+                        }
+                        if universe_codes:
+                            market_scope_source = 'security_master'
+                            scope_inferred = False
+                except Exception as exc:
+                    print(f"  ⚠️ 证券主数据加载失败(A/D继续使用缓存范围): {exc}")
+            if universe_codes:
+                df = df[df['code'].isin(universe_codes)].copy()
+            else:
+                universe_codes = set(df['code'].unique())
 
-            # 在每只股票内计算涨跌幅
-            df['prev_close'] = df.groupby('code')[price_col].shift(1)
-            df['chg_pct'] = (df[price_col] / df['prev_close'] - 1) * 100
-            df = df[(df['prev_close'] > 0) & df['chg_pct'].notna()]
+            if df.empty or not universe_codes:
+                self._ad_cache = {}
+                return {}
+
+            for column in ('close_raw', 'close_qfq', 'close_legacy', 'close'):
+                if column not in df.columns:
+                    df[column] = pd.NA
+                df[column] = pd.to_numeric(df[column], errors='coerce')
+
+            def choose_price(row):
+                for column, basis in (
+                    ('close_raw', 'raw'),
+                    ('close_qfq', 'qfq_fallback'),
+                    ('close_legacy', 'legacy_mixed'),
+                    ('close', 'legacy_mixed'),
+                ):
+                    value = row[column]
+                    if pd.notna(value) and float(value) > 0:
+                        return float(value), basis
+                return None, 'unavailable'
+
+            selected = df.apply(choose_price, axis=1, result_type='expand')
+            selected.columns = ['ad_close', 'ad_basis']
+            df[['ad_close', 'ad_basis']] = selected
+            df = df.dropna(subset=['ad_close']).copy()
+            if df.empty:
+                self._ad_cache = {}
+                return {}
+
+            # 同一股票同一日期可能同时有 raw/qfq/legacy 记录。优先 raw，
+            # 其次 qfq，最后 legacy；这样补齐不会被旧行覆盖。
+            basis_rank = {'raw': 0, 'qfq_fallback': 1, 'legacy_mixed': 2}
+            df['_basis_rank'] = df['ad_basis'].map(basis_rank).fillna(9)
+            df = (
+                df.sort_values(['code', 'date_clean', '_basis_rank'])
+                .drop_duplicates(['code', 'date_clean'], keep='first')
+                .sort_values(['code', 'date_clean'])
+            )
+
+            # 在每只股票内计算涨跌幅。只有价格行恰好来自全市场相邻交易日，
+            # 才允许进入 A/D；不能把更早日期冒充上一交易日。
+            market_dates = sorted(df['date_clean'].dropna().unique())
+            expected_previous = {
+                market_dates[index]: market_dates[index - 1]
+                for index in range(1, len(market_dates))
+            }
+            df['prev_date_clean'] = df.groupby('code')['date_clean'].shift(1)
+            df['prev_close'] = df.groupby('code')['ad_close'].shift(1)
+            df['prev_basis'] = df.groupby('code')['ad_basis'].shift(1)
+            df['expected_prev_date'] = df['date_clean'].map(expected_previous)
+            df = df[
+                df['prev_date_clean'].eq(df['expected_prev_date'])
+            ].copy()
+
+            df['chg_pct'] = (df['ad_close'] / df['prev_close'] - 1) * 100
+            df = df.dropna(subset=['ad_close', 'prev_close', 'chg_pct'])
 
             # 按日统计涨跌家数
             daily_up = df[df['chg_pct'] > 0.1].groupby('date_clean').size()
             daily_dn = df[df['chg_pct'] < -0.1].groupby('date_clean').size()
-            daily_eligible = df.groupby('date_clean').size()
 
             all_dates = df['date_clean'].unique()
             result = {}
             for d in all_dates:
                 up = int(daily_up.get(d, 0))
                 dn = int(daily_dn.get(d, 0))
-                eligible = int(daily_eligible.get(d, 0))
-                total = up + dn
+                day_rows = df[df['date_clean'] == d]
+                market_covered = int(day_rows['code'].nunique())
+                flat = max(0, market_covered - up - dn)
+                market_total = len(universe_codes) if not scope_inferred else None
+                bases = set(day_rows['ad_basis'].dropna().astype(str)) | set(
+                    day_rows['prev_basis'].dropna().astype(str)
+                )
+                if 'legacy_mixed' in bases:
+                    basis = 'legacy_mixed'
+                elif 'qfq_fallback' in bases:
+                    basis = 'qfq_fallback'
+                else:
+                    basis = 'raw'
                 result[d] = {
                     'date': d,
                     'up': up,
                     'down': dn,
-                    'eligible': eligible,
-                    'flat': max(0, eligible - up - dn),
-                    'breadth_total': total,
-                    'quality': 'ok' if total >= MIN_MARKET_BREADTH else 'degraded',
-                    'ad_ratio': up / total if total > 0 else 0.5
+                    'flat': flat,
+                    'ad_ratio': up / (up + dn) if (up + dn) > 0 else 0.5
+                    , 'market_covered': market_covered
+                    , 'raw_market_covered': market_covered
+                    , 'market_total': market_total
+                    , 'coverage_pct': round(market_covered / market_total * 100, 2) if market_total else None
+                    , 'market_scope_source': market_scope_source
+                    , 'scope_inferred': scope_inferred
+                    , 'price_basis': basis
+                    , 'source': 'price_cache'
+                    , 'source_timestamp': str(d)
+                    , 'legacy_mixed': basis == 'legacy_mixed'
+                    , 'used_fallback': basis != 'raw'
+                    , 'eligible': market_covered
+                    , 'breadth_total': up + dn
+                    , 'quality': 'ok' if up + dn >= MIN_MARKET_BREADTH else 'degraded'
+                    , 'ad_available': up + dn > 0
+                    , 'ad_status': 'available' if up + dn > 0 else 'missing'
                 }
 
             self._ad_cache = result
@@ -195,62 +318,68 @@ class MarketSentimentFactor:
         ad = self._load_ad_cache()
 
         all_dates = sorted(set(zt.keys()) | set(ad.keys()))
-        latest_day = get_latest_date().strftime("%Y%m%d")
-        latest_api = None
-        if latest_day in all_dates:
-            latest_api = self._fetch_longhu_sentiment(get_latest_date().strftime("%Y-%m-%d"))
-
         data = []
+        latest_date = get_latest_date()
+        today_str = latest_date.strftime("%Y%m%d")
         for d in all_dates:
             z_data = zt.get(d, {'limit_up': 0, 'limit_down': 0})
-            local_ad = ad.get(d)
-            a_data = local_ad or {
-                'up': 0, 'down': 0, 'eligible': 0, 'flat': 0,
-                'breadth_total': 0, 'quality': 'missing', 'ad_ratio': 0.5,
-            }
-            ad_source = 'price_cache_raw' if local_ad else 'none'
-            limit_source = 'limit_cache' if d in zt else 'none'
+            limit_source = 'zt_cache' if d in zt else 'unavailable'
+            a_data = ad.get(d, {
+                'up': None, 'down': None, 'flat': None, 'ad_ratio': None,
+                'ad_available': False, 'ad_status': 'missing',
+                'source': 'unavailable',
+            })
 
-            # LongHu 只补本地缺失/宽度不足，不能覆盖完整 canonical 本地真源。
-            if d == latest_day and latest_api:
-                api_date = str(latest_api.get('date') or '').replace('-', '')
-                if api_date and api_date != d:
-                    latest_api = None
-                else:
-                    api_width = int(latest_api.get('up', 0) or 0) + int(latest_api.get('down', 0) or 0)
-                    local_width = int((local_ad or {}).get('breadth_total', 0) or 0)
-                    if not local_ad or local_width < MIN_MARKET_BREADTH:
-                        if api_width > local_width and api_width > 0:
-                            a_data = {
-                                'up': int(latest_api.get('up', 0) or 0),
-                                'down': int(latest_api.get('down', 0) or 0),
-                                'eligible': api_width,
-                                'flat': 0,
-                                'breadth_total': api_width,
-                                'quality': 'ok' if api_width >= MIN_MARKET_BREADTH else 'degraded',
-                                'ad_ratio': float(latest_api.get('ad_ratio', 0.5) or 0.5),
-                            }
-                            ad_source = 'longhu_fallback'
-                    # 涨停缓存已有记录时保持本地口径；只有本地没有涨跌停数才补 API。
-                    if d not in zt and (int(latest_api.get('zt', 0) or 0) or int(latest_api.get('dt', 0) or 0)):
-                        z_data = {
-                            'limit_up': int(latest_api.get('zt', 0) or 0),
-                            'limit_down': int(latest_api.get('dt', 0) or 0),
+            # API 仅作为当日本地数据不足时的补充。完整的全市场价格缓存优先，
+            # 且 API 必须明确返回同一报告日，防止陈旧快照覆盖本地宽度。
+            if d == today_str:
+                api_data = self._fetch_longhu_sentiment(latest_date.strftime("%Y-%m-%d"))
+                api_date = str((api_data or {}).get('date') or '').replace('-', '')[:8]
+                if api_data and api_date == d:
+                    local_width = max(
+                        int(a_data.get('breadth_total') or 0),
+                        int(a_data.get('market_covered') or 0),
+                        int(a_data.get('eligible') or 0),
+                    )
+                    api_up = int(api_data.get('up') or 0)
+                    api_down = int(api_data.get('down') or 0)
+                    api_flat = api_data.get('flat')
+                    api_width = api_up + api_down + (
+                        int(api_flat) if api_flat not in (None, '') else 0
+                    )
+                    if local_width < MIN_MARKET_BREADTH and api_width > local_width:
+                        a_data = {
+                            'up': api_up, 'down': api_down,
+                            'flat': api_flat, 'ad_ratio': api_data.get('ad_ratio'),
+                            'ad_available': api_data.get('ad_available', api_width > 0),
+                            'ad_status': api_data.get('ad_status', 'api'),
+                            'source': api_data.get('source', 'longhu_api'),
+                            'eligible': api_width,
+                            'breadth_total': api_up + api_down,
+                            'quality': 'ok' if api_width >= MIN_MARKET_BREADTH else 'degraded',
                         }
-                        limit_source = 'longhu_fallback'
+                    if d not in zt:
+                        z_data = {
+                            'limit_up': int(api_data.get('zt') or 0),
+                            'limit_down': int(api_data.get('dt') or 0),
+                        }
+                        limit_source = api_data.get('source', 'longhu_api')
 
             # 纯粹基于 A/D 比例 (Breadth only)
-            raw_score = a_data['ad_ratio']
+            raw_score = a_data.get('ad_ratio')
 
             data.append({
                 'date': d,
                 'limit_up': z_data['limit_up'],
                 'limit_down': z_data['limit_down'],
-                'market_up': a_data['up'],
-                'market_down': a_data['down'],
-                'ad_ratio': a_data['ad_ratio'],
-                'ad_source': ad_source,
-                'ad_eligible': a_data.get('eligible', 0),
+                'market_up': a_data.get('up'),
+                'market_down': a_data.get('down'),
+                'market_flat': a_data.get('flat'),
+                'ad_ratio': a_data.get('ad_ratio'),
+                'ad_available': bool(a_data.get('ad_available', a_data.get('ad_ratio') is not None)),
+                'ad_status': a_data.get('ad_status', 'available' if a_data.get('ad_ratio') is not None else 'missing'),
+                'ad_source': a_data.get('source', 'unknown'),
+                'ad_eligible': a_data.get('eligible', a_data.get('market_covered', 0)),
                 'ad_total': a_data.get('breadth_total', 0),
                 'ad_quality': a_data.get('quality', 'missing'),
                 'limit_source': limit_source,
@@ -298,6 +427,10 @@ class MarketSentimentFactor:
                     row = matches.iloc[-1]
 
         score = row['score_ema']
+        score_available = pd.notna(score)
+        ad_available = bool(row.get('ad_available', False))
+        if not score_available:
+            score = 0.5
 
         # 5级情绪层级分类 (基于AD比例优化的阈值)
         if score >= 0.8:
@@ -324,15 +457,19 @@ class MarketSentimentFactor:
         # 关键修复: 仅当精确匹配到日期时才返回真实的 market_up/market_down
         # 否则返回0, 让调用方知道需要从API补全
         return {
-            'score': float(score),
+            'score': float(score) if score_available else 0.5,
             'level': lvl,
             'sentiment': sentiment,
             'interpretation': interpretation,
-            'ad_ratio': float(row['ad_ratio']) if exact_match else 0.5,
-            'market_up': int(row['market_up']) if exact_match else 0,
-            'market_down': int(row['market_down']) if exact_match else 0,
+            'ad_ratio': float(row['ad_ratio']) if exact_match and pd.notna(row['ad_ratio']) else None,
+            'market_up': int(row['market_up']) if exact_match and pd.notna(row['market_up']) else None,
+            'market_down': int(row['market_down']) if exact_match and pd.notna(row['market_down']) else None,
+            'market_flat': int(row['market_flat']) if exact_match and pd.notna(row.get('market_flat')) else None,
             'date': row['date'],
-            'status': 'OK' if exact_match else 'fallback'
+            'status': 'OK' if exact_match and ad_available else ('fallback' if not exact_match else 'missing'),
+            'ad_available': exact_match and ad_available,
+            'ad_status': row.get('ad_status', 'missing'),
+            'ad_source': row.get('ad_source', 'unknown')
         }
 
     def _fallback_result(self, reason):
@@ -341,7 +478,13 @@ class MarketSentimentFactor:
             'level': 3,
             'sentiment': f'中性 ({reason})',
             'interpretation': '暂无有效数据，使用中性参考值',
-            'status': '降级'
+            'status': '降级',
+            'ad_available': False,
+            'ad_status': 'unavailable',
+            'market_up': None,
+            'market_down': None,
+            'market_flat': None,
+            'ad_ratio': None
         }
 
     def get_factor_name(self):

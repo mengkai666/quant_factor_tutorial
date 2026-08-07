@@ -46,11 +46,18 @@ def _to_int(x, default=0):
 
 
 def _compute_ad_ratio(advance_decline):
-    """从 advance_decline 直接算 ad_ratio, 是最权威口径."""
-    up = _to_int(advance_decline.get('up', 0))
-    down = _to_int(advance_decline.get('down', 0))
+    """从 advance_decline 直接算 breadth_ratio；缺失时保留 None。"""
+    def _optional_int(value):
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return None
+        return _to_int(value)
+
+    up = _optional_int(advance_decline.get('up'))
+    down = _optional_int(advance_decline.get('down'))
+    if up is None or down is None:
+        return None, up, down
     total = up + down
-    if total < 1000:  # 家数残缺时保守回落 0.5
+    if total < 1000:
         return None, up, down
     return up / total, up, down
 
@@ -244,7 +251,7 @@ def _classify_scene(curr_h, prev_h, ad, ladder, zt, dt, pressure_5d,
     )
 
 
-def _historical_outcome(scene, historical_stats, *, compact_missing_label=False):
+def _historical_outcome(scene, historical_stats):
     """读取显式注入的同型统计；没有统计时不生成伪造胜率。"""
     try:
         from report_logic import binomial_confidence_interval
@@ -253,8 +260,7 @@ def _historical_outcome(scene, historical_stats, *, compact_missing_label=False)
     stats = historical_stats if isinstance(historical_stats, dict) else {}
     row = stats.get(scene)
     if not isinstance(row, dict):
-        message = "同型样本未加载，暂不输出固定胜率。" if compact_missing_label else "历史同型样本未加载，暂不输出固定胜率。"
-        return None, message, 0, None
+        return None, "同型样本未加载，暂不输出固定胜率。", 0, None
     sample_size = _to_int(row.get("sample_size"), 0)
     rate = row.get("t3_hit_rate", row.get("t1_hit_rate"))
     try:
@@ -262,8 +268,7 @@ def _historical_outcome(scene, historical_stats, *, compact_missing_label=False)
     except (TypeError, ValueError):
         rate = None
     if rate is None or not 0 <= rate <= 1 or sample_size <= 0:
-        message = "同型样本未加载，暂不输出固定胜率。" if compact_missing_label else "历史同型样本未加载，暂不输出固定胜率。"
-        return None, message, 0, None
+        return None, "同型样本未加载，暂不输出固定胜率。", 0, None
     successes = row.get("t3_hits", row.get("t1_hits", row.get("successes", row.get("hits"))))
     estimated = False
     if successes is None:
@@ -324,11 +329,9 @@ def generate_timing_signal(sentiment_df, advance_decline, echelon=None, historic
         )
 
         historical_stats = historical_stats if historical_stats is not None else advance_decline.get('historical_stats')
-        win_rate, historical_tail, win_rate_sample_size, win_rate_ci = _historical_outcome(
-            scene,
-            historical_stats,
-            compact_missing_label=sentiment_df is not None,
-        )
+        win_rate, historical_tail, win_rate_sample_size, win_rate_ci = _historical_outcome(scene, historical_stats)
+        if win_rate_sample_size == 0 and sentiment_df is None:
+            historical_tail = f"历史{historical_tail}"
 
         # 因子摘要
         factor_line = (

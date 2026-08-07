@@ -109,15 +109,56 @@ def apply_price_cache_breadth_calibration(
     if up <= 0 or up + down <= 0:
         return result
 
+    # 价格缓存记录里的 market_covered 可能来自旧格式，缺失或为 0 时，
+    # 至少要保留 up+down 这部分已经被逐股验证的覆盖数；若记录还包含
+    # 平盘样本，则允许它覆盖更大的有效覆盖范围，但不能小于涨跌家数之和。
+    raw_market_covered = source.get("market_covered")
+    try:
+        source_covered = max(0, _int(raw_market_covered))
+    except (TypeError, ValueError):
+        source_covered = 0
+    market_covered = max(up + down, source_covered)
+
+    previous_primary = str(result.get("primary_source") or "").strip()
+    had_prior_source = any(
+        str(item or "").strip() not in {"", "price_cache"}
+        for item in source_chain
+    )
+
     result.update({
         "up": up,
         "down": down,
         "flat": None,
-        "market_covered": up + down,
+        "market_covered": market_covered,
+        "market_total": max(
+            0,
+            _int(source.get("market_total") or result.get("market_total") or 0),
+        ),
         "primary_source": "price_cache",
         "calibration_source": "price_cache",
         "ad_reconciliation_enabled": False,
     })
+    market_total = int(result.get("market_total") or 0)
+    result["market_covered"] = market_covered
+    result["coverage_pct"] = round(
+        market_covered / market_total * 100, 2
+    ) if market_total else 0.0
+    price_basis = str(source.get("price_basis") or "raw")
+    result["price_basis"] = price_basis
+    result["legacy_mixed"] = price_basis == "legacy_mixed"
+    result["used_fallback"] = bool(
+        source.get("used_fallback")
+        or price_basis != "raw"
+        or (previous_primary and previous_primary != "price_cache")
+        or had_prior_source
+    )
+    warnings = list(result.get("warnings") or [])
+    if price_basis == "legacy_mixed":
+        result["source_chain"].append("legacy_price_fallback")
+        warnings.append("A/D 使用 legacy_mixed 历史价格口径，结果仅作降级观察")
+    elif price_basis == "qfq_fallback":
+        warnings.append("A/D 使用 qfq_fallback 价格口径，未完全使用 raw")
+    result["warnings"] = list(dict.fromkeys(str(item) for item in warnings if str(item).strip()))
     if "price_cache" not in source_chain:
         source_chain.append("price_cache")
     timestamp = source_timestamp or source.get("source_timestamp") or source.get("date")
@@ -126,7 +167,7 @@ def apply_price_cache_breadth_calibration(
     date_text = str(source.get("date") or "").replace("-", "")
     if len(date_text) == 8 and date_text.isdigit():
         result["data_timestamp"] = (
-            f"{date_text}（价格缓存逐股收盘价计算，平盘不计入 A/D 有效覆盖）"
+            f"{date_text}（价格缓存逐股收盘价计算，口径={price_basis}，平盘不计入 A/D 有效覆盖）"
         )
     return result
 
@@ -368,14 +409,30 @@ def binomial_confidence_interval(
     }
 
 
-def compute_market_ratios(up: Any, down: Any, market_total: Any | None = None) -> dict[str, Any]:
-    """同时计算上涨占比和涨跌比，禁止把两者都展示成 A/D。"""
-    up_i = max(0, _int(up))
-    down_i = max(0, _int(down))
-    observed = up_i + down_i
-    total = _int(market_total, observed) if market_total is not None else observed
-    breadth = up_i / observed if observed else None
-    ad = up_i / down_i if down_i else (math.inf if up_i else None)
+def compute_market_ratios(
+    up: Any,
+    down: Any,
+    market_total: Any | None = None,
+    *,
+    preserve_missing: bool = False,
+) -> dict[str, Any]:
+    """同时计算上涨占比和涨跌比，且不把缺失值伪装成 0。"""
+    def _optional_int(value: Any) -> int | None:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return None
+        return max(0, _int(value))
+
+    up_i = _optional_int(up) if preserve_missing else max(0, _int(up))
+    down_i = _optional_int(down) if preserve_missing else max(0, _int(down))
+    complete = up_i is not None and down_i is not None
+    observed = (up_i + down_i) if complete else None
+    total = _int(market_total, observed or 0) if market_total is not None else (observed or 0)
+    breadth = up_i / observed if complete and observed else None
+    ad = (
+        up_i / down_i
+        if complete and down_i
+        else (math.inf if complete and up_i else None)
+    )
     return {
         "up": up_i,
         "down": down_i,
@@ -383,7 +440,7 @@ def compute_market_ratios(up: Any, down: Any, market_total: Any | None = None) -
         "market_total": total,
         "breadth_ratio": breadth,
         "advance_decline_ratio": ad,
-        "valid": observed >= 1000,
+        "valid": bool(complete and observed >= 1000),
     }
 
 
@@ -414,8 +471,10 @@ def assess_data_quality(
 ) -> dict[str, Any]:
     """生成可展示、可审计的数据质量摘要。"""
     total = max(0, _int(market_total))
-    covered = max(0, _int(market_covered))
+    raw_covered = max(0, _int(market_covered))
+    covered = min(raw_covered, total)
     coverage_pct = round(covered / total * 100, 1) if total else 0.0
+    raw_coverage_pct = round(raw_covered / total * 100, 1) if total else (100.0 if raw_covered else 0.0)
     missing = dedupe_quality_messages(missing_fields)
     error_list = dedupe_quality_messages(errors)
     # 兼容直接调用本函数的旧代码：没有传入市场前缀时，不把“前缀未知”误判成
@@ -437,9 +496,9 @@ def assess_data_quality(
 
     # 覆盖率必须来自去重后的有效行情记录。涨跌家数是分类统计，不能直接
     # 代替覆盖数；一旦覆盖数超过证券池总数，整份报告进入阻断态。
-    if total > 0 and covered > total:
+    if raw_covered > total:
         error_list.append(
-            f"COVERAGE_OVERFLOW: 有效覆盖数 {covered} 超过市场总数 {total}"
+            f"COVERAGE_OVERFLOW: 有效覆盖数 {raw_covered} 超过市场总数 {total}"
         )
 
     # 腾讯逐股源同时返回涨、跌、平三类时，三类之和必须与 covered 对账。
@@ -513,7 +572,9 @@ def assess_data_quality(
         "trade_day": bool(trade_day),
         "market_total": total,
         "market_covered": covered,
+        "raw_market_covered": raw_covered,
         "coverage_pct": coverage_pct,
+        "raw_coverage_pct": raw_coverage_pct,
         "primary_source": primary_source or "未声明",
         "fallback_source": fallback_source or "未配置",
         "used_fallback": bool(used_fallback),
@@ -557,7 +618,11 @@ def build_market_state(
         reasons.append("报告日期不是交易日")
     if quality.get("ad_incomplete"):
         reasons.append("全市场涨跌家数未完整就位")
-    if quality.get("coverage_pct", 0) > 100:
+    raw_covered = quality.get("raw_market_covered", quality.get("market_covered", 0))
+    market_total = quality.get("market_total", 0)
+    if quality.get("coverage_pct", 0) > 100 or (
+        market_total and _number(raw_covered, 0) > _number(market_total, 0)
+    ):
         reasons.append("有效覆盖数超过市场总数")
     if quality.get("market_total", 0) and coverage < 98:
         reasons.append(f"覆盖率 {coverage:.1f}%")
@@ -918,58 +983,118 @@ def compute_ladder_metrics(
     current_code_count = len(current_by_code)
     previous_sample_size = len(previous_heights)
     previous_code_count = len(previous_by_code)
-    transition_match_count = sum(1 for code in previous_by_code if code in current_by_code)
+    transition_match_count = sum(
+        1 for code in previous_by_code if code in current_by_code
+    )
     transition_coverage_pct = (
         round(transition_match_count / previous_code_count * 100, 2)
         if previous_code_count else None
     )
-    transition_rows = []
-    for code, previous in previous_by_code.items():
-        current = current_by_code.get(code)
-        prev_height = _height(previous)
-        curr_height = _height(current) if current is not None else 0
-        transition_rows.append((prev_height, curr_height))
-
-    advancement: dict[str, dict[str, Any]] = {}
-    for level in range(1, 6):
-        rows = [(prev, curr) for prev, curr in transition_rows if prev == level]
-        successes = sum(1 for prev, curr in rows if curr >= level + 1)
-        advancement[f"{level}_to_{level + 1}"] = _rate_result(
-            successes, len(rows), f"{level}板→{level + 1}板晋级率"
-        )
-    broken_trials = [(prev, curr) for prev, curr in transition_rows if prev >= 2]
-    broken_successes = sum(1 for prev, curr in broken_trials if curr <= prev)
-    broken_rate = _rate_result(broken_successes, len(broken_trials), "昨日连板池今日断板率")
-
-    # 对外单独给出三个常用口径，避免把首板、昨日连板和全涨停池混成一个分母。
-    first_board = advancement.get("1_to_2", _rate_result(0, 0, "首板→二板晋级率"))
-    streak_rows = [(prev, curr) for prev, curr in transition_rows if prev >= 2]
-    streak_successes = sum(1 for prev, curr in streak_rows if curr >= prev + 1)
-    streak_promotion = _rate_result(streak_successes, len(streak_rows), "昨日连板池晋级率（高度≥2）")
-    streak_current_count = sum(1 for prev, curr in streak_rows if curr >= 2)
-    all_limit_up = _rate_result(
-        sum(1 for _prev, curr in transition_rows if curr >= 1),
-        len(transition_rows),
-        "昨日涨停池次日再板率",
+    highest_board_count = (
+        sum(1 for height in heights if height == max_height)
+        if max_height else 0
     )
-
-    highest_board_count = sum(1 for height in heights if height == max_height) if max_height else 0
     leader_concentration_pct = (
         round(highest_board_count / current_sample_size * 100, 2)
         if current_sample_size else None
     )
     if not current_sample_size:
-        sample_status = "not_ready"
-        sample_reason = "当前有效梯队为空"
+        sample_status, sample_reason = "not_ready", "当前有效梯队为空"
     elif not previous_code_count:
-        sample_status = "insufficient"
-        sample_reason = "昨日梯队缺少可匹配证券代码"
+        sample_status, sample_reason = "insufficient", "昨日梯队缺少可匹配证券代码"
     elif transition_match_count < 3 or (transition_coverage_pct or 0) < 80:
-        sample_status = "conditional"
-        sample_reason = "前后日匹配样本不足或覆盖率低于80%"
+        sample_status, sample_reason = "conditional", "前后日匹配样本不足或覆盖率低于80%"
     else:
-        sample_status = "ok"
-        sample_reason = "前后日梯队匹配样本和覆盖率满足最低要求"
+        sample_status, sample_reason = "ok", "前后日梯队匹配样本和覆盖率满足最低要求"
+    transition_rows = []
+
+    def _transition_status(current: Any, previous_height: int) -> str:
+        """Classify a prior ladder member without treating absence as a break."""
+        if current is None:
+            return "missing"
+        if not isinstance(current, dict):
+            return "missing"
+        status_text = " ".join(
+            str(current.get(key) or "").strip().lower()
+            for key in ("status", "状态", "reason", "原因")
+        )
+        if any(token in status_text for token in ("suspend", "停牌", "暂停交易")):
+            return "suspended"
+        if any(token in status_text for token in ("limit_down", "跌停", "dt")):
+            return "limit_down"
+        curr_height = _height(current)
+        if curr_height > previous_height:
+            return "promoted"
+        if curr_height == previous_height:
+            return "continued"
+        if curr_height > 0:
+            return "broken_positive"
+        return "broken_negative"
+
+    for code, previous in previous_by_code.items():
+        prev_height = _height(previous)
+        current = current_by_code.get(code)
+        curr_height = _height(current) if current is not None else 0
+        transition_rows.append({
+            "code": code,
+            "previous_height": prev_height,
+            "current_height": curr_height,
+            "status": _transition_status(current, prev_height),
+        })
+
+    transition_status_counts = {
+        status: sum(1 for row in transition_rows if row["status"] == status)
+        for status in (
+            "promoted", "continued", "broken_positive", "broken_negative",
+            "limit_down", "suspended", "missing",
+        )
+    }
+    observed_transition_rows = [
+        row for row in transition_rows
+        if row["status"] not in {"missing", "suspended"}
+    ]
+    rate_transition_rows = [
+        row for row in observed_transition_rows
+        if row["status"] != "limit_down"
+    ]
+
+    advancement: dict[str, dict[str, Any]] = {}
+    for level in range(1, 6):
+        rows = [
+            row for row in rate_transition_rows
+            if row["previous_height"] == level
+        ]
+        successes = sum(1 for row in rows if row["current_height"] >= level + 1)
+        advancement[f"{level}_to_{level + 1}"] = _rate_result(
+            successes, len(rows), f"{level}板→{level + 1}板晋级率"
+        )
+    broken_trials = [
+        row for row in rate_transition_rows
+        if row["previous_height"] >= 2
+    ]
+    broken_successes = sum(
+        1 for row in broken_trials
+        if row["status"] in {"broken_positive", "broken_negative"}
+    )
+    broken_rate = _rate_result(broken_successes, len(broken_trials), "昨日连板池今日断板率")
+
+    # 对外单独给出三个常用口径，避免把首板、昨日连板和全涨停池混成一个分母。
+    first_board = advancement.get("1_to_2", _rate_result(0, 0, "首板→二板晋级率"))
+    streak_rows = [
+        row for row in rate_transition_rows
+        if row["previous_height"] >= 2
+    ]
+    streak_successes = sum(
+        1 for row in streak_rows
+        if row["current_height"] >= row["previous_height"] + 1
+    )
+    streak_promotion = _rate_result(streak_successes, len(streak_rows), "昨日连板池晋级率（高度≥2）")
+    streak_current_count = sum(1 for row in streak_rows if row["current_height"] >= 2)
+    all_limit_up = _rate_result(
+        sum(1 for row in observed_transition_rows if row["current_height"] >= 1),
+        len(observed_transition_rows),
+        "昨日涨停池次日再板率",
+    )
 
     bomb_total = 0
     bomb_count = 0
@@ -1044,6 +1169,7 @@ def compute_ladder_metrics(
         "progression_denominator": "今日有效梯队个股数",
         "progression_text": (f"{progressed}/{len(heights)}" if previous_heights else "样本不足"),
         "progressed_count": progressed, "previous_count": len(previous_heights),
+        "broken_count": broken_count, "isolated_leader": isolated_leader,
         "current_sample_size": current_sample_size,
         "current_code_count": current_code_count,
         "previous_sample_size": previous_sample_size,
@@ -1055,7 +1181,6 @@ def compute_ladder_metrics(
         "sample_reason": sample_reason,
         "highest_board_count": highest_board_count,
         "leader_concentration_pct": leader_concentration_pct,
-        "broken_count": broken_count, "isolated_leader": isolated_leader,
         "advancement_rates": advancement,
         "first_board_to_second": first_board,
         "streak_pool_promotion": streak_promotion,
@@ -1063,6 +1188,21 @@ def compute_ladder_metrics(
         "streak_pool_sample_size": len(streak_rows),
         "streak_pool_trials": len(streak_rows),
         "streak_pool_observed_sample_size": len(streak_rows),
+        "streak_pool_raw_sample_size": sum(
+            1 for row in transition_rows if row["previous_height"] >= 2
+        ),
+        "streak_pool_limit_down_count": sum(
+            1 for row in transition_rows
+            if row["previous_height"] >= 2 and row["status"] == "limit_down"
+        ),
+        "streak_pool_suspended_count": sum(
+            1 for row in transition_rows
+            if row["previous_height"] >= 2 and row["status"] == "suspended"
+        ),
+        "streak_pool_missing_count": sum(
+            1 for row in transition_rows
+            if row["previous_height"] >= 2 and row["status"] == "missing"
+        ),
         "streak_pool_current_count": streak_current_count,
         "all_limit_up_reclose": all_limit_up,
         "broken_rate": broken_rate,
@@ -1072,6 +1212,8 @@ def compute_ladder_metrics(
         "quality_score": quality_score,
         "quality_text": quality_text,
         "quality_components": quality_components,
+        "transition_status_counts": transition_status_counts,
+        "transition_rows": transition_rows,
     }
 
 
@@ -1116,18 +1258,38 @@ def build_lianban_review(metrics: dict[str, Any] | None) -> dict[str, Any]:
     previous_code_count = _int(metrics.get("previous_code_count"))
     transition_coverage_pct = metrics.get("transition_coverage_pct")
     sample_status = str(metrics.get("sample_status") or metrics.get("transition_status") or "").lower()
-    if sample_status not in {"ok", "conditional", "insufficient", "not_ready"}:
-        if current_sample_size <= 0:
-            sample_status = "not_ready"
-        elif first_trials > 0 or streak_trials > 0:
-            sample_status = "conditional"
+    first_available = first_trials > 0
+    streak_available = streak_trials > 0
+    first_text = first_board.get("text") if first_available else "样本不足"
+    streak_text = streak_pool.get("text") if streak_available else "样本不足"
+
+    available_metrics: list[str] = []
+    missing_metrics: list[str] = []
+    core_metrics = (
+        ("first_board_to_second", first_available),
+        ("streak_pool_promotion", streak_available),
+    )
+    for key, available in core_metrics:
+        (available_metrics if available else missing_metrics).append(key)
+    for key in ("broken_rate", "bomb_rate", "reclose_rate"):
+        result = metrics.get(key) if isinstance(metrics.get(key), dict) else {}
+        available = _int(result.get("trials")) > 0
+        (available_metrics if available else missing_metrics).append(key)
+    board_structure = metrics.get("board_structure") if isinstance(metrics.get("board_structure"), dict) else {}
+    board_structure_available = _int(board_structure.get("sample_size")) > 0
+    (available_metrics if board_structure_available else missing_metrics).append("board_structure")
+
+    if sample_status in {"ok", "conditional", "insufficient", "not_ready"}:
+        status = sample_status
+        if status == "ok" and not (first_available and streak_available):
+            status = "insufficient"
+    else:
+        if first_available and streak_available:
+            status = "ok"
+        elif available_metrics:
+            status = "partial"
         else:
-            sample_status = "insufficient"
-    if sample_status == "ok" and not (first_trials > 0 and streak_trials > 0):
-        sample_status = "insufficient"
-    status = sample_status
-    first_text = first_board.get("text") if first_trials else "样本不足"
-    streak_text = streak_pool.get("text") if streak_trials else "样本不足"
+            status = "insufficient"
     negative_feedback = {
         "broken_rate": metrics.get("broken_rate") or {"text": "样本不足", "trials": 0},
         "bomb_rate": metrics.get("bomb_rate") or {"text": "样本不足", "trials": 0},
@@ -1140,17 +1302,29 @@ def build_lianban_review(metrics: dict[str, Any] | None) -> dict[str, Any]:
     }
     if status == "not_ready":
         conclusion = "连板复盘：当前梯队数据未就位，暂不输出结构性结论。"
-    elif status == "insufficient":
-        conclusion = "连板复盘：样本不足，不能外推晋级率或连板池强弱。"
     elif status == "conditional":
         conclusion = f"首板→二板 {first_text}；昨日连板池晋级率 {streak_text}。前后日匹配覆盖不足，仅作条件性观察。"
+    elif status == "insufficient":
+        conclusion = "连板复盘：样本不足，不能外推晋级率或连板池强弱。"
+    elif status == "partial":
+        missing_text = "、".join(missing_metrics) if missing_metrics else "其余指标"
+        available_text = "；".join(
+            text for text, available in (
+                (f"首板→二板 {first_text}", first_available),
+                (f"昨日连板池晋级率 {streak_text}", streak_available),
+            ) if available
+        )
+        conclusion = f"连板复盘部分可用：{available_text}；缺少 {missing_text}，不外推完整连板强弱。"
     else:
         conclusion = f"首板→二板 {first_text}；昨日连板池晋级率 {streak_text}。"
     return {
         "status": status,
         "status_label": {
-            "ok": "可用", "conditional": "条件性可用",
-            "insufficient": "样本不足", "not_ready": "数据未就位",
+            "ok": "可用",
+            "conditional": "条件性可用",
+            "partial": "部分可用",
+            "insufficient": "样本不足",
+            "not_ready": "数据未就位",
         }.get(status, "待核验"),
         "current_sample_size": current_sample_size,
         "previous_sample_size": previous_sample_size,
@@ -1162,6 +1336,9 @@ def build_lianban_review(metrics: dict[str, Any] | None) -> dict[str, Any]:
         "leader_concentration_pct": metrics.get("leader_concentration_pct"),
         "sample_status": status,
         "sample_reason": metrics.get("sample_reason") or "未提供样本质量说明",
+        "available_metrics": available_metrics,
+        "missing_metrics": missing_metrics,
+        "sample_note": "、".join(missing_metrics) + "暂无有效样本" if missing_metrics else "核心连板转移样本齐全",
         "first_board_count": first_count,
         "second_board_count": second_count,
         "board_counts": {int(k): _int(v) for k, v in board_counts.items()} if board_counts else {},
@@ -1195,31 +1372,38 @@ def build_data_credibility_summary(
     degraded: list[str] = []
     unavailable: list[str] = []
     blocked: list[str] = []
-    publishable: list[str] = []
     reasons: list[str] = []
     source_failure = 0
     stale = 0
     missing = 0
+    publishable: list[str] = []
     used_fallback = bool(quality.get("used_fallback"))
     used_stale = bool(quality.get("used_stale"))
-    source_chain = list(quality.get("source_chain") or []) if isinstance(quality.get("source_chain"), (list, tuple)) else []
+    source_chain = list(quality.get("source_chain") or [])
     freshness_levels: list[str] = []
-    market_prefixes = set(str(value).lower().strip() for value in (quality.get("market_prefixes") or ()) if str(value).strip())
-    required_market_prefixes = set(str(value).lower().strip() for value in (quality.get("required_market_prefixes") or ()) if str(value).strip())
+    market_prefixes = {str(value).lower().strip() for value in quality.get("market_prefixes") or () if str(value).strip()}
+    required_market_prefixes = {str(value).lower().strip() for value in quality.get("required_market_prefixes") or ("sh", "sz", "bj") if str(value).strip()}
     for name, raw in (quality.get("modules") or {}).items():
         if not isinstance(raw, dict):
             continue
         item = dict(raw)
         module_name = str(name)
         total = max(0, _int(item.get("total", quality.get("market_total", 0))))
-        covered = max(0, _int(item.get("covered", 0)))
-        raw_pct = round(covered / total * 100, 2) if total else 0.0
-        status = str(item.get("status") or ("unavailable" if covered == 0 else "ok")).lower()
+        raw_covered = max(0, _int(
+            item.get("raw_covered", item.get("covered", 0))
+        ))
+        effective_covered = min(raw_covered, total) if total else 0
+        raw_pct = round(raw_covered / total * 100, 2) if total else 0.0
+        status = str(item.get("status") or ("unavailable" if raw_covered == 0 else "ok")).lower()
         lineage = item.get("lineage") if isinstance(item.get("lineage"), dict) else {}
         used_fallback = used_fallback or bool(item.get("used_fallback") or lineage.get("used_fallback"))
-        used_stale = used_stale or bool(item.get("used_stale") or lineage.get("stale") or lineage.get("used_stale"))
-        if lineage.get("source_chain") and isinstance(lineage.get("source_chain"), (list, tuple)):
-            source_chain.extend(str(value) for value in lineage.get("source_chain") if str(value).strip())
+        used_stale = used_stale or bool(
+            item.get("used_stale") or lineage.get("stale") or lineage.get("used_stale")
+        )
+        item_source_chain = lineage.get("source_chain") or item.get("source_chain") or []
+        if isinstance(item_source_chain, str):
+            item_source_chain = [item_source_chain]
+        source_chain.extend(str(value) for value in item_source_chain if str(value).strip())
         freshness = str(item.get("freshness_level") or lineage.get("freshness_level") or "").lower()
         if freshness:
             freshness_levels.append(freshness)
@@ -1228,14 +1412,30 @@ def build_data_credibility_summary(
                 market_prefixes.add(str(value).lower().strip())
         price_basis = str(lineage.get("price_basis") or "")
         legacy_mixed = price_basis == "legacy_mixed"
-        effective_covered = covered
+        overflow = bool(total and raw_covered > total)
+        if overflow:
+            status = "blocked"
+            reasons.append(
+                f"{module_name}: COVERAGE_OVERFLOW: 有效覆盖数 {raw_covered} 超过市场总数 {total}"
+            )
         if legacy_mixed and module_name.startswith("price_"):
             effective_covered = 0
             if status == "ok":
                 status = "degraded"
             reasons.append(f"{module_name} 使用 legacy_mixed 价格口径，覆盖不可核验")
         effective_pct = round(effective_covered / total * 100, 2) if total else 0.0
-        item.update({"status": status, "total": total, "covered": covered, "coverage_pct": raw_pct, "effective_covered": effective_covered, "effective_coverage_pct": effective_pct, "legacy_mixed": legacy_mixed})
+        item.update({
+            "status": status,
+            "total": total,
+            "covered": effective_covered,
+            "raw_covered": raw_covered,
+            "coverage_pct": effective_pct,
+            "raw_coverage_pct": raw_pct,
+            "effective_covered": effective_covered,
+            "effective_coverage_pct": effective_pct,
+            "legacy_mixed": legacy_mixed,
+            "coverage_overflow": overflow,
+        })
         modules[module_name] = item
         missing_fields = item.get("missing_fields") or []
         errors = item.get("errors") or []
@@ -1264,13 +1464,16 @@ def build_data_credibility_summary(
         overall = "degraded" if overall not in {"blocked", "non_trading_day"} else overall
     freshness_level = str(quality.get("freshness_level") or "").lower()
     if not freshness_level:
-        freshness_level = next((level for level in ("stale", "delayed", "unknown", "fresh") if level in freshness_levels), "unknown")
+        freshness_level = next(
+            (level for level in ("stale", "delayed", "unknown", "fresh") if level in freshness_levels),
+            "unknown",
+        )
     missing_market_prefixes = sorted(required_market_prefixes - market_prefixes)
     primary_source = quality.get("primary_source") or quality.get("source")
     fallback_source = quality.get("fallback_source")
-    if primary_source and primary_source not in source_chain:
+    if primary_source and str(primary_source) not in source_chain:
         source_chain.insert(0, str(primary_source))
-    if fallback_source and fallback_source not in source_chain:
+    if fallback_source and str(fallback_source) not in source_chain:
         source_chain.append(str(fallback_source))
     return {
         "report_date": report_date or quality.get("report_date") or "",
@@ -1291,6 +1494,9 @@ def build_data_credibility_summary(
         "required_market_prefixes": sorted(required_market_prefixes),
         "missing_market_prefixes": missing_market_prefixes,
         "publication_mode": quality.get("publication_mode"),
+        "publication_scopes": dict(
+            quality.get("publication_scopes") or {}
+        ),
         "status": overall,
         "modules": modules,
         "available_modules": available,

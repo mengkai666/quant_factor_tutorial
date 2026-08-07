@@ -28,6 +28,7 @@ import pandas as pd
 
 from paths import DATA_DIR, PRICE_CACHE
 from time_utils import filter_completed_rows
+from data_sources.price_provider import price_value_column
 
 # 同花顺板块指数日线缓存 (每交易日刷一次; 接口单次即返全历史, 无需增量)
 THS_CACHE = os.path.join(DATA_DIR, 'ths_sector_hist.json')
@@ -46,6 +47,9 @@ def fetch_index(symbol='sh000001', lookback=LOOKBACK_DAYS):
     import akshare as ak
     df = ak.stock_zh_index_daily(symbol=symbol)
     df['date'] = pd.to_datetime(df['date']).dt.strftime('%Y-%m-%d')
+    # 指数接口经常返回当天/未来交易日缓存；历史回顾必须与全项目
+    # REPORT_DATE 口径一致，不能把生成日之后的“最新”行情带入报告。
+    df = filter_completed_rows(df, 'date')
     df = df.tail(lookback + 40)
     return df[['date', 'open', 'high', 'low', 'close', 'volume']].to_dict('records')
 
@@ -267,8 +271,11 @@ def market_breadth(det):
     try:
         df = pd.read_csv(PRICE_CACHE)
         df = filter_completed_rows(df, 'date')
-        df = df[df.close > 0]
-        px = df.pivot_table(index='date', columns='code', values='close',
+        value_column = price_value_column(df, 'qfq', allow_legacy=True)
+        if not value_column:
+            return {}
+        df = df[pd.to_numeric(df[value_column], errors='coerce') > 0]
+        px = df.pivot_table(index='date', columns='code', values=value_column,
                             aggfunc=lambda s: s.iloc[-1])
     except Exception as e:
         print(f'  ⚠️ 市场宽度计算跳过: {e}')

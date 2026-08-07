@@ -40,6 +40,7 @@ import pandas as pd
 
 from paths import INDUSTRY_CACHE, PRICE_CACHE, ZT_CACHE_FILE
 from time_utils import filter_completed_rows
+from data_sources.price_provider import price_value_column
 
 TOP_N = 6                # 每象限展示几只
 MID_CAP_MIN = 100.0      # 中军最小总市值 (亿元)
@@ -56,8 +57,11 @@ def _phase_returns(phases):
         return pd.DataFrame()
     df = pd.read_csv(PRICE_CACHE)
     df = filter_completed_rows(df, 'date')
-    df = df[df.close > 0]
-    px = df.pivot_table(index='date', columns='code', values='close',
+    value_column = price_value_column(df, 'qfq', allow_legacy=True)
+    if not value_column:
+        return pd.DataFrame()
+    df = df[pd.to_numeric(df[value_column], errors='coerce') > 0]
+    px = df.pivot_table(index='date', columns='code', values=value_column,
                         aggfunc=lambda s: s.iloc[-1])
     dates = list(px.index)
 

@@ -104,3 +104,73 @@ def test_prepare_cold_start_refreshes_universe_then_rebuilds_candidate(tmp_path)
     assert result.target_date == "2026-08-05"
     assert order == ["calendar", "universe", "prices", "promote"]
     assert (tmp_path / "official.csv").exists()
+
+
+def test_publication_scopes_keep_market_facts_available_when_optional_modules_fail():
+    from data_sources.quality_gate import build_module_quality, aggregate_report_quality
+
+    modules = {
+        "universe": build_module_quality("universe", total=5538, covered=5538),
+        "price_raw": build_module_quality("price_raw", total=5538, covered=5538),
+        "breadth": build_module_quality("breadth", total=5538, covered=5538),
+        "limit_pool": build_module_quality("limit_pool", total=74, covered=74),
+        "echelon": build_module_quality(
+            "echelon", total=74, covered=74, critical=False
+        ),
+        "history": build_module_quality(
+            "history", total=20, covered=20, critical=False
+        ),
+        "sector": build_module_quality(
+            "sector", total=74, covered=13, critical=False
+        ),
+        "price_qfq": build_module_quality(
+            "price_qfq", total=5538, covered=0, critical=False
+        ),
+        "ai": build_module_quality(
+            "ai", total=1, covered=0, critical=False
+        ),
+    }
+
+    quality = aggregate_report_quality(modules)
+    scopes = quality["publication_scopes"]
+
+    assert quality["publication_mode"] == "observation"
+    assert scopes["market_facts"]["mode"] == "full"
+    assert scopes["lianban_review"]["mode"] == "full"
+    assert scopes["mainline_review"]["mode"] == "limited"
+    assert scopes["return_analysis"]["mode"] == "unavailable"
+    assert scopes["ai_review"]["mode"] == "unavailable"
+
+
+def test_ai_publication_scope_is_limited_when_guarded_ai_is_facts_only():
+    from data_sources.quality_gate import build_module_quality, build_publication_scopes
+
+    modules = {
+        'ai': build_module_quality(
+            'ai', total=1, covered=1, critical=False,
+            lineage={
+                'input_quality_status': 'blocked',
+                'publication_mode': 'facts_only',
+            },
+        ),
+    }
+
+    scopes = build_publication_scopes(modules)
+
+    assert scopes['ai_review']['mode'] == 'limited'
+
+
+def test_ai_publication_scope_is_full_for_decision_ready_output():
+    from data_sources.quality_gate import build_module_quality, build_publication_scopes
+
+    modules = {
+        'ai': build_module_quality(
+            'ai', total=1, covered=1, critical=False,
+            lineage={
+                'input_quality_status': 'ok',
+                'publication_mode': 'decision',
+            },
+        ),
+    }
+
+    scopes = build_publication_scopes(modules)

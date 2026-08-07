@@ -57,10 +57,40 @@ def append_outcome(path: str | Path, prediction_id: str, horizon: str, actual: d
     return _append(path, {"event_type": "outcome", "prediction_id": prediction_id, "horizon": normalized, "actual": dict(actual)})
 
 
+def _binary_outcome(actual: Any) -> bool | None:
+    """Extract a scored binary outcome without treating missing values as False."""
+    if not isinstance(actual, dict):
+        return None
+    for key in ("hit", "success", "market_up", "focus_pool_hit"):
+        value = actual.get(key)
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)) and value in (0, 1):
+            return bool(value)
+    direction = str(actual.get("market_direction", "") or "").strip().lower()
+    if direction in {"up", "上涨", "positive", "bull"}:
+        return True
+    if direction in {"down", "下跌", "negative", "bear"}:
+        return False
+    return None
+
+
+def _wilson_interval(successes: int, trials: int, z: float = 1.96) -> dict[str, Any] | None:
+    if trials <= 0:
+        return None
+    n = float(trials)
+    p = float(successes) / n
+    denominator = 1.0 + z * z / n
+    centre = (p + z * z / (2.0 * n)) / denominator
+    margin = z * ((p * (1.0 - p) / n + z * z / (4.0 * n * n)) ** 0.5) / denominator
+    return {"lower": max(0.0, centre - margin), "upper": min(1.0, centre + margin), "successes": int(successes), "trials": int(trials)}
+
+
 def build_prediction_review(path: str | Path) -> dict[str, Any]:
     target = Path(path)
     predictions: dict[str, dict[str, Any]] = {}
     events: list[dict[str, Any]] = []
+    orphan_outcomes = 0
     if target.exists():
         for raw in target.read_text(encoding="utf-8").splitlines():
             if not raw.strip():
@@ -69,19 +99,76 @@ def build_prediction_review(path: str | Path) -> dict[str, Any]:
                 event = json.loads(raw)
             except json.JSONDecodeError:
                 continue
+            if not isinstance(event, dict):
+                continue
             events.append(event)
             pid = str(event.get("prediction_id", ""))
-            if event.get("event_type") == "prediction":
+            if event.get("event_type") == "prediction" and pid:
                 predictions[pid] = {**event, "outcomes": {}}
-            elif event.get("event_type") == "outcome":
-                predictions.setdefault(pid, {"prediction_id": pid, "outcomes": {}}).setdefault("outcomes", {})[str(event.get("horizon"))] = event.get("actual", {})
-    completed = sum({"t1", "t3"}.issubset(set(row.get("outcomes", {}))) for row in predictions.values())
+
+        # Join outcomes only after the prediction inventory is known. Orphan
+        # outcomes remain auditable but must not inflate the prediction sample.
+        for event in events:
+            if event.get("event_type") != "outcome":
+                continue
+            pid = str(event.get("prediction_id", ""))
+            if pid not in predictions:
+                orphan_outcomes += 1
+                continue
+            horizon = str(event.get("horizon", "")).lower().replace("+", "")
+            if horizon in {"t1", "t3"}:
+                predictions[pid].setdefault("outcomes", {})[horizon] = event.get("actual", {})
+
+    status_counts = {"pending": 0, "incomplete": 0, "matured": 0}
+    matured_ids: list[str] = []
+    t3_scored: list[bool] = []
+    brier_values: list[float] = []
+    for pid, row in predictions.items():
+        outcomes = row.get("outcomes") if isinstance(row.get("outcomes"), dict) else {}
+        present = {key for key in ("t1", "t3") if key in outcomes}
+        if present == {"t1", "t3"}:
+            status = "matured"
+            matured_ids.append(pid)
+        elif present:
+            status = "incomplete"
+        else:
+            status = "pending"
+        row["outcome_status"] = status
+        status_counts[status] += 1
+
+        # T+3 is the primary terminal outcome. Score only explicit outcomes
+        # and explicit probabilities; absence is not a zero score.
+        if status == "matured":
+            actual = _binary_outcome(outcomes.get("t3"))
+            probability = row.get("probability", row.get("predicted_probability"))
+            try:
+                probability = float(probability) if probability is not None else None
+            except (TypeError, ValueError):
+                probability = None
+            if actual is not None:
+                t3_scored.append(actual)
+                if probability is not None and 0.0 <= probability <= 1.0:
+                    brier_values.append((probability - float(actual)) ** 2)
+
+    scored_trials = len(t3_scored)
+    scored_successes = sum(t3_scored)
     prediction_count = len(predictions)
+    completed = status_counts["matured"]
     return {
         "predictions": predictions,
         "events": events,
         "prediction_count": prediction_count,
         "completed_count": completed,
         "matured_count": completed,
-        "pending_count": max(0, prediction_count - completed),
+        "pending_count": status_counts["pending"],
+        "incomplete_count": status_counts["incomplete"],
+        "status_counts": status_counts,
+        "matured_ids": matured_ids,
+        "scored_count": scored_trials,
+        "scored_successes": scored_successes,
+        "hit_rate": (scored_successes / scored_trials) if scored_trials else None,
+        "confidence_interval": _wilson_interval(scored_successes, scored_trials),
+        "brier_score": (sum(brier_values) / len(brier_values)) if brier_values else None,
+        "brier_sample_count": len(brier_values),
+        "orphan_outcome_count": orphan_outcomes,
     }
