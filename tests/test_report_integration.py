@@ -77,6 +77,160 @@ def test_daily_delta_snapshot_explains_missing_previous_day():
     assert "上一交易日" in snapshot["reason"]
 
 
+def test_limit_pool_delta_classifies_new_promoted_broken_missing_and_unchanged():
+    from review_metrics import build_limit_pool_delta
+
+    previous = [
+        {"code": "sh600001", "name": "甲", "height": 2},
+        {"code": "sz000002", "name": "乙", "height": 3},
+        {"code": "bj920003", "name": "丙", "height": 1},
+    ]
+    current = [
+        {"code": "sh600001", "name": "甲", "height": 3},
+        {"code": "sz000002", "name": "乙", "height": 1},
+        {"code": "sh600004", "name": "丁", "height": 1},
+    ]
+
+    delta = build_limit_pool_delta(previous, current)
+
+    assert delta["available"] is True
+    assert [row["code"] for row in delta["promoted"]] == ["sh600001"]
+    assert [row["code"] for row in delta["broken"]] == ["sz000002"]
+    assert [row["code"] for row in delta["missing"]] == ["bj920003"]
+    assert [row["code"] for row in delta["new"]] == ["sh600004"]
+    assert delta["counts"] == {
+        "new": 1,
+        "new_first_board": 1,
+        "promoted": 1,
+        "broken": 1,
+        "missing": 1,
+        "unchanged": 0,
+    }
+
+
+def test_daily_delta_snapshot_includes_structured_limit_pool_changes():
+    from review_metrics import build_daily_delta_snapshot
+
+    current = {
+        "max_height": 6,
+        "limit_pool_rows": [{"code": "sh600001", "height": 2}],
+    }
+    previous = {
+        "max_height": 5,
+        "limit_pool_rows": [{"code": "sh600001", "height": 1}],
+    }
+
+    snapshot = build_daily_delta_snapshot(current, previous)
+
+    assert snapshot["limit_pool"]["available"] is True
+    assert snapshot["limit_pool"]["counts"]["promoted"] == 1
+    assert snapshot["limit_pool"]["promoted"][0]["code"] == "sh600001"
+
+
+def test_lianban_review_marks_partial_core_samples_without_overstating():
+    from report_logic import build_lianban_review
+
+    got = build_lianban_review(
+        {
+            "board_counts": {1: 2, 2: 1},
+            "first_board_to_second": {
+                "successes": 1,
+                "trials": 2,
+                "text": "1/2（50%）",
+            },
+            "streak_pool_promotion": {"successes": 0, "trials": 0, "text": "样本不足"},
+            "streak_pool_trials": 0,
+        }
+    )
+
+    assert got["status"] == "partial"
+    assert got["available_metrics"] == ["first_board_to_second"]
+    assert "streak_pool_promotion" in got["missing_metrics"]
+    assert "部分可用" in got["conclusion"]
+
+
+def test_dashboard_exposes_partial_status_and_limit_pool_delta():
+    from decision_dashboard import build_dashboard_ctx, generate_dashboard_html
+
+    report_context = {
+        "report_date": "2026-08-06",
+        "facts": {
+            "lianban_review": {
+                "status": "partial",
+                "first_board_count": 2,
+                "second_board_count": 1,
+                "board_counts": {1: 2, 2: 1},
+                "first_board_to_second": {"text": "1/2（50%）"},
+                "streak_pool_promotion": {"text": "样本不足"},
+                "streak_pool_trials": 0,
+                "streak_pool_current_count": 0,
+                "negative_feedback": {"text": "样本不足"},
+                "available_metrics": ["first_board_to_second"],
+                "missing_metrics": ["streak_pool_promotion"],
+                "conclusion": "连板复盘部分可用",
+            }
+        },
+        "daily_delta": {
+            "available": True,
+            "highlights": [],
+            "limit_pool": {
+                "available": True,
+                "counts": {"new": 2, "new_first_board": 1, "promoted": 1, "broken": 1, "missing": 0, "unchanged": 4},
+                "new": [{"code": "sh600001", "name": "甲", "current_height": 1}],
+                "new_first_board": [{"code": "sh600001", "name": "甲", "current_height": 1}],
+                "promoted": [{"code": "sz000002", "name": "乙", "previous_height": 1, "current_height": 2}],
+                "broken": [{"code": "bj920003", "name": "丙", "previous_height": 3, "current_height": 1}],
+                "missing": [],
+            },
+        },
+    }
+    ctx = build_dashboard_ctx(
+        timing={"scene": "中性震荡", "action": "观察", "level": "观察"},
+        advance_decline={"up": 3000, "down": 2000, "zt": 50, "dt": 5},
+        report_context=report_context,
+    )
+
+    html = generate_dashboard_html(ctx)
+
+    assert "部分可用" in html
+    assert "涨停池变化" in html
+    assert "新增首板" in html
+
+
+def test_dashboard_places_quality_and_lianban_before_strategy_content():
+    from decision_dashboard import generate_dashboard_html, generate_dashboard_section
+
+    ctx = {
+        "date_str": "2026-08-06",
+        "data_quality": {
+            "status": "degraded",
+            "publication_mode": "observation",
+            "market_scope": "沪深北全A",
+            "market_total": 5538,
+            "market_covered": 5100,
+            "coverage_pct": 92.09,
+            "reasons": ["报告日价格覆盖不足"],
+        },
+        "lianban_review": {
+            "status": "partial",
+            "first_board_count": 2,
+            "second_board_count": 1,
+            "conclusion": "连板复盘部分可用",
+        },
+        "scene": "数据降级",
+        "action": "仅观察与条件触发",
+        "focus_df": None,
+    }
+
+    for html in (generate_dashboard_html(ctx), generate_dashboard_section(ctx)):
+        quality_pos = html.index("数据可信度")
+        lianban_pos = html.index("连板复盘")
+        strategy_pos = html.index("明日核心股票池") if "明日核心股票池" in html else html.index("观察名单")
+        assert quality_pos < strategy_pos
+        assert lianban_pos < strategy_pos
+        assert "数据降级" in html
+
+
 def test_previous_daily_snapshot_ignores_same_day_and_future_files(tmp_path, monkeypatch):
     import 主线强度追踪 as report
 
@@ -145,10 +299,10 @@ def test_ai_gate_preserves_retry_failure_reason(monkeypatch):
         {"breadth": 0.6}, ReportPolicy.from_mode("observation"), timeout=1,
     )
 
-    assert len(calls) == 3
+    assert len(calls) == 2
     assert result["status"] == "fallback"
-    assert result["reason"] == "上游接口连续 3 次返回 503"
-    assert result["lineage"]["attempt_count"] == 3
+    assert result["reason"] == "上游接口连续 2 次返回 503"
+    assert result["lineage"]["attempt_count"] == 2
     assert result["lineage"]["http_status"] == 503
 
 def test_audit_json_is_atomic_and_contains_lineage(tmp_path):
@@ -342,7 +496,7 @@ def test_dashboard_explains_limit_pool_reconciliation_and_degraded_scope():
         "ai": {
             "status": "unavailable", "total": 1, "covered": 0,
             "coverage_pct": 0, "source": "guarded_ai",
-            "errors": ["上游接口连续 3 次返回 503"],
+            "errors": ["上游接口连续 2 次返回 503"],
         },
     }
     context = ReportContext(
@@ -357,6 +511,13 @@ def test_dashboard_explains_limit_pool_reconciliation_and_degraded_scope():
             "primary_source": "tencent_close_snapshot",
             "market_scope": "沪深北全A",
             "modules": modules,
+            "publication_scopes": {
+                "market_facts": {"mode": "full"},
+                "lianban_review": {"mode": "full"},
+                "mainline_review": {"mode": "limited"},
+                "return_analysis": {"mode": "unavailable"},
+                "ai_review": {"mode": "unavailable"},
+            },
         },
         facts={
             "market_state": {
@@ -375,6 +536,12 @@ def test_dashboard_explains_limit_pool_reconciliation_and_degraded_scope():
     html = decision_dashboard.generate_dashboard_html(ctx)
 
     assert "当前可用范围：观察与条件触发" in html
+    assert "分层可用性" in html
+    assert "市场事实=完整可用" in html
+    assert "连板复盘=完整可用" in html
+    assert "主线归因=条件性" in html
+    assert "复权收益=不可用" in html
+    assert "AI 复盘=不可用" in html
     assert "涨停事实池：79 只" in html
     assert "题材归因命中：53 / 79（67.09%）" in html
     assert "尚未归因：26 只" in html
@@ -383,7 +550,7 @@ def test_dashboard_explains_limit_pool_reconciliation_and_degraded_scope():
     for label in ("证券主数据", "报告日价格", "市场宽度", "涨停事实池", "题材归因", "连板梯队", "前复权价格", "AI 研判"):
         assert label in html
     assert "AI 研判未生成" in html
-    assert "连续 3 次返回 503" in html
+    assert "连续 2 次返回 503" in html
     assert "不以规则文本冒充 AI 输出" in html
     assert "缺少上一交易日结构化快照；历史 HTML 不作为计算源" in html
     assert "<b>limit_pool</b>" not in html

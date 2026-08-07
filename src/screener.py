@@ -18,9 +18,18 @@ def generate_focus_pool(ml_strength, echelon, top30_data, sentiment_df, output_p
         except (KeyError, IndexError): pass
 
     # === 策略一：主升接力池 (寻找当前主线的首板或2连板) ===
+    def board_height(label):
+        text = str(label or '')
+        if '首板' in text:
+            return 1
+        digits = ''.join(ch for ch in text if ch.isdigit())
+        return int(digits) if digits else 0
+
+    max_height = max((board_height(e.get('height')) for e in (echelon or [])), default=0)
     if echelon:
         for e in echelon:
             height = str(e.get('height', ''))
+            height_value = board_height(height)
             stocks = e.get('stocks', [])
             stock_details = e.get('stock_details', [])
             primary = str(e.get('primary', ''))
@@ -28,28 +37,24 @@ def generate_focus_pool(ml_strength, echelon, top30_data, sentiment_df, output_p
             # name -> code 映射, 用于催化归因反查 (stock_details 里带 code)
             name_to_code = {d.get('name', ''): d.get('code', '') for d in stock_details}
 
-            # 放宽条件：只要是首板、2连板、3连板都可以入选
-            if '板' in height:
-                # 尽量找核心主线，如果没有匹配上，也把最高板加进去
+            if '板' in height and height_value:
                 is_core = (core_ml in primary or core_ml in secondary or core_ml == "未知")
-                height_num = 0
-                try:
-                    height_num = int(''.join(ch for ch in height if ch.isdigit()))
-                except ValueError:
-                    pass
-                is_space = height_num >= 3
-                is_low_level = height_num in {1, 2} or '首板' in height
-                if is_core or height_num >= 3:
-                    for s in stocks[:2]:  # 每个高度最多取2只
-                        bucket = '【空间博弈池】' if is_space else ('【低位补涨池】' if is_low_level else '【主升接力池】')
-                        pool.append({
-                            '股票': s,
-                            '代码': name_to_code.get(s, ''),
-                            '板块': primary.split(',')[0] if primary else core_ml,
-                            '策略池': bucket,
-                            '入场条件': f'昨日{height}。若开盘放量换手且承接极强，可跟随打板；切忌加速缩量秒板。',
-                            '防守位': '昨日收盘价破位止损'
-                        })
+                is_space_leader = height_value >= 3 and height_value == max_height
+                if is_space_leader or (height_value >= 3 and not is_core):
+                    strategy_pool = '【空间博弈池】'
+                elif height_value <= 2 and not (is_core and core_ml != "未知"):
+                    strategy_pool = '【低位补涨池】'
+                else:
+                    strategy_pool = '【主升接力池】'
+                for s in stocks[:2]:  # 每个高度最多取2只
+                    pool.append({
+                        '股票': s,
+                        '代码': name_to_code.get(s, ''),
+                        '板块': primary.split(',')[0] if primary else core_ml,
+                        '策略池': strategy_pool,
+                        '入场条件': f'昨日{height}。若开盘放量换手且承接极强，可跟随打板；切忌加速缩量秒板。',
+                        '防守位': '昨日收盘价破位止损'
+                    })
 
     # === 策略二：冰点低吸池 (寻找大容量中军回踩) ===
     # 只要有 top30_data 就选出前两大板块的中军，无视情绪绝对值

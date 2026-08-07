@@ -18,6 +18,8 @@
 import sys
 import os
 import time
+import json
+import subprocess
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -37,20 +39,130 @@ from data_sources.models import normalize_code
 import hashlib
 import requests  # type: ignore
 
+def _normalize_date_token(value):
+    """将交易日值规范化为 YYYYMMDD；无法解析时返回空字符串。"""
+    text = str(value or "").strip().replace("-", "").replace("/", "")[:8]
+    if len(text) != 8 or not text.isdigit():
+        return ""
+    try:
+        datetime.strptime(text, "%Y%m%d")
+    except ValueError:
+        return ""
+    return text
+
+
+_TRADE_DATE_MARKER = "__CODEX_TRADE_DATES__"
+_TRADE_DATE_TIMEOUT_SECONDS = 12
+
+
+def get_cached_trading_dates():
+    """返回涨跌停缓存中不晚于报告截止日的已知交易日。"""
+    if not os.path.exists(CACHE_FILE):
+        return []
+    try:
+        from time_utils import get_latest_date
+
+        frame = pd.read_csv(
+            CACHE_FILE,
+            encoding="utf-8-sig",
+            dtype=str,
+            usecols=["日期"],
+        )
+        if frame.empty:
+            return []
+        cutoff = get_latest_date().strftime("%Y%m%d")
+        dates = {
+            token
+            for token in frame["日期"].map(_normalize_date_token)
+            if token and token <= cutoff
+        }
+        return sorted(dates)
+    except Exception as exc:
+        print(f"  ⚠️ 本地交易日缓存读取失败: {exc}")
+        return []
+
+
+def _fetch_external_trade_dates(timeout_seconds=_TRADE_DATE_TIMEOUT_SECONDS):
+    """在隔离子进程中获取交易日历，给无超时的第三方 SDK 加硬超时。"""
+    script = (
+        "import json\n"
+        "import akshare as ak\n"
+        "df = ak.tool_trade_date_hist_sina()\n"
+        "values = df['trade_date'].astype(str).tolist() if 'trade_date' in df.columns else []\n"
+        f"print({_TRADE_DATE_MARKER!r} + json.dumps(values, ensure_ascii=False))\n"
+    )
+    try:
+        completed = subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=max(1, int(timeout_seconds)),
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        print(f"  ⚠️ 外部交易日历超过 {timeout_seconds}s，已终止并回退本地/工作日历")
+        return []
+    except Exception as exc:
+        print(f"  ⚠️ 外部交易日历进程启动失败: {exc}")
+        return []
+
+    marker_line = next(
+        (line for line in reversed(completed.stdout.splitlines()) if _TRADE_DATE_MARKER in line),
+        "",
+    )
+    if not marker_line:
+        detail_lines = (completed.stderr or completed.stdout or "未知错误").strip().splitlines()
+        detail = detail_lines[-1] if detail_lines else "未知错误"
+        print(f"  ⚠️ 外部交易日历返回异常: {detail[:200]}")
+        return []
+    try:
+        raw_values = json.loads(marker_line.split(_TRADE_DATE_MARKER, 1)[1])
+    except (ValueError, TypeError, json.JSONDecodeError) as exc:
+        print(f"  ⚠️ 外部交易日历解析失败: {exc}")
+        return []
+    return sorted({token for token in map(_normalize_date_token, raw_values) if token})
+
+
 def get_trading_dates(n_days=120, now=None, calendar_provider=None):
-    """Return the latest closed trading days from the canonical calendar provider."""
+    """Return the latest closed trading days with cache reuse and a hard network timeout."""
     from data_sources.calendar_provider import CalendarProvider
     from paths import CALENDAR_CACHE, FETCH_STATUS_CACHE
     from data_sources.fetch_status import FetchStatusStore
 
+    explicit_now = now is not None
     now = now or datetime.now()
-    calendar = calendar_provider or CalendarProvider(
-        cache_path=CALENDAR_CACHE,
-        status_store=FetchStatusStore(FETCH_STATUS_CACHE),
-    )
+    cached_dates = []
+    if calendar_provider is not None:
+        calendar = calendar_provider
+    elif explicit_now:
+        calendar = CalendarProvider(
+            cache_path=CALENDAR_CACHE,
+            status_store=FetchStatusStore(FETCH_STATUS_CACHE),
+        )
+    else:
+        cached_dates = get_cached_trading_dates()
+        if len(cached_dates) >= n_days:
+            return cached_dates[-n_days:][::-1]
+
+        external_dates = _fetch_external_trade_dates()
+
+        def bounded_source():
+            if not external_dates:
+                raise TimeoutError("external trading calendar unavailable within timeout")
+            return pd.DataFrame({"trade_date": external_dates})
+
+        calendar = CalendarProvider(
+            source=bounded_source,
+            cache_path=CALENDAR_CACHE,
+            status_store=FetchStatusStore(FETCH_STATUS_CACHE),
+        )
     try:
         today = now.strftime("%Y-%m-%d")
         dates = calendar.trading_days("1900-01-01", today)
+        if cached_dates:
+            dates = sorted(set(dates) | {f"{day[:4]}-{day[4:6]}-{day[6:8]}" for day in cached_dates})
         if now.hour < calendar.close_hour and today in dates:
             dates.remove(today)
         if len(dates) >= n_days:
@@ -67,7 +179,6 @@ def get_trading_dates(n_days=120, now=None, calendar_provider=None):
         if d.weekday() < 5:
             dates.append(d.strftime("%Y%m%d"))
     return dates
-
 
 # ============================================================
 # 财联社 API 数据获取 (支持6个月+历史数据)
@@ -525,12 +636,12 @@ def analyze_lianban(zt_data, dt_data):
         current_pressure = max(window_heights)
 
         # 提取当前市场最高板的信息用于 Tooltip 显示
-        ad_ratio = 0.5
+        ad_ratio = None
         res = {}
         if msf:
             res = msf.calculate_factor(date_str)
-            ad_ratio = res.get('ad_ratio', 0.5)
-        sentiment, sentiment_color = judge_sentiment(ad_ratio)
+            ad_ratio = res.get('ad_ratio')
+        sentiment, sentiment_color = judge_sentiment(ad_ratio if ad_ratio is not None else 0.5)
 
         # 提取当前市场最高板的信息用于 Tooltip 显示
         current_lt_name = lianban_names_all[0] if lianban_names_all else ""
@@ -558,9 +669,12 @@ def analyze_lianban(zt_data, dt_data):
             '压力高度': current_pressure,
             '涨停数': len(df),
             '跌停数': len(dt_data.get(date_str, pd.DataFrame())),
-            '涨跌比': round(float(ad_ratio), 2),
-            'up': res.get('market_up', 0) if msf else 0,
-            'down': res.get('market_down', 0) if msf else 0,
+            '涨跌比': round(float(ad_ratio), 2) if ad_ratio is not None else None,
+            'up': res.get('market_up') if msf else None,
+            'down': res.get('market_down') if msf else None,
+            'ad_available': bool(res.get('ad_available', False)) if msf else False,
+            'ad_status': res.get('ad_status', 'missing') if msf else 'missing',
+            'ad_source': res.get('ad_source', 'unknown') if msf else 'unknown',
             '情绪': sentiment,
             '情绪颜色': sentiment_color,
             '龙头首板日期': current_lt_sb_date,
@@ -580,7 +694,11 @@ def analyze_lianban(zt_data, dt_data):
     # === 后处理: 对 up=0 且 down=0 的日期, 直接从 LongHu API 补全 ===
     # 这解决了 price_cache 陈旧时 MarketSentimentFactor 返回 fallback 值的问题
     if 'up' in final_df.columns and 'down' in final_df.columns:
-        missing_mask = (final_df['up'] == 0) & (final_df['down'] == 0)
+        missing_mask = (
+            ~final_df.get('ad_available', pd.Series(False, index=final_df.index)).fillna(False)
+            | final_df['up'].isna()
+            | final_df['down'].isna()
+        )
         missing_dates = final_df[missing_mask]['日期'].tolist()
         # 只补最近60天, 更早的不太重要
         if len(missing_dates) > 60:
@@ -621,6 +739,9 @@ def analyze_lianban(zt_data, dt_data):
                                 final_df.at[idx, 'up'] = up_val
                                 final_df.at[idx, 'down'] = down_val
                                 final_df.at[idx, '涨跌比'] = round(up_val / max(up_val + down_val, 1), 2)
+                                final_df.at[idx, 'ad_available'] = True
+                                final_df.at[idx, 'ad_status'] = 'api_fallback'
+                                final_df.at[idx, 'ad_source'] = 'longhu_api'
                                 filled += 1
                 except Exception:
                     pass

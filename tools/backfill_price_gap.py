@@ -42,6 +42,7 @@ except Exception:
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'src'))
 from paths import PRICE_CACHE, INDUSTRY_CACHE  # noqa: E402
+from data_sources.price_provider import normalize_price_frame, merge_price_frames  # noqa: E402
 
 # 单块硬超时 (秒): 一块 200 只股票正常 20~40s。某只股票的畸形响应会让 rs.next()
 # 在 worker 里 100% CPU 空转 (socket 超时管不住 C 层读循环), imap_unordered + 池
@@ -51,7 +52,7 @@ CHUNK_TIMEOUT = 180
 
 
 def _fetch_bs_chunk(args):
-    """抓一批股票在 [start, end] 的 date/code/close。与主程序同名函数逻辑一致。"""
+    """抓一批股票在 [start, end] 的前复权价格。"""
     codes, start, end = args
     socket.setdefaulttimeout(15)  # 防止 socket 挂起导致进程死锁
     # pyrefly: ignore [missing-import]
@@ -86,7 +87,13 @@ def _fetch_bs_chunk(args):
                     ret_code = row[1].replace('.', '') if row[1] else ''
                     if ret_code and ret_code != code_str:
                         continue
-                    rows.append({'date': row[0], 'code': code_str, 'close': float(row[2])})
+                    rows.append({
+                        'date': row[0],
+                        'code': code_str,
+                        'close_qfq': float(row[2]),
+                        'price_basis': 'qfq',
+                        'source': 'baostock',
+                    })
         except Exception:
             continue  # 单股失败不拖垮整块
 
@@ -117,11 +124,12 @@ def _load_codes(price_df):
 
 def _report_ad(price_df, target_dates):
     """按价格缓存算目标日 A/D (与 MarketSentimentFactor._load_ad_cache 同判据: ±0.1%)。"""
-    df = price_df.copy()
+    df = normalize_price_frame(price_df)
+    value_col = 'close_qfq' if df.get('close_qfq', pd.Series(dtype=float)).notna().any() else 'close_legacy'
     df['date_clean'] = df['date'].str.replace('-', '')
     df = df.sort_values(['code', 'date_clean'])
-    df['prev_close'] = df.groupby('code')['close'].shift(1)
-    df['chg_pct'] = (df['close'] / df['prev_close'] - 1) * 100
+    df['prev_close'] = df.groupby('code')[value_col].shift(1)
+    df['chg_pct'] = (df[value_col] / df['prev_close'] - 1) * 100
     df = df.dropna(subset=['chg_pct'])
     for d in target_dates:
         sub = df[df['date_clean'] == d]
@@ -152,7 +160,7 @@ def main():
         sys.exit('  ❌ --dates 为空')
     target_dashed = {datetime.strptime(d, '%Y%m%d').strftime('%Y-%m-%d') for d in target_dates}
 
-    price_df = pd.read_csv(PRICE_CACHE, dtype={'code': str, 'date': str})
+    price_df = normalize_price_frame(pd.read_csv(PRICE_CACHE, dtype={'code': str, 'date': str}))
     orig_rows = len(price_df)
     print(f'  📂 现有价格缓存: {len(price_df)} 行, 日期范围 {price_df["date"].min()} ~ {price_df["date"].max()}')
     existing = price_df[price_df['date'].isin(target_dashed)]
@@ -232,10 +240,7 @@ def main():
         before = len(price_df)
         price_df = price_df[~price_df['date'].isin(target_dashed)]
         print(f'  🧹 覆盖模式: 已剔除目标日旧行 {before - len(price_df)} 条')
-    combined = pd.concat([price_df, new_df], ignore_index=True)
-    # 保留先到的行 = 原缓存优先; 目标日原本缺失, 故实际写入的是新抓的行
-    combined = combined.drop_duplicates(subset=['code', 'date'], keep='first')
-    combined = combined.sort_values(['code', 'date']).reset_index(drop=True)
+    combined = merge_price_frames(price_df, new_df)
     combined.to_csv(PRICE_CACHE, index=False)
     print(f'  💾 已落库: {orig_rows} → {len(combined)} 行 ({len(combined) - orig_rows:+d})')
 

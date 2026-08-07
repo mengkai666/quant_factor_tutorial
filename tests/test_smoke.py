@@ -177,6 +177,47 @@ def test_drop_stale_latest_day():
     small_both = pd.concat([small_prev, small], ignore_index=True)
     assert len(m._drop_stale_latest_day(small_both)) == len(small_both)
 
+def test_price_update_uses_explicit_universe_snapshot(monkeypatch):
+    """价格覆盖分母必须来自同次运行传入的沪深北证券池快照。"""
+    import importlib.util
+    import pandas as pd
+
+    spec = importlib.util.spec_from_file_location(
+        'mztrack_explicit_universe', os.path.join(_ROOT, 'src', '主线强度追踪.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    universe_codes = ['sh600000', 'sz000001', 'bj920117']
+    cached = pd.DataFrame({
+        'date': ['2026-08-05'] * 3,
+        'code': universe_codes,
+        'close_raw': [10.0, 11.0, 12.0],
+        'close_qfq': [9.0, 10.0, 11.0],
+        'price_basis': ['both'] * 3,
+        'source': ['fixture'] * 3,
+    })
+    classified = pd.DataFrame({
+        '日期': ['20260805'],
+        '代码': ['600000'],
+    })
+
+    monkeypatch.setattr(module, 'load_price_cache', lambda include_future=False: cached.copy())
+
+    def fail_if_disk_universe_is_read(*args, **kwargs):
+        raise AssertionError('explicit universe must not re-read security master or industry cache')
+
+    monkeypatch.setattr(module.pd, 'read_csv', fail_if_disk_universe_is_read)
+    result, meta = module.update_price_cache(
+        classified,
+        return_meta=True,
+        universe_codes=universe_codes,
+    )
+
+    assert set(result['code']) == set(universe_codes)
+    assert meta['universe_total'] == 3
+    assert meta['requested_codes'] == 3
+    assert meta['market_prefixes'] == ['bj', 'sh', 'sz']
+
 
 def test_trim_uninformative_prefix():
     """回测前缀裁剪: 裁掉无 A/D 真源的开头, 中段残缺保留以维持序列连续性。
@@ -234,3 +275,240 @@ def test_audit_clips_to_price_window(tmp_path, monkeypatch):
 
     # 20250919 宽度为 0 但在区间外 (真源不覆盖) → 只提示不计缺陷
     assert adi.audit_sentiment({'20260623', '20260701'}, quiet=True) == []
+
+
+def test_ai_legacy_schema_is_normalized_for_guarded_output():
+    import ai_rebound
+    output, source = ai_rebound.normalize_ai_output({
+        'market_summary': '结构性反弹',
+        'active_comment': '主线有承接',
+        'follow_comment': '跟随盘谨慎',
+        'gap_comment': '中间档位缺失',
+        'evolution': '关注轮动',
+        'operation': '等待确认',
+    })
+    assert source == 'legacy'
+    assert output['facts'] == ['结构性反弹']
+    assert '主动主线: 主线有承接' in output['observations']
+    assert output['decision'] == '等待确认'
+
+
+def test_ai_canonical_schema_renders_without_legacy_fields():
+    import ai_rebound
+    html = ai_rebound.render_ai_rebound_html(
+        {'observations': ['主动主线有承接', '跟随盘谨慎'],
+         'risks': ['高度断层'], 'conditions': ['明日看承接'],
+         'decision': '等待确认'},
+        {'market_char': '数据不足', 'char_desc': 'A/D 未取得'}, '#8b949e')
+    assert '主动主线有承接' in html
+    assert '高度断层' in html
+    assert '等待确认' in html
+
+
+def test_missing_ad_is_not_classified_as_market_decline():
+    import importlib.util
+    import pandas as pd
+    spec = importlib.util.spec_from_file_location(
+        'mztrack_missing_ad', os.path.join(_ROOT, 'src', '主线强度追踪.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module._analyze_active_mainlines = lambda: ('', '', [], [])
+    html = module.generate_rebound_analysis(
+        {'up': None, 'down': None, 'ad_available': False, 'ad_status': 'missing'},
+        pd.DataFrame({'up': [None, 1200, 900]}), [],
+        {'publication_mode': 'facts_only'},
+    )
+    assert '涨跌家数数据不足' in html
+    assert '普跌弱势' not in html
+    assert '数据不足' in html
+
+
+def test_market_sentiment_missing_snapshot_keeps_counts_unknown(monkeypatch):
+    import pandas as pd
+    from limit_ratio_factor import MarketSentimentFactor
+
+    factor = MarketSentimentFactor()
+    frame = pd.DataFrame([{
+        'date': '20260806', 'limit_up': 4, 'limit_down': 2,
+        'market_up': None, 'market_down': None, 'market_flat': None,
+        'ad_ratio': None, 'ad_available': False, 'ad_status': 'missing',
+        'ad_source': 'unavailable', 'raw_score': None, 'score_ema': None,
+    }])
+    monkeypatch.setattr(factor, '_get_composite_data', lambda: frame)
+    result = factor.calculate_factor('20260806')
+    assert result['market_up'] is None
+    assert result['market_down'] is None
+    assert result['ad_available'] is False
+    assert result['status'] == 'missing'
+
+def test_price_provider_fallback_fills_beijing_gap_only():
+    """Baostock 不支持北交所时，统一备用源应补齐 BJ 双口径价格。"""
+    import importlib.util
+    from types import SimpleNamespace
+    import pandas as pd
+
+    spec = importlib.util.spec_from_file_location(
+        'mztrack_price_fallback', os.path.join(_ROOT, 'src', '主线强度追踪.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    cached = pd.DataFrame({
+        'date': ['2026-08-05', '2026-08-05'],
+        'code': ['sh600000', 'sz000001'],
+        'close_raw': [10.0, 11.0],
+        'close_qfq': [9.0, 10.0],
+        'source': ['baostock', 'baostock'],
+    })
+
+    class FakeProvider:
+        requested = []
+
+        def fetch_range(self, universe, dates):
+            self.requested = universe['code'].tolist()
+            data = pd.DataFrame({
+                'date': dates,
+                'code': ['bj920117'],
+                'close_raw': [12.0],
+                'close_qfq': [11.0],
+                'trade_status': ['traded'],
+                'source_raw': ['sina_raw'],
+                'source_qfq': ['sina_qfq'],
+                'fetched_at': ['2026-08-05T16:00:00+08:00'],
+            })
+            return SimpleNamespace(
+                data=data, source='price_provider',
+                status=SimpleNamespace(value='success'),
+                expected_count=1, actual_count=1, message='',
+            )
+
+    provider = FakeProvider()
+    result, meta = module._fill_price_gaps_with_provider(
+        cached,
+        ['sh600000', 'sz000001', 'bj920117'],
+        '2026-08-05',
+        provider=provider,
+    )
+
+    bj = result[(result['date'] == '2026-08-05') & (result['code'] == 'bj920117')]
+    assert provider.requested == ['bj920117']
+    assert bj['close_raw'].notna().all()
+    assert bj['close_qfq'].notna().all()
+    assert meta['fallback_requested'] == 1
+    assert meta['fallback_covered'] == 1
+    assert meta['missing_after'] == 0
+    assert meta['fallback_status'] == 'success'
+
+
+def test_price_provider_fallback_keeps_missing_when_source_is_empty():
+    """备用源返回空数据时必须保留缺失状态，不能伪造 100% 覆盖。"""
+    import importlib.util
+    from types import SimpleNamespace
+    import pandas as pd
+
+    spec = importlib.util.spec_from_file_location(
+        'mztrack_price_fallback_empty', os.path.join(_ROOT, 'src', '主线强度追踪.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    class FakeProvider:
+        def fetch_range(self, universe, dates):
+            return SimpleNamespace(
+                data=pd.DataFrame(), source='price_provider',
+                status=SimpleNamespace(value='failed'),
+                expected_count=len(universe) * len(dates), actual_count=0,
+                message='source empty',
+            )
+
+    result, meta = module._fill_price_gaps_with_provider(
+        pd.DataFrame(), ['bj920117'], '2026-08-05', provider=FakeProvider())
+
+    assert result.empty
+    assert meta['fallback_requested'] == 1
+    assert meta['fallback_covered'] == 0
+    assert meta['missing_after'] == 1
+    assert meta['fallback_status'] == 'failed'
+
+
+def test_price_pair_coverage_requires_adjacent_market_day_for_breadth():
+    """报告日完整不代表 A/D 可用；必须同时覆盖前一真实交易日。"""
+    import importlib.util
+    import pandas as pd
+
+    spec = importlib.util.spec_from_file_location(
+        'mztrack_price_pair', os.path.join(_ROOT, 'src', '主线强度追踪.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    frame = pd.DataFrame([
+        {'date': '2026-08-04', 'code': 'sh600000', 'close_raw': 9.8, 'close_qfq': 9.8},
+        {'date': '2026-08-05', 'code': 'sh600000', 'close_raw': 10.0, 'close_qfq': 10.0},
+        {'date': '2026-08-05', 'code': 'sz000001', 'close_raw': 11.0, 'close_qfq': 11.0},
+        {'date': '2026-08-05', 'code': 'bj920117', 'close_raw': 12.0, 'close_qfq': 12.0},
+    ])
+    codes = ['sh600000', 'sz000001', 'bj920117']
+
+    coverage = module._price_pair_coverage(
+        frame, codes, '2026-08-05', '2026-08-04')
+
+    assert coverage['current_raw_covered'] == 3
+    assert coverage['previous_raw_covered'] == 1
+    assert coverage['breadth_pair_covered'] == 1
+    assert coverage['breadth_pair_coverage_pct'] == 33.3
+    assert coverage['breadth_pair_required'] == 3
+    assert coverage['breadth_pair_ready'] is False
+    assert module._price_fetch_start_for_breadth(
+        frame, codes, '2026-08-05', '2026-08-04', '2026-08-05'
+    ) == '2026-08-04'
+
+
+def test_price_provider_fallback_fills_beijing_gap_for_both_breadth_dates():
+    """北交所缺口要同时补报告日和前一交易日，不能只补报告日。"""
+    import importlib.util
+    from types import SimpleNamespace
+    import pandas as pd
+
+    spec = importlib.util.spec_from_file_location(
+        'mztrack_price_pair_fallback', os.path.join(_ROOT, 'src', '主线强度追踪.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    cached = pd.DataFrame([
+        {'date': date, 'code': code, 'close_raw': close, 'close_qfq': close}
+        for date in ('2026-08-04', '2026-08-05')
+        for code, close in (('sh600000', 10.0), ('sz000001', 11.0))
+    ])
+
+    class FakeProvider:
+        requested_codes = []
+        requested_dates = []
+
+        def fetch_range(self, universe, dates):
+            self.requested_codes = universe['code'].tolist()
+            self.requested_dates = list(dates)
+            data = pd.DataFrame([
+                {
+                    'date': date, 'code': 'bj920117',
+                    'close_raw': 12.0, 'close_qfq': 11.0,
+                    'trade_status': 'traded', 'source_raw': 'sina_raw',
+                    'source_qfq': 'sina_qfq',
+                    'fetched_at': f'{date}T16:00:00+08:00',
+                }
+                for date in dates
+            ])
+            return SimpleNamespace(
+                data=data, source='price_provider',
+                status=SimpleNamespace(value='success'),
+                expected_count=len(data), actual_count=len(data), message='')
+
+    provider = FakeProvider()
+    result, meta = module._fill_price_gaps_with_provider(
+        cached, ['sh600000', 'sz000001', 'bj920117'], '2026-08-05',
+        previous_date='2026-08-04', provider=provider)
+
+    bj = result[result['code'] == 'bj920117'].sort_values('date')
+    assert provider.requested_codes == ['bj920117']
+    assert provider.requested_dates == ['2026-08-04', '2026-08-05']
+    assert bj['date'].tolist() == ['2026-08-04', '2026-08-05']
+    assert bj['close_raw'].notna().all()
+    assert bj['close_qfq'].notna().all()
+    assert meta['fallback_requested'] == 1
+    assert meta['fallback_covered'] == 1
+    assert meta['missing_after'] == 0

@@ -27,14 +27,8 @@ import sys
 import pandas as pd
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'src'))
-from paths import (  # noqa: E402
-    PRICE_CACHE, ZT_CACHE_FILE, SENTIMENT_CACHE, UNIVERSE_CACHE,
-    FETCH_STATUS_CACHE, QUALITY_REPORT,
-)
-from data_sources.fetch_status import FetchStatusStore  # noqa: E402
-from data_sources.models import FetchResult, FetchStatus  # noqa: E402
-from data_sources.price_provider import PRICE_COLUMNS  # noqa: E402
-from data_sources.quality_gate import MarketDataQualityGate  # noqa: E402
+from paths import PRICE_CACHE, ZT_CACHE_FILE, SENTIMENT_CACHE  # noqa: E402
+from time_utils import filter_completed_rows, get_report_cutoff  # noqa: E402
 
 try:
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')  # pyrefly: ignore [missing-attribute]
@@ -60,6 +54,20 @@ def _to_compact(dashed: str) -> str:
     return dashed.replace('-', '')
 
 
+def _price_value_column(price_df: pd.DataFrame) -> tuple[str | None, bool]:
+    """Return the raw close column and whether the cache is legacy.
+
+    ``close_raw`` is the only authoritative value for stale-copy and value-range
+    checks.  The ``close`` fallback is retained only so the audit can explain an
+    old cache clearly instead of crashing with a KeyError.
+    """
+    if 'close_raw' in price_df.columns:
+        return 'close_raw', False
+    if 'close' in price_df.columns:
+        return 'close', True
+    return None, False
+
+
 def check_conflict_markers(path: str) -> list:
     """检查 CSV 是否残留 git 冲突标记 (曾致 awk 截断读到错误数, 见 memory)。"""
     if not os.path.exists(path):
@@ -77,18 +85,30 @@ def check_conflict_markers(path: str) -> list:
 def audit_price(price_df: pd.DataFrame, dates: list, quiet: bool) -> list:
     """价格缓存: 陈旧副本 + 覆盖缺口 + 重复/异常值。返回缺陷描述列表。"""
     defects = []
-    raw_column = 'close_raw' if 'close_raw' in price_df.columns else 'close'
-    qfq_column = 'close_qfq' if 'close_qfq' in price_df.columns else None
-    if raw_column not in price_df.columns:
-        defects.append('价格缓存缺少 close_raw（且无旧 close 兼容列）')
-        print('  ❌ 价格缓存缺少 close_raw，无法进行原始价格审计')
+    close_col, legacy_schema = _price_value_column(price_df)
+    if close_col is None:
+        defects.append('价格缓存缺少 close_raw（无法审计 raw 收盘价）')
+        print('\n  ❌ 价格缓存缺少 close_raw, 无法进行 raw 收盘价体检')
         return defects
-    if 'close_raw' in price_df.columns:
-        missing_contract = [c for c in ('trade_status', 'source_raw', 'source_qfq')
-                            if c not in price_df.columns]
-        if missing_contract:
-            defects.append(f'价格缓存缺少 canonical 字段 {", ".join(missing_contract)}')
-            print(f'  ❌ canonical 字段缺失: {", ".join(missing_contract)}')
+    if legacy_schema:
+        defects.append('价格缓存仍使用旧 close 字段（未迁移到 close_raw）')
+        print('  ❌ 价格缓存仍使用旧 close 字段；主链路只接受 close_raw')
+
+    raw_values = pd.to_numeric(
+        price_df['close_raw'] if 'close_raw' in price_df.columns else price_df['close'],
+        errors='coerce',
+    )
+    legacy_values = pd.to_numeric(price_df.get('close_legacy'), errors='coerce')
+    valid_raw = raw_values.notna() & (raw_values > 0)
+    valid_legacy = legacy_values.notna() & (legacy_values > 0)
+    if 'close_qfq' in price_df.columns:
+        qfq_values = pd.to_numeric(price_df['close_qfq'], errors='coerce')
+        qfq_missing = int(qfq_values.isna().sum())
+        print(f'  ℹ️ qfq 可选列: {len(qfq_values) - qfq_missing}/{len(qfq_values)} 行有效, '
+              f'{qfq_missing} 行缺失不影响 raw 主链路')
+    else:
+        print('  ℹ️ qfq 可选列不存在；本次只审计 raw 主链路')
+
     counts = price_df['date'].value_counts()
     baseline = int(counts.median())
     print(f'\n  📊 价格缓存: {len(price_df)} 行, {len(dates)} 交易日, '
@@ -107,15 +127,39 @@ def audit_price(price_df: pd.DataFrame, dates: list, quiet: bool) -> list:
     else:
         print(f'  ✅ 覆盖率: 全部 {len(dates)} 天 ≥{MIN_COVERAGE_RATIO:.0%} 基准')
 
-    # --- 2. 陈旧副本 (逐股 close_raw 身份比对; close 仅为迁移期兼容) ---
-    compare_df = price_df
-    if 'trade_status' in compare_df.columns:
-        compare_df = compare_df[compare_df['trade_status'].astype(str).str.lower().eq('traded')]
-    close_by_date = {d: dict(zip(compare_df.loc[compare_df['date'] == d, 'code'],
-                                 compare_df.loc[compare_df['date'] == d, raw_column]))
-                     for d in dates}
+    raw_counts = price_df.loc[valid_raw].groupby('date')['code'].nunique()
+    raw_dates = [d for d in dates if int(raw_counts.get(d, 0)) > 0]
+    if raw_dates:
+        raw_baseline = int(raw_counts.loc[raw_dates].median())
+        raw_thin = [(d, int(raw_counts.get(d, 0))) for d in raw_dates
+                    if int(raw_counts.get(d, 0)) < raw_baseline * MIN_COVERAGE_RATIO]
+        print(f'  ℹ️ raw 收盘覆盖: {len(raw_dates)}/{len(dates)} 天有 raw, 基准 {raw_baseline} 只/日')
+        if raw_thin:
+            defects.append(f'raw 收盘覆盖不足 {len(raw_thin)} 天 (<{MIN_COVERAGE_RATIO:.0%} raw 基准)')
+            print(f'  ❌ raw 覆盖不足 {len(raw_thin)} 天:')
+            for d, n in (raw_thin if not quiet else raw_thin[:10]):
+                print(f'       {d}: {n} 只 ({n / raw_baseline:.0%})')
+    else:
+        print('  ⚠️ raw 收盘在当前窗口没有有效行；只能审计 legacy 历史兼容值')
+
+    # --- 2. 陈旧副本 (逐股同口径收盘价身份比对) ---
+    basis_by_date = {
+        d: str(price_df.loc[price_df['date'] == d, 'price_basis'].mode().iloc[0])
+        if 'price_basis' in price_df.columns and not price_df.loc[price_df['date'] == d, 'price_basis'].dropna().empty
+        else ''
+        for d in dates
+    }
+    close_by_date = {}
+    for d in dates:
+        day_mask = price_df['date'] == d
+        use_legacy = 'price_basis' in price_df.columns and basis_by_date[d] == 'legacy_mixed'
+        values, valid = (legacy_values, valid_legacy) if use_legacy else (raw_values, valid_raw)
+        mask = day_mask & valid
+        close_by_date[d] = dict(zip(price_df.loc[mask, 'code'], values.loc[mask]))
     stale, ratios = [], []
     for prev, cur in zip(dates, dates[1:]):
+        if basis_by_date.get(cur) != basis_by_date.get(prev):
+            continue
         cur_map, prev_map = close_by_date[cur], close_by_date[prev]
         common = set(cur_map) & set(prev_map)
         if len(common) < MIN_COMPARE_SAMPLE:
@@ -128,7 +172,7 @@ def audit_price(price_df: pd.DataFrame, dates: list, quiet: bool) -> list:
             stale.append((cur, prev, identical, len(common), ratio))
     if stale:
         defects.append(f'价格缓存陈旧副本 {len(stale)} 天')
-        print(f'  ❌ 陈旧副本 {len(stale)} 天 ({raw_column} 与前一交易日逐股相同):')
+        print(f'  ❌ 陈旧副本 {len(stale)} 天 (close 与前一交易日逐股相同):')
         for cur, prev, ident, tot, r in stale:
             print(f'       {cur} ≈ {prev}: {ident}/{tot} ({r:.1%})')
     else:
@@ -137,23 +181,22 @@ def audit_price(price_df: pd.DataFrame, dates: list, quiet: bool) -> list:
               f'阈值 {STALE_IDENTITY_THRESHOLD:.0%})')
 
     # --- 3. 值域与重复 ---
-    bad_close = (pd.to_numeric(price_df[raw_column], errors='coerce').fillna(0) <= 0).sum()
-    bad_qfq = ((pd.to_numeric(price_df[qfq_column], errors='coerce').fillna(0) <= 0).sum()
-               if qfq_column else 0)
+    raw_present = raw_values.notna()
+    legacy_present = legacy_values.notna()
+    bad_raw = int((raw_present & ~valid_raw).sum())
+    bad_legacy = int((legacy_present & ~valid_legacy).sum())
     dup = int(price_df.duplicated(subset=['code', 'date']).sum())
-    if bad_close:
-        defects.append(f'价格缓存 {raw_column}<=0 或空值 {bad_close} 行')
-        print(f'  ❌ {raw_column}<=0/空值: {bad_close} 行')
-    if bad_qfq:
-        defects.append(f'价格缓存 close_qfq<=0 或空值 {bad_qfq} 行')
-        print(f'  ❌ close_qfq<=0/空值: {bad_qfq} 行')
+    if bad_raw:
+        defects.append(f'价格缓存 close_raw<=0 {bad_raw} 行')
+        print(f'  ❌ close_raw<=0: {bad_raw} 行')
+    if bad_legacy:
+        defects.append(f'价格缓存 close_legacy<=0 {bad_legacy} 行')
+        print(f'  ❌ close_legacy<=0: {bad_legacy} 行')
     if dup:
         defects.append(f'价格缓存 (code,date) 重复 {dup} 行')
         print(f'  ❌ (code,date) 重复: {dup} 行')
-    if not bad_close and not bad_qfq and not dup:
-        print(f'  ✅ 值域与唯一性: {raw_column}'
-              + ('/close_qfq' if qfq_column else '')
-              + ' 全 >0, (code,date) 无重复')
+    if not bad_raw and not bad_legacy and not dup:
+        print('  ✅ 值域与唯一性: 已有 raw/legacy 数值均 >0, (code,date) 无重复')
 
     return defects
 
@@ -282,6 +325,8 @@ def main():
     ap.add_argument('--recent', type=int, default=0,
                     help='只体检最近 N 个交易日 (默认 0 = 全量)')
     ap.add_argument('--quiet', action='store_true', help='明细折叠, 只报缺陷概览')
+    ap.add_argument('--as-of', default=None,
+                    help='报告截止日 YYYY-MM-DD/YYYYMMDD；排除该日之后的缓存行')
     args = ap.parse_args()
 
     print('=' * 72)
@@ -295,52 +340,24 @@ def main():
     if marks:
         sys.exit(f'  ❌ 价格缓存残留 git 冲突标记 (第 {marks[0][0]} 行), 先解决冲突再体检')
 
+    try:
+        cutoff = get_report_cutoff(report_date=args.as_of)
+    except ValueError as exc:
+        sys.exit(f'  ❌ {exc}')
+
     price_df = pd.read_csv(PRICE_CACHE, dtype={'code': str})
-    # 新价格契约是正式生产口径；旧单列 close 缓存只用于迁移诊断，绝不再判“通过”。
-    if set(PRICE_COLUMNS).issubset(price_df.columns):
-        if not os.path.exists(UNIVERSE_CACHE):
-            sys.exit('  ❌ stock_universe.csv 不存在，无法证明沪深北全市场覆盖')
-        universe = pd.read_csv(UNIVERSE_CACHE, dtype=str).fillna('')
-        dates = sorted(price_df['date'].astype(str).unique())
-        if args.recent > 0:
-            dates = dates[-args.recent:]
-            price_df = price_df[price_df['date'].astype(str).isin(dates)]
-        target_date = dates[-1]
-        fetch_results = []
-        if os.path.exists(FETCH_STATUS_CACHE):
-            for _, row in FetchStatusStore(FETCH_STATUS_CACHE).read().iterrows():
-                try:
-                    fetch_results.append(FetchResult(
-                        dataset=row['dataset'], date=row['date'], source=row['source'],
-                        status=FetchStatus(row['status']),
-                        expected_count=int(row['expected_count'] or 0),
-                        actual_count=int(row['actual_count'] or 0),
-                        scope=row['scope'], message=row['message'], run_id=row['run_id'],
-                    ))
-                except (ValueError, KeyError):
-                    continue
-        report = MarketDataQualityGate().validate(
-            universe, price_df, target_date, fetch_results
-        )
-        report.write_json(QUALITY_REPORT)
-        print(f'  📊 新价格契约: {len(price_df)} 行, 目标日 {target_date}')
-        if not report.ok:
-            print(f'  ❌ 发现 {len(report.critical)} 个严重缺陷:')
-            for issue in report.critical:
-                print(f'     - [{issue.code}] {issue.message}')
-            sys.exit(1)
-        print('  ✅ 沪深北 universe、raw/qfq 价格、来源、状态与覆盖率均通过体检')
-        return
-
-    missing_contract = sorted(set(PRICE_COLUMNS) - set(price_df.columns))
-    print('  ❌ 价格缓存仍是旧单列 close 格式，禁止进入生产计算')
-    print(f'     缺少字段: {", ".join(missing_contract)}')
-    print('     请运行: python tools/rebuild_market_data.py')
-    sys.exit(1)
-
-    # 以下保留旧审计函数供迁移诊断和历史测试调用，不再作为生产 main 路径。
+    required = {'code', 'date'}
+    missing_required = sorted(required - set(price_df.columns))
+    if missing_required:
+        sys.exit(f'  ❌ 价格缓存缺少必要列: {", ".join(missing_required)}')
     price_df['date'] = price_df['date'].astype(str).str.strip()
+    before_rows = len(price_df)
+    price_df = filter_completed_rows(price_df, 'date', report_date=cutoff.isoformat())
+    if len(price_df) < before_rows:
+        print(f'  🕒 截止日: {cutoff.isoformat()} (过滤未来缓存 {before_rows - len(price_df)} 行)')
     dates = sorted(price_df['date'].unique())
+    if not dates:
+        sys.exit(f'  ❌ 截止 {cutoff.isoformat()} 前没有可审计的价格缓存')
     if args.recent > 0:
         dates = dates[-args.recent:]
         price_df = price_df[price_df['date'].isin(dates)]

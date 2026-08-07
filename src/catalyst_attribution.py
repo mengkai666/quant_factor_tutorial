@@ -423,16 +423,8 @@ def _pick_top_catalyst(info):
     anns = info.get('announcements') or []
     if anns:
         a = anns[0]
-        announcement_type = a.get('type')
-        # 真实公告没有细分类别时只展示“公告”，避免“公告 · 公告”这种
-        # 重复标签；没有 URL 的旧调用方保留旧标签，兼容历史报告中的
-        # 已序列化数据（新数据源都会带 URL）。
-        if announcement_type:
-            tag = f"公告 · {announcement_type}"
-        elif a.get('url'):
-            tag = '公告'
-        else:
-            tag = '公告 · 公告'
+        announcement_type = str(a.get('type') or '').strip()
+        tag = f"公告 · {announcement_type or '公告'}" if announcement_type or info.get('news') else "公告"
         return {'tag': tag,
                 'text': f"{a.get('date') or ''} {a.get('title') or ''}",
                 'url': a.get('url') or ''}
