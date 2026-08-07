@@ -54,7 +54,8 @@ from report_logic import (
 
 def build_dashboard_ctx(timing=None, advance_decline=None, sentiment_df=None,
                         echelon=None, previous_echelon=None, report_date=None, focus_df=None,
-                        focus_catalysts=None, report_context=None) -> dict:
+                        focus_catalysts=None, report_context=None, regime=None,
+                        data_quality=None, ladder_review=None) -> dict:
     """从 timing + 盘面 + focus_pool + 催化归因结果组装看板 ctx.
 
     focus_catalysts: {股票名: {catalyst: {tag, text, url} | None, raw: {...}}}
@@ -68,6 +69,9 @@ def build_dashboard_ctx(timing=None, advance_decline=None, sentiment_df=None,
     timing = timing or {}
     advance_decline = advance_decline or {}
     unified_context = report_context if isinstance(report_context, dict) else {}
+    legacy_regime = dict(regime) if isinstance(regime, dict) else {}
+    legacy_quality = dict(data_quality) if isinstance(data_quality, dict) else {}
+    legacy_ladder_review = dict(ladder_review) if isinstance(ladder_review, dict) else {}
     try:
         from timing_signal import (
             _compute_ad_ratio, _compute_ladder, _get_5day_pressure, _to_int,
@@ -101,6 +105,7 @@ def build_dashboard_ctx(timing=None, advance_decline=None, sentiment_df=None,
         advance_decline.get('up', _up),
         advance_decline.get('down', _dn),
         advance_decline.get('market_total'),
+        preserve_missing=True,
     )
     ladder, h3, h4, h5, h6p = _compute_ladder(echelon)
     ladder_metrics = compute_ladder_metrics(
@@ -168,17 +173,88 @@ def build_dashboard_ctx(timing=None, advance_decline=None, sentiment_df=None,
         market_state.setdefault('publication_mode', unified_context.get('publication_mode', 'facts_only'))
         scenario_probabilities = list(unified_context.get('scenarios') or [])
     else:
-        quality = assess_data_quality(**quality_args)
+        if legacy_quality:
+            quality = dict(legacy_quality)
+            if not quality.get('status'):
+                quality['status'] = 'ok' if quality.get('ok') is True else 'degraded'
+            quality.setdefault('market_scope', '沪深北全A')
+            quality.setdefault(
+                'publication_mode',
+                'decision' if quality['status'] == 'ok' else 'observation',
+            )
+        else:
+            quality = assess_data_quality(**quality_args)
+        scene_hint = legacy_regime.get('code') or timing.get('scene')
         market_state = build_market_state(
-            quality, scene=timing.get('scene'), historical_samples=historical_samples,
+            quality, scene=scene_hint, historical_samples=historical_samples,
         )
+        if legacy_regime:
+            market_state.update(legacy_regime)
+            regime_title = legacy_regime.get('title') or legacy_regime.get('label')
+            if regime_title:
+                market_state['title'] = regime_title
+                market_state['label'] = regime_title
+                market_state['scene'] = regime_title
         scenario_probabilities = build_scenario_probabilities(
-            scene=timing.get('scene'), ad_ratio=ratios.get('breadth_ratio'),
+            scene=scene_hint, ad_ratio=ratios.get('breadth_ratio'),
             zt=zt, dt=dt, curr_h=curr_h, pressure_5d=pressure,
             ladder=ladder, h5=h5, data_quality=quality,
             historical_samples=historical_samples,
             historical_stats=historical_stats,
         )
+    if not unified_context and legacy_ladder_review:
+        merged_ladder = dict(ladder_metrics)
+        merged_ladder.update(legacy_ladder_review)
+        distribution = legacy_ladder_review.get('distribution')
+        if isinstance(distribution, dict):
+            normalized_distribution = {}
+            for key, value in distribution.items():
+                try:
+                    normalized_distribution[int(key)] = int(value)
+                except (TypeError, ValueError):
+                    continue
+            if normalized_distribution:
+                merged_ladder['distribution'] = normalized_distribution
+                merged_ladder['counts'] = normalized_distribution
+                merged_ladder['board_counts'] = normalized_distribution
+                merged_ladder['height_count'] = sum(normalized_distribution.values())
+                merged_ladder['first_board_count'] = normalized_distribution.get(1, 0)
+                merged_ladder['second_board_count'] = normalized_distribution.get(2, 0)
+                merged_ladder['h3'] = normalized_distribution.get(3, 0)
+                merged_ladder['h4'] = normalized_distribution.get(4, 0)
+                merged_ladder['h5'] = normalized_distribution.get(5, 0)
+                merged_ladder['h6p'] = sum(
+                    count for height, count in normalized_distribution.items() if height >= 6
+                )
+        promotions = legacy_ladder_review.get('promotions')
+        if isinstance(promotions, dict):
+            first_promotion = promotions.get(1) or promotions.get('1')
+            if isinstance(first_promotion, dict):
+                eligible = first_promotion.get('eligible')
+                advanced = first_promotion.get('advanced')
+                rate = first_promotion.get('rate')
+                try:
+                    rate_text = f'{float(rate) * 100:.1f}%'
+                except (TypeError, ValueError):
+                    rate_text = '样本不足'
+                if advanced is not None and eligible is not None:
+                    rate_text += f'（{advanced}/{eligible}）'
+                rate_row = {
+                    **first_promotion,
+                    'successes': advanced,
+                    'trials': eligible,
+                    'text': rate_text,
+                }
+                merged_ladder['first_board_to_second'] = rate_row
+                advancement_rates = dict(merged_ladder.get('advancement_rates') or {})
+                advancement_rates['1_to_2'] = rate_row
+                merged_ladder['advancement_rates'] = advancement_rates
+        ladder_metrics = merged_ladder
+        ladder = ladder_metrics.get('ladder', ladder)
+        h3 = ladder_metrics.get('h3', h3)
+        h4 = ladder_metrics.get('h4', h4)
+        h5 = ladder_metrics.get('h5', h5)
+        h6p = ladder_metrics.get('h6p', h6p)
     facts = unified_context.get('facts') if isinstance(unified_context.get('facts'), dict) else {}
     # 主报告已经计算过一套带前后交易日匹配的梯队指标；看板必须复用这套
     # canonical facts，不能再次用可能被裁剪/变形的 echelon 重新计算，
@@ -197,6 +273,17 @@ def build_dashboard_ctx(timing=None, advance_decline=None, sentiment_df=None,
             quality, report_date=date_key,
             report_generated_at=unified_context.get('generated_at') if unified_context else None,
         )
+    if not unified_context and legacy_quality:
+        data_credibility = dict(data_credibility)
+        for key in ('name_conflicts', 'limit_pool_status', 'limit_pool_source', 'notes'):
+            if key in legacy_quality:
+                data_credibility[key] = legacy_quality.get(key)
+        reasons = [str(item) for item in (data_credibility.get('reasons') or []) if str(item).strip()]
+        conflict_count = legacy_quality.get('name_conflicts')
+        if isinstance(conflict_count, (int, float)) and conflict_count > 0:
+            reasons.append(f'名称冲突 {int(conflict_count)}')
+        reasons.extend(str(item) for item in (legacy_quality.get('notes') or []) if str(item).strip())
+        data_credibility['reasons'] = list(dict.fromkeys(reasons))
     lianban_review = facts.get('lianban_review') if isinstance(facts.get('lianban_review'), dict) else None
     if lianban_review is None:
         lianban_review = build_lianban_review(ladder_metrics)
@@ -216,13 +303,13 @@ def build_dashboard_ctx(timing=None, advance_decline=None, sentiment_df=None,
 
     return {
         'date_str': date_key,
-        'scene': timing.get('scene'),
-        'action': timing.get('action'),
+        'scene': market_state.get('title') or market_state.get('scene') or market_state.get('label') or timing.get('scene'),
+        'action': market_state.get('action') or timing.get('action'),
         'level': timing.get('level'),
-        'color': timing.get('color'),
+        'color': market_state.get('color') or timing.get('color'),
         'position': timing.get('position'),
         'win_rate': timing.get('win_rate'),
-        'desc': timing.get('desc'),
+        'desc': market_state.get('reason') or timing.get('desc'),
         'curr_h': curr_h, 'prev_h': prev_h, 'pressure_5d': pressure,
         'zt': zt, 'dt': dt, 'zt_prev': zt_prev,
         # 兼容旧调用方, 但新展示必须区分两个指标。
@@ -284,6 +371,15 @@ def _pick_base_scenario(scenarios: list[dict]) -> tuple[dict | None, int]:
         if p > best_p:
             best, best_p = s, p
     return best, max(best_p, 0)
+def _historical_outcomes_only(ctx: dict) -> bool:
+    """识别只有历史结果率、没有前瞻概率的研究统计。"""
+    stats = ctx.get('scenario_stats')
+    if not isinstance(stats, dict):
+        return False
+    rows = [row for row in stats.values() if isinstance(row, dict)]
+    has_outcome_rate = any('win_rate' in row or 'horizon' in row for row in rows)
+    has_forward_probability = any(row.get('predicted_probability') is not None or row.get('probability') is not None for row in rows)
+    return has_outcome_rate and not has_forward_probability
 
 
 def _sentiment_temp(ad, zt, dt, curr_h, pressure_5d) -> tuple[int, str, str]:
@@ -314,13 +410,14 @@ def _sentiment_temp(ad, zt, dt, curr_h, pressure_5d) -> tuple[int, str, str]:
 
 
 def _split_focus_pool(focus_df) -> dict:
-    """把 focus_pool DataFrame 按'策略池'字段拆成三桶, 便于挂到 4 情形.
-    返回: {'space': [...], 'core': [...], 'midcore': [...]}
+    """把 focus_pool DataFrame 按'策略池'字段拆桶, 便于挂到不同情形.
+    返回: {'space': [...], 'midcore': [...], 'low_level': [...]}
       space: 高连板追打 (空间博弈池 + 主升接力池, 用于 A/B/C)
       midcore: 中军低吸 (核心中军低吸池, 用于 D 或 C 换车)
+      low_level: 首板/二板补涨观察
     每个元素形如 {'name': '爱丽家居', 'plate': '并购重组50%', 'cond': '...', 'stop': '...'}
     """
-    buckets = {'space': [], 'midcore': []}
+    buckets = {'space': [], 'midcore': [], 'low_level': []}
     if focus_df is None:
         return buckets
     try:
@@ -339,7 +436,9 @@ def _split_focus_pool(focus_df) -> dict:
             }
             if not entry['name']:
                 continue
-            if '空间博弈' in pool or '主升接力' in pool:
+            if '补涨' in pool:
+                buckets['low_level'].append(entry)
+            elif '空间博弈' in pool or '主升接力' in pool:
                 buckets['space'].append(entry)
             elif '中军' in pool or '低吸' in pool:
                 buckets['midcore'].append(entry)
@@ -789,6 +888,18 @@ _MODULE_STATUS_LABELS = {
     'unknown': '未评估',
 }
 
+_SCOPE_LABELS = {
+    'market_facts': '市场事实',
+    'lianban_review': '连板复盘',
+    'mainline_review': '主线归因',
+    'return_analysis': '复权收益',
+    'ai_review': 'AI 复盘',
+}
+_SCOPE_MODE_LABELS = {
+    'full': '完整可用',
+    'limited': '条件性',
+    'unavailable': '不可用',
+}
 
 def _module_sort_key(key: str, modules: dict) -> tuple[int, int, str]:
     module = modules.get(key) if isinstance(modules.get(key), dict) else {}
@@ -847,11 +958,59 @@ def _quality_scope_summary(quality: dict, publication_label: str, prefix: str) -
         limited.append(f'{label}{coverage_text}')
     passed_text = '、'.join(passed) if passed else '暂无模块通过完整校验'
     limited_text = '、'.join(limited) if limited else '无'
+    scopes = quality.get('publication_scopes') if isinstance(quality.get('publication_scopes'), dict) else {}
+    scope_rows = []
+    for key, label in _SCOPE_LABELS.items():
+        scope = scopes.get(key) if isinstance(scopes.get(key), dict) else {}
+        mode = str(scope.get('mode') or 'unavailable').lower()
+        scope_rows.append(
+            f'{label}={_SCOPE_MODE_LABELS.get(mode, "不可用")}'
+        )
+    scope_text = '；'.join(scope_rows) if scopes else '未生成分层评估'
     return (
         f'<div class="{prefix}quality-scope"><b>当前可用范围：{_esc(publication_label)}</b>'
         f'<span>事实层已通过：{_esc(passed_text)}</span>'
-        f'<span>限制项：{_esc(limited_text)}</span></div>'
+        f'<span>限制项：{_esc(limited_text)}</span>'
+        f'<span>分层可用性：{_esc(scope_text)}</span></div>'
     )
+
+
+def _quality_module_source_summary(quality: dict, *, field: str = 'source') -> str:
+    """返回报表实际参与的模块来源，优先使用 lineage.source_chain。"""
+    modules = quality.get('modules') if isinstance(quality.get('modules'), dict) else {}
+    rows = []
+    for key in ('price_raw', 'breadth'):
+        module = modules.get(key) if isinstance(modules.get(key), dict) else {}
+        lineage = module.get('lineage') if isinstance(module.get('lineage'), dict) else {}
+        chain = lineage.get('source_chain')
+        if isinstance(chain, (list, tuple)):
+            chain = [str(item).strip() for item in chain if str(item).strip()]
+        else:
+            chain = []
+        if field == 'fallback':
+            value = lineage.get('fallback_source') or module.get('fallback_source')
+            if not value and len(chain) > 1:
+                value = ' → '.join(chain[1:])
+        elif chain:
+            value = ' → '.join(chain)
+        else:
+            value = module.get('source')
+        if not value:
+            value = '未声明' if field != 'fallback' else '未配置'
+        rows.append(f'{_MODULE_LABELS.get(key, key)}：{value}')
+    return '；'.join(rows)
+
+
+def _quality_module_fallback_summary(quality: dict) -> str:
+    modules = quality.get('modules') if isinstance(quality.get('modules'), dict) else {}
+    rows = []
+    for key in ('price_raw', 'breadth'):
+        module = modules.get(key) if isinstance(modules.get(key), dict) else {}
+        lineage = module.get('lineage') if isinstance(module.get('lineage'), dict) else {}
+        used = bool(lineage.get('used_fallback', module.get('used_fallback')))
+        rows.append(f'{_MODULE_LABELS.get(key, key)}={"是" if used else "否"}')
+    return '；'.join(rows)
+
 
 def _quality_html(ctx: dict, prefix: str = '') -> str:
     """渲染统一的数据质量摘要，避免把内部字段或 Python None 泄漏到 HTML。"""
@@ -876,6 +1035,8 @@ def _quality_html(ctx: dict, prefix: str = '') -> str:
         coverage_text = '未声明/未提供'
     primary = _esc(quality.get('primary_source') or '未声明')
     fallback = _esc(quality.get('fallback_source') or '未配置')
+    module_sources = _esc(_quality_module_source_summary(quality))
+    module_fallbacks = _esc(_quality_module_fallback_summary(quality))
     scope = _esc(quality.get('market_scope') or '沪深北全A')
     prefixes = _esc(','.join(quality.get('market_prefixes') or ()) or '未获取')
     fallback_used = '是' if quality.get('used_fallback') else '否'
@@ -912,6 +1073,8 @@ def _quality_html(ctx: dict, prefix: str = '') -> str:
       <div class="{prefix}quality-items">
         <span>数据源：{primary}</span>
         <span>备用源：{fallback}</span>
+        <span>模块来源：{module_sources}</span>
+        <span>模块备用源启用：{module_fallbacks}</span>
         <span>市场范围：{scope}</span>
         <span>代码前缀：{prefixes}</span>
         <span>覆盖率：{_esc(coverage_text)}</span>
@@ -1182,6 +1345,14 @@ def _data_credibility_html(ctx: dict, prefix: str = '') -> str:
         module_items.append(f'{_esc(labels.get(name, name))}：{_esc(state_label)} {coverage_text}')
     reasons = [_esc(str(x)) for x in (summary.get('reasons') or [])[:3] if str(x).strip()]
     reason_text = '；'.join(reasons) if reasons else '未发现额外质量告警'
+    legacy_items = []
+    if summary.get('name_conflicts') is not None:
+        legacy_items.append(f'名称冲突 {summary.get("name_conflicts")}')
+    if summary.get('limit_pool_status'):
+        legacy_items.append(f'涨停池状态：{summary.get("limit_pool_status")}')
+    if summary.get('limit_pool_source'):
+        legacy_items.append(f'涨停池来源：{summary.get("limit_pool_source")}')
+    legacy_html = ''.join(f'<span>{_esc(item)}</span>' for item in legacy_items)
     return f'''
     <div class="{cls}">
       <div class="{title}">数据可信度</div>
@@ -1193,6 +1364,7 @@ def _data_credibility_html(ctx: dict, prefix: str = '') -> str:
         <span>源失败模块：{_esc(str(summary.get('source_failure', 0)))}</span>
         <span>陈旧模块：{_esc(str(summary.get('stale', 0)))}</span>
         <span>缺失字段：{_esc(str(summary.get('missing', 0)))}</span>
+        {legacy_html}
       </div>
       <div class="{note}">{'；'.join(module_items) if module_items else '模块状态未提供'}<br/>原因：{reason_text}</div>
     </div>'''
@@ -1211,7 +1383,15 @@ def _lianban_review_html(ctx: dict, prefix: str = '') -> str:
     first = review.get('first_board_to_second') if isinstance(review.get('first_board_to_second'), dict) else {}
     streak = review.get('streak_pool_promotion') if isinstance(review.get('streak_pool_promotion'), dict) else {}
     negative = review.get('negative_feedback') if isinstance(review.get('negative_feedback'), dict) else {}
-    status = '样本充分' if str(review.get('status')) == 'ok' else '样本不足'
+    status = {
+        'ok': '样本充分',
+        'partial': '部分可用',
+        'insufficient': '样本不足',
+    }.get(str(review.get('status') or 'insufficient'), '样本不足')
+    available_metrics = review.get('available_metrics') or []
+    missing_metrics = review.get('missing_metrics') or []
+    available_text = '、'.join(str(item) for item in available_metrics) or '—'
+    missing_text = '、'.join(str(item) for item in missing_metrics) or '—'
     return f'''
     <div class="{cls}">
       <div class="{title}">连板复盘</div>
@@ -1226,8 +1406,10 @@ def _lianban_review_html(ctx: dict, prefix: str = '') -> str:
         <span>昨日连板池晋级率：{_esc(streak.get('text') or '样本不足')}</span>
         <span>负反馈：{_esc(negative.get('text') or '样本不足')}</span>
         <span>状态：{_esc(status)}</span>
+        <span>可用指标：{_esc(available_text)}</span>
+        <span>缺失指标：{_esc(missing_text)}</span>
       </div>
-      <div class="{note}">{_esc(review.get('conclusion') or '连板复盘结论未就位')}；所有晋级率均展示真实前后交易日匹配分母。</div>
+      <div class="{note}">{_esc(review.get('conclusion') or '连板复盘结论未就位')}；所有晋级率均展示真实前后交易日匹配分母。{_esc(review.get('sample_note') or '')}</div>
     </div>'''
 
 
@@ -1317,6 +1499,24 @@ def _review_closure_html(ctx: dict, prefix: str = '') -> str:
             f'<div style="{muted_style}">缺少上一交易日结构化快照；历史 HTML 不作为计算源。</div>'
         )
 
+    limit_pool = daily_delta.get('limit_pool') if isinstance(daily_delta.get('limit_pool'), dict) else {}
+    limit_pool_items = []
+    if limit_pool.get('available'):
+        counts = limit_pool.get('counts') if isinstance(limit_pool.get('counts'), dict) else {}
+        limit_pool_items.extend([
+            f'<div style="{item_style}"><b>涨停池变化</b>：新增 {_esc(_fmt(counts.get("new"), "0"))}（新增首板 {_esc(_fmt(counts.get("new_first_board"), "0"))}） · '
+            f'晋级 {_esc(_fmt(counts.get("promoted"), "0"))} · 断板 {_esc(_fmt(counts.get("broken"), "0"))} · '
+            f'消失 {_esc(_fmt(counts.get("missing"), "0"))} · 未变 {_esc(_fmt(counts.get("unchanged"), "0"))}</div>'
+        ])
+        for key, label in (('new_first_board', '新增首板'), ('promoted', '晋级'), ('broken', '断板')):
+            rows = [row for row in list(limit_pool.get(key) or [])[:3] if isinstance(row, dict)]
+            if rows:
+                names = '、'.join(_esc(row.get('name') or row.get('code') or '未知标的') for row in rows)
+                limit_pool_items.append(f'<div style="{muted_style}">{label}：{names}</div>')
+    else:
+        reason = limit_pool.get('reason') or '缺少结构化逐股快照'
+        limit_pool_items.append(f'<div style="{warning_style}">涨停池逐股变化不可用：{_esc(reason)}</div>')
+
     status_labels = {
         'promoted': '晋级',
         'broken_positive': '断板收红',
@@ -1362,12 +1562,23 @@ def _review_closure_html(ctx: dict, prefix: str = '') -> str:
     prediction_count = prediction.get('prediction_count', prediction.get('total', 0))
     matured_count = prediction.get('matured_count', prediction.get('matured', 0))
     pending_count = prediction.get('pending_count', prediction.get('pending', 0))
+    incomplete_count = prediction.get('incomplete_count', prediction.get('incomplete', 0))
+    scored_count = prediction.get('scored_count')
+    hit_rate = prediction.get('hit_rate')
+    confidence = prediction.get('confidence_interval') if isinstance(prediction.get('confidence_interval'), dict) else {}
     brier = prediction.get('brier_score')
     brier_text = f' · Brier {_fmt(brier)}' if brier is not None else ''
+    scored_text = f' · 可评分 {_fmt(scored_count, "0")} 条' if scored_count is not None else ''
+    rate_text = ''
+    if hit_rate is not None:
+        rate_text = f' · T+3结果 {_fmt(float(hit_rate) * 100, "—")}% '
+        if confidence.get('lower') is not None and confidence.get('upper') is not None:
+            rate_text += f'（Wilson {_fmt(float(confidence["lower"]) * 100, "—")}–{_fmt(float(confidence["upper"]) * 100, "—")}%）'
     prediction_html = (
         f'<div style="{item_style}">历史记录 {_esc(_fmt(prediction_count, "0"))} 条 · '
-        f'已到期 {_esc(_fmt(matured_count, "0"))} 条 · 待验证 {_esc(_fmt(pending_count, "0"))} 条'
-        f'{_esc(brier_text)}</div>'
+        f'已到期 {_esc(_fmt(matured_count, "0"))} 条 · 部分回填 {_esc(_fmt(incomplete_count, "0"))} 条 · '
+        f'待验证 {_esc(_fmt(pending_count, "0"))} 条'
+        f'{_esc(scored_text)}{_esc(rate_text)}{_esc(brier_text)}</div>'
     )
 
     extra_panels = []
@@ -1407,7 +1618,7 @@ def _review_closure_html(ctx: dict, prefix: str = '') -> str:
     block = f'{prefix}review-closure'
     return f'''
     <div class="{block}" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;margin:16px 0 20px">
-      <div style="{panel_style}"><div style="{title_style}">今日相对昨日</div>{''.join(delta_items)}</div>
+      <div style="{panel_style}"><div style="{title_style}">今日相对昨日</div>{''.join(delta_items)}{''.join(limit_pool_items)}</div>
       <div style="{panel_style}"><div style="{title_style}">昨日连板反馈</div>{''.join(progression_items)}</div>
       <div style="{panel_style}"><div style="{title_style}">数据来源与质量</div>{''.join(lineage_items)}</div>
       <div style="{panel_style}"><div style="{title_style}">历史预测复盘</div>{prediction_html}</div>
@@ -1438,10 +1649,10 @@ def generate_dashboard_html(ctx: dict) -> str:
         win_rate = None
         desc = f"{state.get('reason', '核心数据未通过质量校验')}。当前仅展示已校验事实。"
     elif observation_only:
-        scene = state.get('label', '数据降级')
-        action = '仅观察与条件触发'
-        level = f"条件模式 · {state.get('label', '数据降级')}"
-        color = '#d29922'
+        scene = state.get('title') or state.get('label', '数据降级')
+        action = state.get('action') or '仅观察与条件触发'
+        level = f"条件模式 · {scene}"
+        color = state.get('color') or '#d29922'
         position = '条件性观察'
         win_rate = None
         desc = f"{state.get('reason', '数据处于降级状态')}。当前展示条件性观察。"
@@ -1513,8 +1724,15 @@ def generate_dashboard_html(ctx: dict) -> str:
     lianban_review_html = _lianban_review_html(ctx)
     mainline_review_html = _mainline_review_html(ctx)
     review_closure_html = _review_closure_html(ctx)
-    scenario_heading = '观察与条件触发' if policy['observation_only'] else '明日 T+1 · 4 情形决策树'
-    scenario_sub = '满足条件后再评估，不构成无条件动作' if policy['observation_only'] else '概率最高者为基准情形'
+    historical_outcomes_only = _historical_outcomes_only(ctx)
+    if historical_outcomes_only:
+        scenario_heading = '当前策略 · 历史结果对照'
+        scenario_sub = '历史结果率仅作研究参考'
+    elif policy['observation_only']:
+        scenario_heading = '观察与条件触发'
+        scenario_sub = '满足条件后再评估，不构成无条件动作'
+    else:
+        scenario_heading, scenario_sub = '明日 T+1 · 4 情形决策树', '概率最高者为基准情形'
     scenario_block = '' if policy['facts_only'] else (
         f'<div class="section-title">{scenario_heading}<span class="st-sub">{scenario_sub}</span></div>'
         f'<div class="scenario-tree">{scen_cards}</div>'
@@ -1542,6 +1760,8 @@ def generate_dashboard_html(ctx: dict) -> str:
     pick_html = f' — <span class="pk">首选 {_esc(top_pick)}</span>' if top_pick and policy['decision_ready'] else ''
     if policy['facts_only']:
         headline_label, headline_value, headline_sub = '可用范围', '仅事实层', '当前仅展示已校验事实'
+    elif historical_outcomes_only:
+        headline_label, headline_value, headline_sub = '重点 · 当前策略', base_name, '历史结果率仅作研究参考'
     elif policy['observation_only']:
         headline_label, headline_value, headline_sub = '可用范围', '观察与条件触发', '当前展示条件性观察'
     else:
@@ -1896,17 +2116,18 @@ def generate_dashboard_html(ctx: dict) -> str:
 
   {review_closure_html}
 
+  {quality_html}
+  {ladder_quality_html}
+  {data_credibility_html}
+  {lianban_review_html}
+  {mainline_review_html}
+
   {playbook_html}
 
   {scenario_block}
 
   <div class="section-title">{"股票池未发布" if policy['facts_only'] else "观察名单（非推荐）" if policy['observation_only'] else "明日核心股票池"}<span class="st-sub">{"数据阻断" if policy['facts_only'] else "仅供观察 · 条件触发" if policy['observation_only'] else "具体标的 · 入场条件 · 防守位"}</span></div>
   {focus_rows_html}
-  {quality_html}
-  {ladder_quality_html}
-  {data_credibility_html}
-  {lianban_review_html}
-  {mainline_review_html}
 
   <details class="evidence">
     <summary>数据佐证 · 盘面因子明细 与 历史同型样本</summary>
@@ -1976,10 +2197,10 @@ def generate_dashboard_section(ctx: dict) -> str:
         win_rate = None
         desc = f"{state.get('reason', '核心数据未通过质量校验')}。当前仅展示已校验事实。"
     elif observation_only:
-        scene = state.get('label', '数据降级')
-        action = '仅观察与条件触发'
-        level = f"条件模式 · {state.get('label', '数据降级')}"
-        color = '#d29922'
+        scene = state.get('title') or state.get('label', '数据降级')
+        action = state.get('action') or '仅观察与条件触发'
+        level = f"条件模式 · {scene}"
+        color = state.get('color') or '#d29922'
         position = '条件性观察'
         win_rate = None
         desc = f"{state.get('reason', '数据处于降级状态')}。当前展示条件性观察。"
@@ -2115,8 +2336,15 @@ def generate_dashboard_section(ctx: dict) -> str:
     lianban_review_html = _lianban_review_html(ctx, prefix='dbd-')
     mainline_review_html = _mainline_review_html(ctx, prefix='dbd-')
     review_closure_html = _review_closure_html(ctx, prefix='dbd-')
-    scenario_heading = '观察与条件触发' if policy['observation_only'] else '明日 T+1 · 4 情形决策树'
-    scenario_sub = '满足条件后再评估，不构成无条件动作' if policy['observation_only'] else '基准情形已高亮'
+    historical_outcomes_only = _historical_outcomes_only(ctx)
+    if historical_outcomes_only:
+        scenario_heading = '当前策略 · 历史结果对照'
+        scenario_sub = '历史结果率仅作研究参考'
+    elif policy['observation_only']:
+        scenario_heading = '观察与条件触发'
+        scenario_sub = '满足条件后再评估，不构成无条件动作'
+    else:
+        scenario_heading, scenario_sub = '明日 T+1 · 4 情形决策树', '基准情形已高亮'
     scenario_block = '' if policy['facts_only'] else (
         f'<div class="dbd-section-title">{scenario_heading} <span class="dbd-st-sub">{scenario_sub}</span></div>'
         f'<div class="dbd-tree">{scen_cards}</div>'
@@ -2140,6 +2368,8 @@ def generate_dashboard_section(ctx: dict) -> str:
     pick_html = f' — <span class="dbd-pk">首选 {_esc(top_pick)}</span>' if top_pick and policy['decision_ready'] else ''
     if policy['facts_only']:
         headline_label, headline_value, headline_sub = '可用范围', '仅事实层', '当前仅展示已校验事实'
+    elif historical_outcomes_only:
+        headline_label, headline_value, headline_sub = '重点 · 当前策略', base_name, '历史结果率仅作研究参考'
     elif policy['observation_only']:
         headline_label, headline_value, headline_sub = '可用范围', '观察与条件触发', '当前展示条件性观察'
     else:
@@ -2399,17 +2629,18 @@ def generate_dashboard_section(ctx: dict) -> str:
 
   {review_closure_html}
 
+  {quality_html}
+  {ladder_quality_html}
+  {data_credibility_html}
+  {lianban_review_html}
+  {mainline_review_html}
+
   {playbook_html}
 
   {scenario_block}
 
   <div class="dbd-section-title">{"股票池未发布" if policy['facts_only'] else "观察名单（非推荐）" if policy['observation_only'] else "明日核心股票池"} · {"数据阻断" if policy['facts_only'] else "仅供观察 · 条件触发" if policy['observation_only'] else "具体标的与入场条件"}</div>
   {focus_rows_inline}
-  {quality_html}
-  {ladder_quality_html}
-  {data_credibility_html}
-  {lianban_review_html}
-  {mainline_review_html}
 
   <details class="dbd-evidence">
     <summary>数据佐证 · 盘面因子明细</summary>

@@ -2,19 +2,25 @@
 """
 量化择时信号 · 数据驱动 6 场景模型 (v2)
 
-回溯基础: 历史样本仅由报告层按当前可用数据动态计算。
-本模块只负责结构分类与仓位动作，不在规则文案中写死历史胜率。
+历史命中率不在规则代码中硬编码；由预测回顾模块按场景和样本量动态注入。
 
 核心因子 (按预测力排序):
   ① ad_ratio  = up / (up + down)       # 情绪水位 (最强单因子)
   ② h_drop    = prev_max_h - max_h     # 断板变化 (最强顶部信号)
   ③ ladder    = h3 + 2h4 + 3h5 + 4h6+  # 梯队完整度
- ④ 突破前压力位 (5日高) + 情绪+梯队联合
+  ④ 突破前压力位 (5日高) + 情绪+梯队联合，需用实时证据确认
   ⑤ 涨停/跌停家数放缩
 
-v2.1 反身性顶部保护:
+规则提示（不替代动态回测）:
+  · 单一“突破压力位”信号不能单独支撑进攻结论
+  · 梯队饱满也可能处于情绪高潮末段，需要结合承接和涨跌家数
+  · ad_ratio ∈ [0.20, 0.35] 需要降低追涨仓位并等待承接确认
+  · 冰点阶段只作为观察窗口，不预设必然反弹
+  · 退潮阶段区分“风险下降”和“可买入”，不把两者混为一谈
+
+v2.1 反身性顶部保护 (2026-07-26 实盘教训):
   7/23 尾盘 A/D=0.78 触发 E_主升加速 建议 7-9 成, 7/24 情绪崩塌 A/D=0.17. 复盘:
-  · A/D > 0.75 属于极端过热, 需要反身顶保护
+  · A/D 过高时需要额外检查是否进入反身顶状态
   · 立新 6 板孤峰 + 5 板缺档 = 高低断代崩塌形态, 与 12/22 饱满型 E 本质不同
   ⇒ E 场景新增两道过滤: A/D > 0.75 或 (6+板存在 且 5板缺档) → 降级 C_高位分歧
 """
@@ -40,11 +46,18 @@ def _to_int(x, default=0):
 
 
 def _compute_ad_ratio(advance_decline):
-    """从 advance_decline 直接算 ad_ratio, 是最权威口径."""
-    up = _to_int(advance_decline.get('up', 0))
-    down = _to_int(advance_decline.get('down', 0))
+    """从 advance_decline 直接算 breadth_ratio；缺失时保留 None。"""
+    def _optional_int(value):
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return None
+        return _to_int(value)
+
+    up = _optional_int(advance_decline.get('up'))
+    down = _optional_int(advance_decline.get('down'))
+    if up is None or down is None:
+        return None, up, down
     total = up + down
-    if total < 1000:  # 家数残缺时保守回落 0.5
+    if total < 1000:
         return None, up, down
     return up / total, up, down
 
@@ -96,14 +109,14 @@ def _get_5day_pressure(sentiment_df, prev_h):
 def _classify_scene(curr_h, prev_h, ad, ladder, zt, dt, pressure_5d,
                     h3=0, h4=0, h5=0, h6p=0):
     """
-    数据驱动 6 场景分类器. 返回 (scene_code, position_str, action, level, color, desc_tail, win_rate)
+    数据驱动 6 场景分类器. 返回 (scene_code, position_str, action, level, color, desc_tail, 规则占位值)
     优先级从高到低, 命中即返回.
     h3/h4/h5/h6p 用于识别梯队断代 (E 场景反身顶保护).
     """
     h_drop = prev_h - curr_h if prev_h > 0 else 0
 
     # ============================================================
-    # D · 冰点抄底
+    # D · 冰点观察
     # ============================================================
     if ad is not None and ad < 0.20 and curr_h <= 4:
         return (
@@ -112,7 +125,7 @@ def _classify_scene(curr_h, prev_h, ad, ladder, zt, dt, pressure_5d,
             '强进攻 (冰点反转)',
             '#f85149',
             f'情绪冰点 (A/D={ad:.2f}, <0.20 罕见档), 杀跌动能枯竭. '
-            f'等待止跌和前排确认后试错，样本结果见报告页动态统计.',
+            f'进入冰点反转观察区, 先确认数据与次日承接. 此时不进攻更待何时.',
             None
         )
 
@@ -126,7 +139,7 @@ def _classify_scene(curr_h, prev_h, ad, ladder, zt, dt, pressure_5d,
             '极度危险 (顶部崩塌)',
             '#58a6ff',
             f'断板高度崩塌 ({prev_h}→{curr_h} 板, 断 {h_drop} 板) + 跌停 {dt} 家. '
-            f'负反馈扩散风险高，先控制仓位，样本结果见报告页动态统计.',
+            f'亏钱效应扩散风险高, 优先控制回撤.',
             None
         )
 
@@ -145,24 +158,25 @@ def _classify_scene(curr_h, prev_h, ad, ladder, zt, dt, pressure_5d,
                 '强进攻 (真突破)',
                 '#ff3232',
                 f'突破 {pressure_5d}板压力 + 情绪强 (A/D={ad:.2f}) + 梯队饱满 ({ladder}分). '
-                f'结构共振，可小仓确认，主仓底仓不动，样本结果见报告页动态统计.',
+                f'三因子共振, 仅允许小仓试错. 主力龙头小仓突破加, 大仓底仓不动.',
                 None
             )
-        # A 普通突破 - 结构确认不足, 减仓不加仓
+        # A 普通突破：没有情绪与梯队确认时，减仓不加仓
         return (
             'A_突破陷阱', '3-4成',
             '突破日减仓 / 不追高',
-            '警戒 (突破确认不足)',
+            '警戒 (单因子突破待确认)',
             '#ff8800',
-            f'空间破 {pressure_5d}板压力至 {curr_h}板，但情绪或梯队未同步确认. '
-            f'突破日先观察承接，避免追高，等分歧转强再参与.',
+            f'空间破 {pressure_5d}板压力至 {curr_h}板. '
+            f'单因子突破缺少情绪与梯队确认, 突破日应减仓而非追高. '
+            f'突破日应减仓, 而非加仓. 等 D 冰点信号才是真买点.',
             None
         )
 
     # ============================================================
-    # E · 主升加速 (强而不稳)
+    # E · 主升加速（强而不稳，需检查反身顶保护）
     # v2.1 新增两道反身顶保护, 命中即降级为 C_高位分歧:
-    #   (1) A/D > 0.75 属极端过热 (历史 E 均值仅 0.57), 反身顶特征
+        #   (1) A/D > 0.75 属极端过热，触发反身顶保护
     #   (2) 6+板存在 且 5板缺档 (h6p>=1 and h5==0) = 高低断代崩塌形态
     # ============================================================
     if ad is not None and ad > 0.65 and curr_h >= 6 and (ladder is None or ladder >= 8):
@@ -171,7 +185,7 @@ def _classify_scene(curr_h, prev_h, ad, ladder, zt, dt, pressure_5d,
         if overheat or broken_ladder:
             reasons = []
             if overheat:
-                reasons.append(f'情绪极端过热 A/D={ad:.2f} (>0.75 保护阈值)')
+                reasons.append(f'情绪极端过热 A/D={ad:.2f} (>0.75, 进入反身顶观察区)')
             if broken_ladder:
                 reasons.append(f'{curr_h}板孤峰+5板缺档 (梯队{h6p}/{h5}/{h4}/{h3}) 高低断代')
             return (
@@ -180,7 +194,7 @@ def _classify_scene(curr_h, prev_h, ad, ladder, zt, dt, pressure_5d,
                 '防守预警 (反身顶保护)',
                 '#ff8800',
                 '⚠️ 表面 E 主升, 但触发反身顶保护降级: ' + '; '.join(reasons) + '. '
-                '该结构存在高低断代风险，尾盘建议减仓而非加仓. '
+                '尾盘建议减仓而非加仓., 尾盘建议减仓而非加仓. '
                 '等 D 冰点信号 (A/D<0.20) 才是真买点.',
                 None
             )
@@ -190,7 +204,7 @@ def _classify_scene(curr_h, prev_h, ad, ladder, zt, dt, pressure_5d,
             '强进攻 (高潮期,尾盘减半)',
             '#ff4444',
             f'情绪强 (A/D={ad:.2f}) + 空间 {curr_h}板 + 梯队饱满. '
-            f'结构偏主升但处于高位，死拿龙一底仓，尾盘绝不加仓，盯 T+2 分歧兑现.',
+            f'死拿龙一底仓, 尾盘绝不加仓, 盯 T+2 分歧兑现. 死拿龙一底仓,尾盘绝不加仓,盯 T+2 分歧兑现.',
             None
         )
 
@@ -204,7 +218,7 @@ def _classify_scene(curr_h, prev_h, ad, ladder, zt, dt, pressure_5d,
             '防守预警 (高位分歧)',
             '#ff8800',
             f'空间 {curr_h}板悬高, 但情绪弱 (A/D={ad:.2f}). '
-            f'前排逢高兑现，空仓等新主线，样本结果见报告页动态统计.',
+            f'前排逢高兑现, 空仓等新主线.',
             None
         )
 
@@ -215,15 +229,16 @@ def _classify_scene(curr_h, prev_h, ad, ladder, zt, dt, pressure_5d,
         return (
             'B_退潮蓄势', '4-5成',
             '底仓埋伏 / 等冰点',
-            '中性偏进攻 (退潮蓄势)',
+            '中性偏进攻 (等待冰点与承接确认)',
             '#d29922',
             f'空间断板 ({prev_h}→{curr_h}), 情绪弱 (A/D={ad:.2f}). '
-            f'退潮阶段只保留底仓，等待下一轮冰点和前排确认.',
+            f'但退潮阶段只保留底仓, 盯紧下一轮冰点抄底. '
+            f'底仓不动, 盯紧下一轮冰点抄底.',
             None
         )
 
     # ============================================================
-    # 默认 · 中性震荡 (保底 5 成)
+    # 默认 · 中性震荡
     # ============================================================
     ad_str = f'A/D={ad:.2f}' if ad is not None else 'A/D未就位'
     return (
@@ -236,7 +251,36 @@ def _classify_scene(curr_h, prev_h, ad, ladder, zt, dt, pressure_5d,
     )
 
 
-def generate_timing_signal(sentiment_df, advance_decline, echelon=None):
+def _historical_outcome(scene, historical_stats):
+    """读取显式注入的同型统计；没有统计时不生成伪造胜率。"""
+    try:
+        from report_logic import binomial_confidence_interval
+    except Exception:
+        binomial_confidence_interval = None
+    stats = historical_stats if isinstance(historical_stats, dict) else {}
+    row = stats.get(scene)
+    if not isinstance(row, dict):
+        return None, "同型样本未加载，暂不输出固定胜率。", 0, None
+    sample_size = _to_int(row.get("sample_size"), 0)
+    rate = row.get("t3_hit_rate", row.get("t1_hit_rate"))
+    try:
+        rate = float(rate) if rate is not None else None
+    except (TypeError, ValueError):
+        rate = None
+    if rate is None or not 0 <= rate <= 1 or sample_size <= 0:
+        return None, "同型样本未加载，暂不输出固定胜率。", 0, None
+    successes = row.get("t3_hits", row.get("t1_hits", row.get("successes", row.get("hits"))))
+    estimated = False
+    if successes is None:
+        successes = round(rate * sample_size)
+        estimated = True
+    interval = binomial_confidence_interval(successes, sample_size) if binomial_confidence_interval else None
+    ci_text = interval.get("text") if interval else f"命中率 {rate:.0%}"
+    suffix = "（由历史比例反推命中数）" if estimated else ""
+    return rate, f"历史同型 {sample_size} 例，{ci_text}{suffix}。", sample_size, interval
+
+
+def generate_timing_signal(sentiment_df, advance_decline, echelon=None, historical_stats=None):
     """
     数据驱动的量化择时信号 (v2, 6 场景模型).
 
@@ -279,10 +323,15 @@ def generate_timing_signal(sentiment_df, advance_decline, echelon=None):
         pressure_5d = _get_5day_pressure(sentiment_df, prev_h)
 
         # 分类
-        scene, position, action, level, color, desc_tail, win_rate = _classify_scene(
+        scene, position, action, level, color, desc_tail, _rule_win_rate = _classify_scene(
             curr_h, prev_h, ad, ladder, zt, dt, pressure_5d,
             h3=h3, h4=h4, h5=h5, h6p=h6p,
         )
+
+        historical_stats = historical_stats if historical_stats is not None else advance_decline.get('historical_stats')
+        win_rate, historical_tail, win_rate_sample_size, win_rate_ci = _historical_outcome(scene, historical_stats)
+        if win_rate_sample_size == 0 and sentiment_df is None:
+            historical_tail = f"历史{historical_tail}"
 
         # 因子摘要
         factor_line = (
@@ -295,10 +344,12 @@ def generate_timing_signal(sentiment_df, advance_decline, echelon=None):
             'action': action,
             'level': level,
             'color': color,
-            'desc': f"{desc_tail} {factor_line}",
+            'desc': f"{desc_tail} {historical_tail} {factor_line}",
             'position': position + '仓位',
             'scene': scene,
-            'win_rate': win_rate
+            'win_rate': win_rate,
+            'win_rate_sample_size': win_rate_sample_size,
+            'win_rate_confidence_interval': win_rate_ci,
         }
     except Exception as e:
         print(f"择时模块异常: {e}")
