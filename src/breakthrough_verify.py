@@ -41,6 +41,7 @@ if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
 from paths import ZT_CACHE_FILE, SENTIMENT_CACHE  # noqa: E402
+from time_utils import filter_completed_rows  # noqa: E402
 
 
 # ─────────────────────────────────────────────────────────────
@@ -257,6 +258,7 @@ def load_sentiment_cache(path: str = SENTIMENT_CACHE) -> pd.DataFrame:
     try:
         df = pd.read_csv(path, encoding='utf-8-sig', dtype={'日期': str})
         df.columns = [c.strip().lstrip('﻿') for c in df.columns]
+        df = filter_completed_rows(df, '日期')
         df['date'] = df['日期'].astype(str)
         if 'up' not in df.columns:
             df['up'] = 0

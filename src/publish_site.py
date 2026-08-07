@@ -25,15 +25,19 @@ def _fmt_date(d):
     return d.strftime('%Y-%m-%d')
 
 
-def _scan_reports(reports_dir):
-    """扫描 reports/ 下所有 YYYY-MM-DD.html, 返回 [(date_str, filename)] 按日期倒序。"""
+def _scan_reports(reports_dir, max_date=None):
+    """扫描不晚于 max_date 的归档，返回 [(date_str, filename)] 按日期倒序。"""
     if not os.path.isdir(reports_dir):
         return []
+    if isinstance(max_date, datetime):
+        max_date = _fmt_date(max_date)
+    elif max_date is not None:
+        max_date = str(max_date)
     pat = re.compile(r'^(\d{4}-\d{2}-\d{2})\.html$')
     items = []
     for name in os.listdir(reports_dir):
         m = pat.match(name)
-        if m:
+        if m and (max_date is None or m.group(1) <= max_date):
             items.append((m.group(1), name))
     items.sort(key=lambda x: x[0], reverse=True)
     return items
@@ -307,8 +311,10 @@ def publish(output_html, site_dir, report_date=None, summary=None, dashboard_htm
         dashboard_date = date_str
         print(f"  [publish] 已归档决策看板 {date_str} → {dash_archived}")
 
-    reports = _scan_reports(reports_dir)
-    updated_at = datetime.now().strftime('%Y-%m-%d %H:%M')
+    reports = _scan_reports(reports_dir, max_date=date_str)
+    generated_now = datetime.now()
+    updated_at = (generated_now.strftime('%Y-%m-%d %H:%M') if _fmt_date(generated_now) <= date_str
+                  else f'{date_str}（报告口径）')
     index_path = os.path.join(site_dir, 'index.html')
     with open(index_path, 'w', encoding='utf-8') as f:
         f.write(_render_index(reports, updated_at, summary, dashboard_date=dashboard_date))

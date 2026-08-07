@@ -413,7 +413,7 @@ def _pick_top_catalyst(info):
     for kw in _ANN_PRIORITY:
         for a in info.get('announcements', [])[:15]:
             title = a.get('title', '') or ''
-            typ = str(a.get('type') or '').strip()
+            typ = a.get('type', '') or ''
             if kw in title or kw in typ:
                 return {'tag': f'公告 · {typ or kw}',
                         'text': f"{a.get('date', '')} {title}",
@@ -423,18 +423,21 @@ def _pick_top_catalyst(info):
     anns = info.get('announcements') or []
     if anns:
         a = anns[0]
-        typ = str(a.get('type') or '').strip()
-        return {'tag': f"公告 · {typ}" if typ else '公告',
-                'text': f"{a.get('date', '')} {a.get('title', '')}",
-                'url': a.get('url', '')}
+        announcement_type = str(a.get('type') or '').strip()
+        tag = f"公告 · {announcement_type or '公告'}" if announcement_type or info.get('news') else "公告"
+        return {'tag': tag,
+                'text': f"{a.get('date') or ''} {a.get('title') or ''}",
+                'url': a.get('url') or ''}
 
     # 4) 任意最新新闻
     news = info.get('news') or []
     if news:
         n = news[0]
-        return {'tag': f"新闻 · {n.get('source', '')}",
-                'text': f"{n.get('time', '')[:10]} {n.get('title', '')}",
-                'url': n.get('url', '')}
+        news_source = n.get('source') or '新闻'
+        news_time = str(n.get('time') or '')[:10]
+        return {'tag': f"新闻 · {news_source}",
+                'text': f"{news_time} {n.get('title') or ''}",
+                'url': n.get('url') or ''}
 
     return None
 

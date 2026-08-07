@@ -43,9 +43,15 @@ QUALITY_REPORT = os.path.join(DATA_DIR, 'market_data_quality.json')
 SENTIMENT_CACHE = os.path.join(DATA_DIR, 'sentiment_history_cache.csv')
 CLS_PLATE_CACHE = os.path.join(DATA_DIR, 'cls_plate_cache.csv')
 EM_PLATE_CACHE = os.path.join(DATA_DIR, 'em_stock_plate_cache.csv')  # 东财个股所属概念板块归因缓存
+SECURITY_MASTER_CACHE = os.path.join(DATA_DIR, 'security_master.csv')
+PREDICTION_HISTORY = os.path.join(DATA_DIR, 'report_prediction_history.jsonl')
+DAILY_SNAPSHOT_DIR = os.path.join(DATA_DIR, 'report_daily_snapshots')
 
 # === 输出产物 (output/) ===
 OUTPUT_HTML = os.path.join(OUTPUT_DIR, '主线强度追踪.html')
+AUDIT_DIR = os.path.join(OUTPUT_DIR, 'audit')
+os.makedirs(DAILY_SNAPSHOT_DIR, exist_ok=True)
+os.makedirs(AUDIT_DIR, exist_ok=True)
 
 # === 站点发布 (归档历史报告 + 首页; 本地累积在 output/site/, CI 部署到 gh-pages) ===
 SITE_DIR = os.path.join(OUTPUT_DIR, 'site')
