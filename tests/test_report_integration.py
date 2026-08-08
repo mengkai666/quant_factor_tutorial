@@ -236,12 +236,76 @@ def test_previous_daily_snapshot_ignores_same_day_and_future_files(tmp_path, mon
 
     snapshots = tmp_path / "snapshots"
     snapshots.mkdir()
-    (snapshots / "2026-08-04.json").write_text('{"max_height": 4}', encoding="utf-8")
-    (snapshots / "2026-08-06.json").write_text('{"max_height": 6}', encoding="utf-8")
-    (snapshots / "2026-08-07.json").write_text('{"max_height": 7}', encoding="utf-8")
+    valid = lambda height, date: json.dumps({
+        "snapshot_schema": "daily-fact-snapshot/v1",
+        "snapshot_source": "daily_snapshot",
+        "source": "daily_snapshot",
+        "date_verified": True,
+        "immutable": True,
+        "report_date": date,
+        "max_height": height,
+    })
+    (snapshots / "2026-08-04.json").write_text(valid(4, "2026-08-04"), encoding="utf-8")
+    (snapshots / "2026-08-06.json").write_text(valid(6, "2026-08-06"), encoding="utf-8")
+    (snapshots / "2026-08-07.json").write_text(valid(7, "2026-08-07"), encoding="utf-8")
     monkeypatch.setattr(report, "DAILY_SNAPSHOT_DIR", str(snapshots))
 
-    assert report._load_previous_daily_snapshot("2026-08-06") == {"max_height": 4}
+    assert report._load_previous_daily_snapshot("2026-08-06")["max_height"] == 4
+
+
+def test_previous_daily_snapshot_rejects_legacy_format(tmp_path, monkeypatch):
+    import 主线强度追踪 as report
+
+    snapshots = tmp_path / "snapshots"
+    snapshots.mkdir()
+    (snapshots / "2026-08-06.json").write_text('{"max_height": 6}', encoding="utf-8")
+    monkeypatch.setattr(report, "DAILY_SNAPSHOT_DIR", str(snapshots))
+
+    assert report._load_previous_daily_snapshot("2026-08-08") == {}
+
+def test_daily_snapshot_is_immutable_for_existing_report_date(tmp_path, monkeypatch):
+    import 主线强度追踪 as report
+
+    snapshots = tmp_path / "snapshots"
+    snapshots.mkdir()
+    monkeypatch.setattr(report, "DAILY_SNAPSHOT_DIR", str(snapshots))
+
+    first = {
+        "snapshot_schema": "daily-fact-snapshot/v1",
+        "snapshot_source": "daily_snapshot",
+        "source": "snapshot",
+        "date_verified": True,
+        "immutable": True,
+        "report_date": "2026-08-07",
+        "max_height": 4,
+    }
+    second = {"report_date": "2026-08-07", "max_height": 99, "source": "fupan-history"}
+    report._write_daily_snapshot("2026-08-07", first)
+    report._write_daily_snapshot("2026-08-07", second)
+
+    path = snapshots / "2026-08-07.json"
+    assert json.loads(path.read_text(encoding="utf-8")) == first
+
+
+def test_snapshot_limit_up_count_prefers_authoritative_fact_pool():
+    import 主线强度追踪 as report
+
+    assert report._resolve_snapshot_limit_up_count(83, 74, 74) == 83
+    assert report._resolve_snapshot_limit_up_count(None, 83, 74) == 83
+    assert report._resolve_snapshot_limit_up_count(None, None, 74) == 74
+
+
+def test_fupan_history_is_not_accepted_as_snapshot_source():
+    import 主线强度追踪 as report
+
+    assert report._snapshot_source_is_usable(
+        {"source": "fupan_ladder", "requested_date": "2026-08-06", "date_verified": False},
+        "2026-08-06",
+    ) is False
+    assert report._snapshot_source_is_usable(
+        {"source": "daily_snapshot", "report_date": "2026-08-06", "date_verified": True},
+        "2026-08-06",
+    ) is True
 
 
 def test_scenario_calibration_hides_probability_for_small_sample():
@@ -654,3 +718,98 @@ def test_dashboard_reuses_canonical_ladder_metrics_from_report_context():
     html = generate_dashboard_html(ctx)
     assert "昨日连板池晋级率（高度≥2）：50%（1/2）" in html
     assert "昨日连板池晋级率（高度≥2）：样本不足（0/0）" not in html
+
+
+def test_ai_primary_503_uses_configured_fallback_model(monkeypatch):
+    import ai_rebound
+
+    calls = []
+    sleeps = []
+
+    class Response:
+        def __init__(self, status_code, payload=None):
+            self.status_code = status_code
+            self.text = 'service unavailable' if status_code != 200 else 'ok'
+            self.headers = {}
+            self._payload = payload or {}
+
+        def json(self):
+            return self._payload
+
+    def post(*args, **kwargs):
+        calls.append(kwargs['json']['model'])
+        if len(calls) <= 2:
+            return Response(503)
+        return Response(200, {
+            'content': [{
+                'type': 'text',
+                'text': '{"facts":["事实"],"observations":["观察"],"conditions":[],"risks":[],"decision":""}',
+            }],
+        })
+
+    monkeypatch.setattr(ai_rebound, 'ANTHROPIC_API_KEY', 'test-key')
+    monkeypatch.setattr(ai_rebound, 'ANTHROPIC_ENABLE', True)
+    monkeypatch.setattr(ai_rebound, 'ANTHROPIC_MODEL', 'primary-model')
+    monkeypatch.setattr(ai_rebound, 'ANTHROPIC_FALLBACK_MODEL', 'fallback-model')
+    monkeypatch.setattr(ai_rebound, 'AI_RETRY_BASE_DELAY', 0.5)
+    monkeypatch.setattr(ai_rebound, 'AI_RETRY_MAX_DELAY', 2.0)
+    monkeypatch.setattr(ai_rebound.requests, 'post', post)
+    monkeypatch.setattr(ai_rebound.time, 'sleep', lambda delay: sleeps.append(delay))
+
+    result, diagnostics = ai_rebound.generate_ai_rebound(
+        {'breadth': 0.6}, timeout=1, return_diagnostics=True,
+    )
+
+    assert result['facts'] == ['事实']
+    assert calls == ['primary-model', 'primary-model', 'fallback-model']
+    assert sleeps == [0.5]
+    assert diagnostics['attempt_count'] == 2
+    assert diagnostics['http_status'] == 200
+    assert diagnostics['fallback_model'] == 'fallback-model'
+    assert diagnostics['fallback_attempt_count'] == 1
+    assert [item['model'] for item in diagnostics['model_attempts']] == calls
+
+
+def test_ai_retryable_request_exception_is_diagnosed_and_retried(monkeypatch):
+    import ai_rebound
+
+    calls = []
+    sleeps = []
+
+    class Response:
+        status_code = 200
+        text = 'ok'
+        headers = {}
+
+        def json(self):
+            return {
+                'content': [{
+                    'type': 'text',
+                    'text': '{"facts":["事实"],"observations":[],"conditions":[],"risks":[],"decision":""}',
+                }],
+            }
+
+    def post(*args, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            raise ai_rebound.requests.RequestException('temporary network error')
+        return Response()
+
+    monkeypatch.setattr(ai_rebound, 'ANTHROPIC_API_KEY', 'test-key')
+    monkeypatch.setattr(ai_rebound, 'ANTHROPIC_ENABLE', True)
+    monkeypatch.setattr(ai_rebound, 'ANTHROPIC_FALLBACK_MODEL', '')
+    monkeypatch.setattr(ai_rebound, 'AI_RETRY_BASE_DELAY', 0.25)
+    monkeypatch.setattr(ai_rebound, 'AI_RETRY_MAX_DELAY', 1.0)
+    monkeypatch.setattr(ai_rebound.requests, 'post', post)
+    monkeypatch.setattr(ai_rebound.time, 'sleep', lambda delay: sleeps.append(delay))
+
+    result, diagnostics = ai_rebound.generate_ai_rebound(
+        {'breadth': 0.6}, timeout=1, return_diagnostics=True,
+    )
+
+    assert result['facts'] == ['事实']
+    assert calls == [1, 1]
+    assert sleeps == [0.25]
+    assert diagnostics['model_attempts'][0]['error_type'] == 'RequestException'
+    assert diagnostics['attempt_count'] == 2
+    assert diagnostics['http_status'] == 200

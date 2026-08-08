@@ -60,7 +60,19 @@ _load_dotenv()
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 # 默认 opus-4-8 (当前中转唯一可用; 官方 key 也支持)。可用 ANTHROPIC_MODEL 覆盖。
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-opus-4-8")
+ANTHROPIC_FALLBACK_MODEL = os.environ.get("ANTHROPIC_FALLBACK_MODEL", "").strip()
 ANTHROPIC_ENABLE = os.environ.get("ANTHROPIC_ENABLE", "1") == "1"
+
+def _float_env(name, default):
+    try:
+        value = float(os.environ.get(name, default))
+        return value if value >= 0 else default
+    except (TypeError, ValueError):
+        return default
+
+
+AI_RETRY_BASE_DELAY = _float_env("AI_RETRY_BASE_DELAY", 0.5)
+AI_RETRY_MAX_DELAY = _float_env("AI_RETRY_MAX_DELAY", 2.0)
 # 中转地址 (留空 = 官方)。裸域名会自动补 /v1/messages。
 ANTHROPIC_BASE_URL = os.environ.get("ANTHROPIC_BASE_URL", "").strip()
 # 部分中转强制要求显式启用 1M 上下文 beta (如 anyrouter: 不带此头直接 400
@@ -230,89 +242,155 @@ def _build_prompt(facts: dict) -> str:
 def generate_ai_rebound(
     facts: dict, timeout: int = 45, *, return_diagnostics: bool = False,
 ) -> dict | None | tuple[dict | None, dict]:
-    """调用 Claude API 生成研判；可选返回失败诊断供报告审计使用。
-
-    默认保持原有接口，成功返回结构化 dict，失败返回 None；当
-    ``return_diagnostics=True`` 时额外返回原因、尝试次数和 HTTP 状态。
-    """
-    def finish(result, *, reason="", attempt_count=0, http_status=None):
+    """调用 Claude API；主模型有限重试，失败后可切备用模型，且不阻断日报。"""
+    def finish(result, *, reason="", attempt_count=0, http_status=None, extra=None):
         if not return_diagnostics:
             return result
         diagnostics = {"reason": reason, "attempt_count": attempt_count}
         if http_status is not None:
             diagnostics["http_status"] = http_status
+        if extra:
+            diagnostics.update(extra)
         return result, diagnostics
 
     if not ai_enabled():
         return finish(None, reason="AI 未启用或缺少 API Key")
-    try:
+
+    headers = {
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": _API_VERSION,
+        "content-type": "application/json",
+    }
+    if ANTHROPIC_BETA:
+        headers["anthropic-beta"] = ANTHROPIC_BETA
+
+    retryable_statuses = {429, 500, 502, 503, 504}
+    model_attempts = []
+    primary_attempt_count = 0
+    fallback_attempt_count = 0
+    last_response = None
+    last_error = ""
+    successful_response = None
+
+    def call_model(model, attempts, allow_retry):
+        nonlocal last_response, last_error
         payload = {
-            "model": ANTHROPIC_MODEL,
+            "model": model,
             "max_tokens": 1500,
-            "messages": [
-                {"role": "user", "content": _build_prompt(facts)},
-            ],
+            "messages": [{"role": "user", "content": _build_prompt(facts)}],
         }
-        headers = {
-            "x-api-key": ANTHROPIC_API_KEY,
-            "anthropic-version": _API_VERSION,
-            "content-type": "application/json",
-        }
-        if ANTHROPIC_BETA:
-            headers["anthropic-beta"] = ANTHROPIC_BETA
-        # 中转服务不可用时只做一次快速重试，避免日报被 AI 重试拖慢。
-        resp = None
-        attempt_count = 0
-        for attempt in range(2):
-            attempt_count = attempt + 1
-            resp = requests.post(_resolve_api_url(), headers=headers, json=payload, timeout=timeout)
-            if resp.status_code == 200:
-                break
-            print(f"  [警告] AI 研判 API 返回 {resp.status_code} (第{attempt+1}/2次): {resp.text[:160]}")
-            if resp.status_code not in (429, 500, 502, 503, 504):
-                return finish(
-                    None,
-                    reason=f"上游接口返回 {resp.status_code}",
-                    attempt_count=attempt_count,
-                    http_status=resp.status_code,
+        for attempt in range(attempts):
+            entry = {"model": model, "attempt": attempt + 1}
+            model_attempts.append(entry)
+            try:
+                response = requests.post(
+                    _resolve_api_url(), headers=headers, json=payload, timeout=timeout,
                 )
-            if attempt + 1 < 2:
+                last_response = response
+                status = getattr(response, "status_code", None)
+                entry["http_status"] = status
+                if status == 200:
+                    return response
+                last_error = f"上游接口返回 {status}"
+                entry["retryable"] = status in retryable_statuses
+                print(
+                    f"  [警告] AI 研判 API 返回 {status} "
+                    f"(模型 {model} 第{attempt + 1}/{attempts}次): "
+                    f"{str(getattr(response, 'text', ''))[:160]}"
+                )
+                if status not in retryable_statuses or not allow_retry or attempt + 1 >= attempts:
+                    return None
                 retry_after = None
                 try:
-                    retry_after = float(resp.headers.get("Retry-After"))
+                    retry_after = float(getattr(response, "headers", {}).get("Retry-After"))
                 except (AttributeError, TypeError, ValueError):
                     retry_after = None
-                time.sleep(max(0.1, min(retry_after if retry_after is not None else 1.0, 5.0)))
-        if resp is None or resp.status_code != 200:
-            status = getattr(resp, "status_code", None)
-            reason = (
-                f"上游接口连续 {attempt_count} 次返回 {status}"
-                if status is not None else "AI 请求未获得响应"
+                delay = retry_after if retry_after is not None else AI_RETRY_BASE_DELAY * (2 ** attempt)
+                time.sleep(max(0.0, min(delay, AI_RETRY_MAX_DELAY)))
+            except requests.RequestException as exc:
+                last_error = f"AI 请求失败：{exc}"
+                entry["error_type"] = type(exc).__name__
+                entry["error"] = str(exc)
+                entry["retryable"] = True
+                print(f"  [警告] AI 研判请求异常 (模型 {model} 第{attempt + 1}/{attempts}次): {exc}")
+                if not allow_retry or attempt + 1 >= attempts:
+                    return None
+                delay = min(AI_RETRY_BASE_DELAY * (2 ** attempt), AI_RETRY_MAX_DELAY)
+                time.sleep(max(0.0, delay))
+        return None
+
+    try:
+        successful_response = call_model(ANTHROPIC_MODEL, 2, True)
+        primary_attempt_count = sum(1 for item in model_attempts if item["model"] == ANTHROPIC_MODEL)
+        if successful_response is None and ANTHROPIC_FALLBACK_MODEL and ANTHROPIC_FALLBACK_MODEL != ANTHROPIC_MODEL:
+            successful_response = call_model(ANTHROPIC_FALLBACK_MODEL, 1, False)
+            fallback_attempt_count = sum(1 for item in model_attempts if item["model"] == ANTHROPIC_FALLBACK_MODEL)
+
+        if successful_response is None:
+            status = getattr(last_response, "status_code", None)
+            primary_statuses = [
+                item.get("http_status")
+                for item in model_attempts
+                if item.get("model") == ANTHROPIC_MODEL
+                and item.get("http_status") is not None
+            ]
+            repeated_primary_failure = (
+                primary_attempt_count >= 2
+                and len(primary_statuses) == primary_attempt_count
+                and len(set(primary_statuses)) == 1
+                and primary_statuses[0] in retryable_statuses
             )
-            return finish(None, reason=reason, attempt_count=attempt_count, http_status=status)
-        data = resp.json()
-        # Claude messages API: content 是 block 数组, 取 text
+            reason = (
+                f"上游接口连续 {primary_attempt_count} 次返回 {primary_statuses[0]}"
+                if repeated_primary_failure
+                else last_error or (
+                    f"上游接口返回 {status}"
+                    if status is not None else "AI 请求未获得响应"
+                )
+            )
+            return finish(
+                None,
+                reason=reason,
+                attempt_count=primary_attempt_count,
+                http_status=status,
+                extra={
+                    "fallback_model": ANTHROPIC_FALLBACK_MODEL,
+                    "fallback_attempt_count": fallback_attempt_count,
+                    "model_attempts": model_attempts,
+                },
+            )
+
+        data = successful_response.json()
         blocks = data.get("content", [])
         text = "".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
+        status = getattr(successful_response, "status_code", None)
+        extra = {
+            "fallback_model": ANTHROPIC_FALLBACK_MODEL,
+            "fallback_attempt_count": fallback_attempt_count,
+            "model_attempts": model_attempts,
+        }
         if not text:
-            return finish(
-                None,
-                reason="AI 返回空内容",
-                attempt_count=attempt_count,
-                http_status=resp.status_code,
-            )
+            return finish(None, reason="AI 返回空内容", attempt_count=primary_attempt_count,
+                          http_status=status, extra=extra)
         parsed = _parse_json(text)
         if parsed is None:
-            return finish(
-                None,
-                reason="AI 返回无法解析的结构化结果",
-                attempt_count=attempt_count,
-                http_status=resp.status_code,
-            )
-        return finish(parsed, attempt_count=attempt_count, http_status=resp.status_code)
-    except Exception as e:
-        print(f"  [警告] AI 研判调用失败, 回退规则模板: {e}")
-        return finish(None, reason=f"AI 调用失败：{e}")
+            return finish(None, reason="AI 返回无法解析的结构化结果", attempt_count=primary_attempt_count,
+                          http_status=status, extra=extra)
+        return finish(parsed, attempt_count=primary_attempt_count, http_status=status, extra=extra)
+    except requests.RequestException as exc:
+        # 非 post 位置（例如自定义 requests 适配器）也不让 AI 异常冒泡到日报。
+        print(f"  [警告] AI 研判调用失败, 回退规则模板: {exc}")
+        return finish(None, reason=f"AI 请求失败：{exc}", attempt_count=primary_attempt_count,
+                      extra={"fallback_model": ANTHROPIC_FALLBACK_MODEL,
+                             "fallback_attempt_count": fallback_attempt_count,
+                             "model_attempts": model_attempts})
+    except Exception as exc:
+        print(f"  [警告] AI 研判调用失败, 回退规则模板: {exc}")
+        return finish(None, reason=f"AI 调用失败：{exc}", attempt_count=primary_attempt_count,
+                      extra={"fallback_model": ANTHROPIC_FALLBACK_MODEL,
+                             "fallback_attempt_count": fallback_attempt_count,
+                             "model_attempts": model_attempts})
+
 def _parse_json(text: str) -> dict | None:
     """从模型输出里稳健地抽出 JSON (容忍 ```json 代码块包裹)。"""
     t = text.strip()

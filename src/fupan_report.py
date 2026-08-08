@@ -48,6 +48,10 @@ class FuPanZhangTingYuanYin:
          
         return { 
             "date": day, 
+            "requested_date": day,
+            "date_verified": False,
+            "date_verification": "unverified",
+            "source": "fupan",
             "reason": reason_data, 
             "ladder": ladder_data 
         } 

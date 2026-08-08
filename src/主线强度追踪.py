@@ -1114,13 +1114,15 @@ def _build_progression_inputs(previous_echelon, current_echelon, price_df, repor
 
 def _load_previous_daily_snapshot(report_date):
     """读取严格早于报告日的最近结构化快照。"""
-    target = str(report_date)
+    target = _normalize_snapshot_date(report_date)
     candidates = []
     if os.path.isdir(DAILY_SNAPSHOT_DIR):
         for name in os.listdir(DAILY_SNAPSHOT_DIR):
             if not name.endswith('.json'):
                 continue
-            date_key = name[:-5]
+            date_key = _normalize_snapshot_date(name[:-5])
+            if not date_key:
+                continue
             if date_key < target:
                 candidates.append((date_key, os.path.join(DAILY_SNAPSHOT_DIR, name)))
     if not candidates:
@@ -1128,7 +1130,10 @@ def _load_previous_daily_snapshot(report_date):
     _, path = max(candidates)
     try:
         with open(path, 'r', encoding='utf-8') as handle:
-            return json.load(handle)
+            snapshot = json.load(handle)
+        if not _is_immutable_daily_snapshot(snapshot, expected_date=_normalize_snapshot_date(os.path.basename(path)[:-5])):
+            return {}
+        return snapshot
     except Exception as exc:
         print(f'  [提示] 上一交易日结构化快照读取失败: {exc}')
         return {}
@@ -1138,6 +1143,21 @@ def _write_daily_snapshot(report_date, snapshot):
     """原子写入每日结构化快照。"""
     os.makedirs(DAILY_SNAPSHOT_DIR, exist_ok=True)
     path = os.path.join(DAILY_SNAPSHOT_DIR, f'{report_date}.json')
+    if os.path.exists(path):
+        try:
+            with open(path, 'r', encoding='utf-8') as handle:
+                existing = json.load(handle)
+            if _is_immutable_daily_snapshot(existing, expected_date=_normalize_snapshot_date(report_date)):
+                return path
+        except Exception:
+            pass
+    snapshot = dict(snapshot or {})
+    snapshot.setdefault('snapshot_schema', 'daily-fact-snapshot/v1')
+    snapshot.setdefault('snapshot_source', 'daily_snapshot')
+    snapshot.setdefault('source', 'daily_snapshot')
+    snapshot.setdefault('date_verified', True)
+    snapshot.setdefault('immutable', True)
+    snapshot.setdefault('report_date', str(report_date))
     tmp = path + '.tmp'
     with open(tmp, 'w', encoding='utf-8') as handle:
         json.dump(snapshot, handle, ensure_ascii=False, indent=2, default=str)
@@ -1146,6 +1166,58 @@ def _write_daily_snapshot(report_date, snapshot):
         os.fsync(handle.fileno())
     os.replace(tmp, path)
     return path
+
+
+def _normalize_snapshot_date(value):
+    """统一快照文件名和内容中的业务日期，不对未知格式做猜测。"""
+    text = str(value or '').strip()
+    digits = ''.join(ch for ch in text if ch.isdigit())
+    if len(digits) == 8:
+        return digits
+    return ''
+
+
+def _snapshot_source_is_usable(metadata, expected_date):
+    """判断来源是否可用于历史对比；FuPan 历史接口未验日期时一律拒绝。"""
+    meta = dict(metadata or {})
+    source = str(meta.get('snapshot_source') or meta.get('source') or '').strip().lower()
+    if source in {'fupan_ladder', 'fupan-history', 'fupan_history'}:
+        return False
+    if source not in {'daily_snapshot', 'snapshot'}:
+        return False
+    if meta.get('date_verified') is not True:
+        return False
+    actual_date = _normalize_snapshot_date(meta.get('report_date') or meta.get('date'))
+    expected = _normalize_snapshot_date(expected_date)
+    return bool(actual_date and expected and actual_date == expected)
+
+
+def _is_immutable_daily_snapshot(snapshot, expected_date=None):
+    """只接受带 schema、日期证明和不可变标记的事实快照。"""
+    if not isinstance(snapshot, dict):
+        return False
+    if snapshot.get('snapshot_schema') != 'daily-fact-snapshot/v1':
+        return False
+    if snapshot.get('immutable') is not True:
+        return False
+    expected = _normalize_snapshot_date(expected_date)
+    if expected and _normalize_snapshot_date(snapshot.get('report_date')) != expected:
+        return False
+    return _snapshot_source_is_usable(snapshot, expected or snapshot.get('report_date'))
+
+
+def _resolve_snapshot_limit_up_count(authoritative_count, snapshot_count, legacy_count):
+    """按权威事实池、结构化快照、旧字段的优先级解析涨停数。"""
+    for value in (authoritative_count, snapshot_count, legacy_count):
+        if value is None or value == '':
+            continue
+        try:
+            number = int(float(value))
+        except (TypeError, ValueError):
+            continue
+        if number >= 0:
+            return number
+    return 0
 
 
 def is_ad_incomplete(up, down):
@@ -4816,6 +4888,7 @@ def main():
     _limit_pool_reconciliation = reconcile_limit_pool(
         f_data.get('ladder') if f_data else None,
         _today_classified_base.to_dict(orient='records') if not _today_classified_base.empty else [],
+        expected_date=latest_date,
     )
     _authoritative_limit_rows = _limit_pool_reconciliation.get('authoritative_rows', [])
     _authoritative_zt_today = pd.DataFrame([

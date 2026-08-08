@@ -118,6 +118,7 @@ jobs:
       if: steps.idempotency.outputs.skip != 'true'
       env:
         # 从 GitHub Secrets 动态读取邮箱配置，避免密码硬编码泄露
+        REPORT_DATE: ${{ steps.idempotency.outputs.today }}
         EMAIL_ENABLE: "1"
         EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
         EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
@@ -126,6 +127,8 @@ jobs:
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         # 第三方中转地址 (留空则用官方 api.anthropic.com)
         ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+        # 主模型连续失败后的可选备用模型；未配置时不额外请求
+        ANTHROPIC_FALLBACK_MODEL: ${{ secrets.ANTHROPIC_FALLBACK_MODEL }}
       run: |
         python src/主线强度追踪.py
 
@@ -137,7 +140,7 @@ jobs:
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
         # 只 add 小体积缓存文件 (data/ 下), 不 add 大体积 CSV 和 HTML
-        git add data/涨停历史缓存.csv data/cls_plate_cache.csv data/sentiment_history_cache.csv 2>/dev/null || true
+        git add data/涨停历史缓存.csv data/cls_plate_cache.csv data/sentiment_history_cache.csv data/ths_sector_hist.json 2>/dev/null || true
         # 只看暂存区判断是否提交。旧写法多看了一眼工作区 (git diff --quiet &&),
         # 兜底重跑时种子缓存幂等无变化 (暂存区空), 但 em 缓存等未 add 的文件必变
         # (工作区脏) → 短路进 commit → 空暂存区报 "nothing to commit" 退出 1 →

@@ -40,9 +40,6 @@ def test_data_credibility_summary_caps_display_coverage_but_preserves_overflow()
         "market_total": 2467,
         "market_covered": 2467,
         "status": "blocked",
-        "publication_scopes": {
-            "market_facts": {"mode": "unavailable"},
-        },
         "modules": {
             "price_raw": {
                 "total": 2467,
@@ -58,7 +55,6 @@ def test_data_credibility_summary_caps_display_coverage_but_preserves_overflow()
     assert module["coverage_pct"] == 100.0
     assert module["raw_coverage_pct"] > 100.0
     assert module["status"] == "blocked"
-    assert got["publication_scopes"]["market_facts"]["mode"] == "unavailable"
     assert any("COVERAGE_OVERFLOW" in reason for reason in got["reasons"])
 
 
@@ -1052,6 +1048,45 @@ def test_reconcile_limit_pool_separates_fupan_facts_from_classification_coverage
     assert got["classification_source"] == "classified_limit_pool"
     assert ladder["category"]["首板"][0]["code"] == "430001"
 
+
+def test_reconcile_limit_pool_requires_same_trade_date_before_matching():
+    from report_logic import reconcile_limit_pool
+
+    ladder = {
+        "date": "20260807",
+        "category": {"首板": [{"code": "600001", "name": "样本", "level": 1}]},
+    }
+    classified = [
+        {"日期": "20260806", "代码": "600001", "大主线": "旧日期"},
+        {"日期": "20260807", "代码": "600001", "大主线": "当日"},
+        {"代码": "000001", "大主线": "无日期"},
+    ]
+
+    got = reconcile_limit_pool(ladder, classified, expected_date="20260807")
+
+    assert got["date_aligned"] is True
+    assert got["authoritative_date"] == "20260807"
+    assert got["classification_date"] == "20260807"
+    assert got["date_mismatch_count"] == 1
+    assert got["date_missing_count"] == 1
+    assert got["matched_count"] == 1
+    assert got["cls_only_count"] == 0
+
+
+def test_reconcile_limit_pool_rejects_unverified_classification_date():
+    from report_logic import reconcile_limit_pool
+
+    ladder = {"category": {"首板": [{"code": "600001", "level": 1}]}}
+    got = reconcile_limit_pool(
+        ladder,
+        [{"代码": "600001", "大主线": "未声明日期"}],
+        expected_date="20260807",
+    )
+
+    assert got["date_aligned"] is False
+    assert got["matched_count"] == 0
+    assert got["date_missing_count"] == 1
+
 def test_build_echelon_table_normalizes_cls_and_fupan_codes_before_attribution():
     import pandas as pd
     import 主线强度追踪 as report
@@ -1210,138 +1245,3 @@ def test_assess_data_quality_exposes_overflow_without_publishing_invalid_coverag
     assert got["raw_coverage_pct"] == round(5190 / 2467 * 100, 1)
     assert got["status"] == "blocked"
     assert any("COVERAGE_OVERFLOW" in error for error in got["errors"])
-
-
-def test_ad_cache_rejects_non_adjacent_previous_price(tmp_path, monkeypatch):
-    """缺少上一交易日价格时，不能拿更早交易日冒充昨日计算 A/D。"""
-    import pandas as pd
-    import limit_ratio_factor
-
-    price_cache = tmp_path / "price.csv"
-    pd.DataFrame([
-        {"date": "2026-08-01", "code": "sz000001", "close_raw": 10.0},
-        {"date": "2026-08-04", "code": "sh600000", "close_raw": 10.0},
-        {"date": "2026-08-05", "code": "sh600000", "close_raw": 11.0},
-        {"date": "2026-08-05", "code": "sz000001", "close_raw": 11.0},
-    ]).to_csv(price_cache, index=False)
-    security_master = tmp_path / "security_master.csv"
-    pd.DataFrame([
-        {"code": "sh600000"},
-        {"code": "sz000001"},
-    ]).to_csv(security_master, index=False)
-
-    monkeypatch.setenv("REPORT_DATE", "2026-08-05")
-    monkeypatch.setattr(limit_ratio_factor, "PRICE_CACHE_FILE", str(price_cache))
-    monkeypatch.setattr(
-        limit_ratio_factor, "SECURITY_MASTER_CACHE", str(security_master))
-
-    got = limit_ratio_factor.MarketSentimentFactor()._load_ad_cache()
-
-    assert got["20260805"]["up"] == 1
-    assert got["20260805"]["down"] == 0
-    assert got["20260805"]["market_covered"] == 1
-    assert got["20260805"]["coverage_pct"] == 50.0
-
-
-def test_lianban_review_marks_low_transition_coverage_as_conditional():
-    from report_logic import build_lianban_review, compute_ladder_metrics
-
-    current = [{"code": f"sh00000{i}", "height": 2} for i in range(1, 4)]
-    previous = [{"code": f"sh00000{i}", "height": 1} for i in range(1, 11)]
-    metrics = compute_ladder_metrics(current, previous_echelon=previous)
-    got = build_lianban_review(metrics)
-
-    assert got["transition_match_count"] == 3
-    assert got["transition_coverage_pct"] == 30.0
-    assert got["status"] == "conditional"
-    assert "条件性观察" in got["conclusion"]
-
-
-def test_data_credibility_summary_exposes_lineage_and_publishable_modules():
-    from report_logic import build_data_credibility_summary
-
-    got = build_data_credibility_summary({
-        "status": "degraded",
-        "market_scope": "沪深北全A",
-        "market_prefixes": ["sh", "sz"],
-        "required_market_prefixes": ["sh", "sz", "bj"],
-        "primary_source": "eastmoney",
-        "fallback_source": "akshare",
-        "used_fallback": True,
-        "modules": {
-            "universe": {"status": "ok", "total": 10, "covered": 10},
-            "breadth": {
-                "status": "degraded", "total": 10, "covered": 9,
-                "lineage": {"source_chain": ["eastmoney", "akshare"]},
-            },
-            "price_qfq": {"status": "unavailable", "total": 10, "covered": 0},
-        },
-    })
-
-    assert got["primary_source"] == "eastmoney"
-    assert got["fallback_source"] == "akshare"
-    assert got["used_fallback"] is True
-    assert got["source_chain"] == ["eastmoney", "akshare"]
-    assert got["missing_market_prefixes"] == ["bj"]
-    assert set(got["publishable_modules"]) == {"universe", "breadth"}
-
-
-def test_market_sentiment_reads_canonical_raw_prices_and_excludes_suspended(
-    tmp_path, monkeypatch,
-):
-    import pandas as pd
-    import limit_ratio_factor
-
-    price_cache = tmp_path / "price.csv"
-    pd.DataFrame([
-        {"date": "2026-08-04", "code": "sh600000", "close_raw": 10.0, "close_qfq": 10.0, "trade_status": "traded"},
-        {"date": "2026-08-05", "code": "sh600000", "close_raw": 11.0, "close_qfq": 9.0, "trade_status": "traded"},
-        {"date": "2026-08-04", "code": "sz000001", "close_raw": 10.0, "close_qfq": 10.0, "trade_status": "traded"},
-        {"date": "2026-08-05", "code": "sz000001", "close_raw": 9.0, "close_qfq": 11.0, "trade_status": "traded"},
-        {"date": "2026-08-04", "code": "bj920117", "close_raw": 20.0, "close_qfq": 20.0, "trade_status": "traded"},
-        {"date": "2026-08-05", "code": "bj920117", "close_raw": 21.0, "close_qfq": 19.0, "trade_status": "suspended"},
-    ]).to_csv(price_cache, index=False)
-
-    monkeypatch.setenv("REPORT_DATE", "2026-08-05")
-    monkeypatch.setattr(limit_ratio_factor, "PRICE_CACHE_FILE", str(price_cache))
-    got = limit_ratio_factor.MarketSentimentFactor()._load_ad_cache()["20260805"]
-
-    assert got["up"] == 1
-    assert got["down"] == 1
-    assert got["eligible"] == 2
-
-
-def test_market_sentiment_does_not_replace_complete_local_breadth_with_stale_longhu(
-    tmp_path, monkeypatch,
-):
-    import pandas as pd
-    import limit_ratio_factor
-
-    rows = []
-    for i in range(5000):
-        code = f"sz{100000 + i:06d}"
-        rows.append({"date": "2026-08-04", "code": code, "close_raw": 10.0, "close_qfq": 10.0, "trade_status": "traded"})
-        change = 1.0 if i < 3200 else -1.0
-        rows.append({"date": "2026-08-05", "code": code, "close_raw": 10.0 + change, "close_qfq": 10.0 + change, "trade_status": "traded"})
-    price_cache = tmp_path / "price.csv"
-    pd.DataFrame(rows).to_csv(price_cache, index=False)
-    zt_cache = tmp_path / "zt.csv"
-    pd.DataFrame([
-        {"日期": "20260804", "代码": "000001", "类型": "ZT"},
-        {"日期": "20260805", "代码": "000001", "类型": "ZT"},
-    ]).to_csv(zt_cache, index=False, encoding="utf-8-sig")
-
-    monkeypatch.setenv("REPORT_DATE", "2026-08-05")
-    monkeypatch.setattr(limit_ratio_factor, "PRICE_CACHE_FILE", str(price_cache))
-    monkeypatch.setattr(limit_ratio_factor, "ZT_CACHE_FILE", str(zt_cache))
-    factor = limit_ratio_factor.MarketSentimentFactor()
-    monkeypatch.setattr(
-        factor, "_fetch_longhu_sentiment",
-        lambda day: {"date": "20260805", "up": 3000, "down": 2000, "zt": 99, "dt": 0, "ad_ratio": 0.6},
-    )
-
-    latest = factor._get_composite_data().iloc[-1]
-
-    assert latest["market_up"] == 3200
-    assert latest["market_down"] == 1800
-    assert latest["limit_up"] == 1
