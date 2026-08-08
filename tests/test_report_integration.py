@@ -77,17 +77,235 @@ def test_daily_delta_snapshot_explains_missing_previous_day():
     assert "上一交易日" in snapshot["reason"]
 
 
+def test_limit_pool_delta_classifies_new_promoted_broken_missing_and_unchanged():
+    from review_metrics import build_limit_pool_delta
+
+    previous = [
+        {"code": "sh600001", "name": "甲", "height": 2},
+        {"code": "sz000002", "name": "乙", "height": 3},
+        {"code": "bj920003", "name": "丙", "height": 1},
+    ]
+    current = [
+        {"code": "sh600001", "name": "甲", "height": 3},
+        {"code": "sz000002", "name": "乙", "height": 1},
+        {"code": "sh600004", "name": "丁", "height": 1},
+    ]
+
+    delta = build_limit_pool_delta(previous, current)
+
+    assert delta["available"] is True
+    assert [row["code"] for row in delta["promoted"]] == ["sh600001"]
+    assert [row["code"] for row in delta["broken"]] == ["sz000002"]
+    assert [row["code"] for row in delta["missing"]] == ["bj920003"]
+    assert [row["code"] for row in delta["new"]] == ["sh600004"]
+    assert delta["counts"] == {
+        "new": 1,
+        "new_first_board": 1,
+        "promoted": 1,
+        "broken": 1,
+        "missing": 1,
+        "unchanged": 0,
+    }
+
+
+def test_daily_delta_snapshot_includes_structured_limit_pool_changes():
+    from review_metrics import build_daily_delta_snapshot
+
+    current = {
+        "max_height": 6,
+        "limit_pool_rows": [{"code": "sh600001", "height": 2}],
+    }
+    previous = {
+        "max_height": 5,
+        "limit_pool_rows": [{"code": "sh600001", "height": 1}],
+    }
+
+    snapshot = build_daily_delta_snapshot(current, previous)
+
+    assert snapshot["limit_pool"]["available"] is True
+    assert snapshot["limit_pool"]["counts"]["promoted"] == 1
+    assert snapshot["limit_pool"]["promoted"][0]["code"] == "sh600001"
+
+
+def test_lianban_review_marks_partial_core_samples_without_overstating():
+    from report_logic import build_lianban_review
+
+    got = build_lianban_review(
+        {
+            "board_counts": {1: 2, 2: 1},
+            "first_board_to_second": {
+                "successes": 1,
+                "trials": 2,
+                "text": "1/2（50%）",
+            },
+            "streak_pool_promotion": {"successes": 0, "trials": 0, "text": "样本不足"},
+            "streak_pool_trials": 0,
+        }
+    )
+
+    assert got["status"] == "partial"
+    assert got["available_metrics"] == ["first_board_to_second"]
+    assert "streak_pool_promotion" in got["missing_metrics"]
+    assert "部分可用" in got["conclusion"]
+
+
+def test_dashboard_exposes_partial_status_and_limit_pool_delta():
+    from decision_dashboard import build_dashboard_ctx, generate_dashboard_html
+
+    report_context = {
+        "report_date": "2026-08-06",
+        "facts": {
+            "lianban_review": {
+                "status": "partial",
+                "first_board_count": 2,
+                "second_board_count": 1,
+                "board_counts": {1: 2, 2: 1},
+                "first_board_to_second": {"text": "1/2（50%）"},
+                "streak_pool_promotion": {"text": "样本不足"},
+                "streak_pool_trials": 0,
+                "streak_pool_current_count": 0,
+                "negative_feedback": {"text": "样本不足"},
+                "available_metrics": ["first_board_to_second"],
+                "missing_metrics": ["streak_pool_promotion"],
+                "conclusion": "连板复盘部分可用",
+            }
+        },
+        "daily_delta": {
+            "available": True,
+            "highlights": [],
+            "limit_pool": {
+                "available": True,
+                "counts": {"new": 2, "new_first_board": 1, "promoted": 1, "broken": 1, "missing": 0, "unchanged": 4},
+                "new": [{"code": "sh600001", "name": "甲", "current_height": 1}],
+                "new_first_board": [{"code": "sh600001", "name": "甲", "current_height": 1}],
+                "promoted": [{"code": "sz000002", "name": "乙", "previous_height": 1, "current_height": 2}],
+                "broken": [{"code": "bj920003", "name": "丙", "previous_height": 3, "current_height": 1}],
+                "missing": [],
+            },
+        },
+    }
+    ctx = build_dashboard_ctx(
+        timing={"scene": "中性震荡", "action": "观察", "level": "观察"},
+        advance_decline={"up": 3000, "down": 2000, "zt": 50, "dt": 5},
+        report_context=report_context,
+    )
+
+    html = generate_dashboard_html(ctx)
+
+    assert "部分可用" in html
+    assert "涨停池变化" in html
+    assert "新增首板" in html
+
+
+def test_dashboard_places_quality_and_lianban_before_strategy_content():
+    from decision_dashboard import generate_dashboard_html, generate_dashboard_section
+
+    ctx = {
+        "date_str": "2026-08-06",
+        "data_quality": {
+            "status": "degraded",
+            "publication_mode": "observation",
+            "market_scope": "沪深北全A",
+            "market_total": 5538,
+            "market_covered": 5100,
+            "coverage_pct": 92.09,
+            "reasons": ["报告日价格覆盖不足"],
+        },
+        "lianban_review": {
+            "status": "partial",
+            "first_board_count": 2,
+            "second_board_count": 1,
+            "conclusion": "连板复盘部分可用",
+        },
+        "scene": "数据降级",
+        "action": "仅观察与条件触发",
+        "focus_df": None,
+    }
+
+    for html in (generate_dashboard_html(ctx), generate_dashboard_section(ctx)):
+        quality_pos = html.index("数据可信度")
+        lianban_pos = html.index("连板复盘")
+        strategy_pos = html.index("明日核心股票池") if "明日核心股票池" in html else html.index("观察名单")
+        assert quality_pos < strategy_pos
+        assert lianban_pos < strategy_pos
+        assert "数据降级" in html
+
+
 def test_previous_daily_snapshot_ignores_same_day_and_future_files(tmp_path, monkeypatch):
     import 主线强度追踪 as report
 
     snapshots = tmp_path / "snapshots"
     snapshots.mkdir()
-    (snapshots / "2026-08-04.json").write_text('{"max_height": 4}', encoding="utf-8")
-    (snapshots / "2026-08-06.json").write_text('{"max_height": 6}', encoding="utf-8")
-    (snapshots / "2026-08-07.json").write_text('{"max_height": 7}', encoding="utf-8")
+    valid = lambda height, date: json.dumps({
+        "snapshot_schema": "daily-fact-snapshot/v1",
+        "snapshot_source": "daily_snapshot",
+        "source": "daily_snapshot",
+        "date_verified": True,
+        "immutable": True,
+        "report_date": date,
+        "max_height": height,
+    })
+    (snapshots / "2026-08-04.json").write_text(valid(4, "2026-08-04"), encoding="utf-8")
+    (snapshots / "2026-08-06.json").write_text(valid(6, "2026-08-06"), encoding="utf-8")
+    (snapshots / "2026-08-07.json").write_text(valid(7, "2026-08-07"), encoding="utf-8")
     monkeypatch.setattr(report, "DAILY_SNAPSHOT_DIR", str(snapshots))
 
-    assert report._load_previous_daily_snapshot("2026-08-06") == {"max_height": 4}
+    assert report._load_previous_daily_snapshot("2026-08-06")["max_height"] == 4
+
+
+def test_previous_daily_snapshot_rejects_legacy_format(tmp_path, monkeypatch):
+    import 主线强度追踪 as report
+
+    snapshots = tmp_path / "snapshots"
+    snapshots.mkdir()
+    (snapshots / "2026-08-06.json").write_text('{"max_height": 6}', encoding="utf-8")
+    monkeypatch.setattr(report, "DAILY_SNAPSHOT_DIR", str(snapshots))
+
+    assert report._load_previous_daily_snapshot("2026-08-08") == {}
+
+def test_daily_snapshot_is_immutable_for_existing_report_date(tmp_path, monkeypatch):
+    import 主线强度追踪 as report
+
+    snapshots = tmp_path / "snapshots"
+    snapshots.mkdir()
+    monkeypatch.setattr(report, "DAILY_SNAPSHOT_DIR", str(snapshots))
+
+    first = {
+        "snapshot_schema": "daily-fact-snapshot/v1",
+        "snapshot_source": "daily_snapshot",
+        "source": "snapshot",
+        "date_verified": True,
+        "immutable": True,
+        "report_date": "2026-08-07",
+        "max_height": 4,
+    }
+    second = {"report_date": "2026-08-07", "max_height": 99, "source": "fupan-history"}
+    report._write_daily_snapshot("2026-08-07", first)
+    report._write_daily_snapshot("2026-08-07", second)
+
+    path = snapshots / "2026-08-07.json"
+    assert json.loads(path.read_text(encoding="utf-8")) == first
+
+
+def test_snapshot_limit_up_count_prefers_authoritative_fact_pool():
+    import 主线强度追踪 as report
+
+    assert report._resolve_snapshot_limit_up_count(83, 74, 74) == 83
+    assert report._resolve_snapshot_limit_up_count(None, 83, 74) == 83
+    assert report._resolve_snapshot_limit_up_count(None, None, 74) == 74
+
+
+def test_fupan_history_is_not_accepted_as_snapshot_source():
+    import 主线强度追踪 as report
+
+    assert report._snapshot_source_is_usable(
+        {"source": "fupan_ladder", "requested_date": "2026-08-06", "date_verified": False},
+        "2026-08-06",
+    ) is False
+    assert report._snapshot_source_is_usable(
+        {"source": "daily_snapshot", "report_date": "2026-08-06", "date_verified": True},
+        "2026-08-06",
+    ) is True
 
 
 def test_scenario_calibration_hides_probability_for_small_sample():
@@ -145,10 +363,10 @@ def test_ai_gate_preserves_retry_failure_reason(monkeypatch):
         {"breadth": 0.6}, ReportPolicy.from_mode("observation"), timeout=1,
     )
 
-    assert len(calls) == 3
+    assert len(calls) == 2
     assert result["status"] == "fallback"
-    assert result["reason"] == "上游接口连续 3 次返回 503"
-    assert result["lineage"]["attempt_count"] == 3
+    assert result["reason"] == "上游接口连续 2 次返回 503"
+    assert result["lineage"]["attempt_count"] == 2
     assert result["lineage"]["http_status"] == 503
 
 def test_audit_json_is_atomic_and_contains_lineage(tmp_path):
@@ -342,7 +560,7 @@ def test_dashboard_explains_limit_pool_reconciliation_and_degraded_scope():
         "ai": {
             "status": "unavailable", "total": 1, "covered": 0,
             "coverage_pct": 0, "source": "guarded_ai",
-            "errors": ["上游接口连续 3 次返回 503"],
+            "errors": ["上游接口连续 2 次返回 503"],
         },
     }
     context = ReportContext(
@@ -383,7 +601,7 @@ def test_dashboard_explains_limit_pool_reconciliation_and_degraded_scope():
     for label in ("证券主数据", "报告日价格", "市场宽度", "涨停事实池", "题材归因", "连板梯队", "前复权价格", "AI 研判"):
         assert label in html
     assert "AI 研判未生成" in html
-    assert "连续 3 次返回 503" in html
+    assert "连续 2 次返回 503" in html
     assert "不以规则文本冒充 AI 输出" in html
     assert "缺少上一交易日结构化快照；历史 HTML 不作为计算源" in html
     assert "<b>limit_pool</b>" not in html
@@ -487,3 +705,98 @@ def test_dashboard_reuses_canonical_ladder_metrics_from_report_context():
     html = generate_dashboard_html(ctx)
     assert "昨日连板池晋级率（高度≥2）：50%（1/2）" in html
     assert "昨日连板池晋级率（高度≥2）：样本不足（0/0）" not in html
+
+
+def test_ai_primary_503_uses_configured_fallback_model(monkeypatch):
+    import ai_rebound
+
+    calls = []
+    sleeps = []
+
+    class Response:
+        def __init__(self, status_code, payload=None):
+            self.status_code = status_code
+            self.text = 'service unavailable' if status_code != 200 else 'ok'
+            self.headers = {}
+            self._payload = payload or {}
+
+        def json(self):
+            return self._payload
+
+    def post(*args, **kwargs):
+        calls.append(kwargs['json']['model'])
+        if len(calls) <= 2:
+            return Response(503)
+        return Response(200, {
+            'content': [{
+                'type': 'text',
+                'text': '{"facts":["事实"],"observations":["观察"],"conditions":[],"risks":[],"decision":""}',
+            }],
+        })
+
+    monkeypatch.setattr(ai_rebound, 'ANTHROPIC_API_KEY', 'test-key')
+    monkeypatch.setattr(ai_rebound, 'ANTHROPIC_ENABLE', True)
+    monkeypatch.setattr(ai_rebound, 'ANTHROPIC_MODEL', 'primary-model')
+    monkeypatch.setattr(ai_rebound, 'ANTHROPIC_FALLBACK_MODEL', 'fallback-model')
+    monkeypatch.setattr(ai_rebound, 'AI_RETRY_BASE_DELAY', 0.5)
+    monkeypatch.setattr(ai_rebound, 'AI_RETRY_MAX_DELAY', 2.0)
+    monkeypatch.setattr(ai_rebound.requests, 'post', post)
+    monkeypatch.setattr(ai_rebound.time, 'sleep', lambda delay: sleeps.append(delay))
+
+    result, diagnostics = ai_rebound.generate_ai_rebound(
+        {'breadth': 0.6}, timeout=1, return_diagnostics=True,
+    )
+
+    assert result['facts'] == ['事实']
+    assert calls == ['primary-model', 'primary-model', 'fallback-model']
+    assert sleeps == [0.5]
+    assert diagnostics['attempt_count'] == 2
+    assert diagnostics['http_status'] == 200
+    assert diagnostics['fallback_model'] == 'fallback-model'
+    assert diagnostics['fallback_attempt_count'] == 1
+    assert [item['model'] for item in diagnostics['model_attempts']] == calls
+
+
+def test_ai_retryable_request_exception_is_diagnosed_and_retried(monkeypatch):
+    import ai_rebound
+
+    calls = []
+    sleeps = []
+
+    class Response:
+        status_code = 200
+        text = 'ok'
+        headers = {}
+
+        def json(self):
+            return {
+                'content': [{
+                    'type': 'text',
+                    'text': '{"facts":["事实"],"observations":[],"conditions":[],"risks":[],"decision":""}',
+                }],
+            }
+
+    def post(*args, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            raise ai_rebound.requests.RequestException('temporary network error')
+        return Response()
+
+    monkeypatch.setattr(ai_rebound, 'ANTHROPIC_API_KEY', 'test-key')
+    monkeypatch.setattr(ai_rebound, 'ANTHROPIC_ENABLE', True)
+    monkeypatch.setattr(ai_rebound, 'ANTHROPIC_FALLBACK_MODEL', '')
+    monkeypatch.setattr(ai_rebound, 'AI_RETRY_BASE_DELAY', 0.25)
+    monkeypatch.setattr(ai_rebound, 'AI_RETRY_MAX_DELAY', 1.0)
+    monkeypatch.setattr(ai_rebound.requests, 'post', post)
+    monkeypatch.setattr(ai_rebound.time, 'sleep', lambda delay: sleeps.append(delay))
+
+    result, diagnostics = ai_rebound.generate_ai_rebound(
+        {'breadth': 0.6}, timeout=1, return_diagnostics=True,
+    )
+
+    assert result['facts'] == ['事实']
+    assert calls == [1, 1]
+    assert sleeps == [0.25]
+    assert diagnostics['model_attempts'][0]['error_type'] == 'RequestException'
+    assert diagnostics['attempt_count'] == 2
+    assert diagnostics['http_status'] == 200

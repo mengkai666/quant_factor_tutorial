@@ -18,6 +18,8 @@
 import sys
 import os
 import time
+import json
+import subprocess
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -36,28 +38,127 @@ from datetime import datetime, timedelta
 import hashlib
 import requests  # type: ignore
 
-def get_trading_dates(n_days=120):
-    """生成候选日期列表"""
+_TRADE_DATE_MARKER = "__CODEX_TRADE_DATES__"
+_TRADE_DATE_TIMEOUT_SECONDS = 12
+
+
+def _normalize_date_token(value):
+    """将交易日值规范化为 YYYYMMDD；无法解析时返回空字符串。"""
+    text = str(value or "").strip().replace("-", "").replace("/", "")[:8]
+    if len(text) != 8 or not text.isdigit():
+        return ""
     try:
-        import akshare as ak
-        trade_df = ak.tool_trade_date_hist_sina()
-        trade_dates = trade_df['trade_date'].astype(str).apply(lambda x: x.replace('-', '')).tolist()
-        
-        today_str = datetime.now().strftime('%Y%m%d')
-        past_dates = [d for d in trade_dates if d <= today_str]
-        if len(past_dates) >= n_days:
-            # 返回最近 n_days 个交易日，按从新到旧排序
-            return past_dates[-n_days:][::-1]
-    except Exception as e:
-        print(f"  ⚠️ 获取交易日历失败, 回退到工作日历: {e}")
-        
-    today = datetime.now()
+        datetime.strptime(text, "%Y%m%d")
+    except ValueError:
+        return ""
+    return text
+
+
+def get_cached_trading_dates():
+    """返回本地涨停缓存中已出现、且不晚于报告截止日的日期集合。
+
+    涨停缓存是本项目当前可追溯的交易日事实源。只要缓存覆盖了目标窗口，
+    就不再重复请求外部交易日历，避免日报被无超时的第三方 SDK 调用卡住。
+    """
+    if not os.path.exists(CACHE_FILE):
+        return []
+    try:
+        frame = pd.read_csv(
+            CACHE_FILE,
+            encoding="utf-8-sig",
+            dtype=str,
+            usecols=["日期"],
+        )
+        if frame.empty:
+            return []
+        cutoff = get_latest_date().strftime("%Y%m%d")
+        dates = {
+            token
+            for token in frame["日期"].map(_normalize_date_token)
+            if token and token <= cutoff
+        }
+        return sorted(dates)
+    except Exception as exc:
+        print(f"  ⚠️ 本地交易日缓存读取失败: {exc}")
+        return []
+
+
+def _fetch_external_trade_dates(timeout_seconds=_TRADE_DATE_TIMEOUT_SECONDS):
+    """在隔离子进程中获取交易日历，确保第三方调用有硬超时。
+
+    akshare 的 ``tool_trade_date_hist_sina`` 没有超时参数。放到独立进程后，
+    ``subprocess.run(timeout=...)`` 可以在网络/SDK卡死时回收子进程，不阻塞日报主进程。
+    """
+    script = (
+        "import json\n"
+        "import akshare as ak\n"
+        "df = ak.tool_trade_date_hist_sina()\n"
+        "values = df['trade_date'].astype(str).tolist() if 'trade_date' in df.columns else []\n"
+        f"print({_TRADE_DATE_MARKER!r} + json.dumps(values, ensure_ascii=False))\n"
+    )
+    try:
+        completed = subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=max(1, int(timeout_seconds)),
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        print(f"  ⚠️ 外部交易日历超过 {timeout_seconds}s，已终止并回退本地/工作日历")
+        return []
+    except Exception as exc:
+        print(f"  ⚠️ 外部交易日历进程启动失败: {exc}")
+        return []
+
+    marker_line = next(
+        (line for line in reversed(completed.stdout.splitlines()) if _TRADE_DATE_MARKER in line),
+        "",
+    )
+    if not marker_line:
+        detail = (completed.stderr or completed.stdout or "未知错误").strip().splitlines()[-1]
+        print(f"  ⚠️ 外部交易日历返回异常: {detail[:200]}")
+        return []
+    try:
+        raw_values = json.loads(marker_line.split(_TRADE_DATE_MARKER, 1)[1])
+    except (TypeError, ValueError, json.JSONDecodeError):
+        print("  ⚠️ 外部交易日历结果无法解析")
+        return []
+    return sorted({token for token in map(_normalize_date_token, raw_values) if token})
+
+
+def get_trading_dates(n_days=120):
+    """生成最近 n 个候选交易日，优先使用本地已验证缓存。"""
+    n_days = max(1, int(n_days))
+    today_str = get_latest_date().strftime("%Y%m%d")
+
+    cached_dates = get_cached_trading_dates()
+    if len(cached_dates) >= n_days:
+        print(f"  📅 使用本地涨停缓存交易日 ({len(cached_dates)} 天，跳过外部交易日历)")
+        return cached_dates[-n_days:][::-1]
+
+    external_dates = _fetch_external_trade_dates()
+    past_dates = [d for d in external_dates if d <= today_str]
+    if len(past_dates) >= n_days:
+        print(f"  📅 使用外部交易日历 ({len(past_dates)} 天)")
+        return past_dates[-n_days:][::-1]
+
+    # 外部日历不可用时仍尽量利用已有缓存，再以工作日历补足候选日期。
+    merged = sorted(set(d for d in cached_dates if d <= today_str) | set(past_dates))
+    if len(merged) >= n_days:
+        print(f"  📅 外部日历不足，使用本地+外部合并日期 ({len(merged)} 天)")
+        return merged[-n_days:][::-1]
+
+    print("  ⚠️ 无完整交易日历，回退到工作日候选日期（节假日由后续事实缓存过滤）")
+    today = get_latest_date()
     dates = []
-    for i in range(int(n_days * 2.0)):
+    for i in range(int(n_days * 2.0) + 10):
         d = today - timedelta(days=i)
         if d.weekday() < 5:
-            dates.append(d.strftime('%Y%m%d'))
-    return dates
+            dates.append(d.strftime("%Y%m%d"))
+    return dates[:n_days]
 
 
 # ============================================================
@@ -154,6 +255,7 @@ def _fetch_multi_channel(date_str):
 # ============================================================
 # 缓存路径统一由 paths.py 定义 (单一真源)
 from paths import ZT_CACHE_FILE as CACHE_FILE
+from time_utils import get_latest_date
 IS_GITHUB_ACTIONS = os.environ.get('GITHUB_ACTIONS') == 'true'
 CACHE_MAX_SIZE_MB = 10 if IS_GITHUB_ACTIONS else 100  # CI: 10MB, 本地: 100MB
 
@@ -428,12 +530,12 @@ def analyze_lianban(zt_data, dt_data):
         current_pressure = max(window_heights)
 
         # 提取当前市场最高板的信息用于 Tooltip 显示
-        ad_ratio = 0.5
+        ad_ratio = None
         res = {}
         if msf:
             res = msf.calculate_factor(date_str)
-            ad_ratio = res.get('ad_ratio', 0.5)
-        sentiment, sentiment_color = judge_sentiment(ad_ratio)
+            ad_ratio = res.get('ad_ratio')
+        sentiment, sentiment_color = judge_sentiment(ad_ratio if ad_ratio is not None else 0.5)
 
         # 提取当前市场最高板的信息用于 Tooltip 显示
         current_lt_name = lianban_names_all[0] if lianban_names_all else ""
@@ -461,9 +563,12 @@ def analyze_lianban(zt_data, dt_data):
             '压力高度': current_pressure,
             '涨停数': len(df),
             '跌停数': len(dt_data.get(date_str, pd.DataFrame())),
-            '涨跌比': round(float(ad_ratio), 2),
-            'up': res.get('market_up', 0) if msf else 0,
-            'down': res.get('market_down', 0) if msf else 0,
+            '涨跌比': round(float(ad_ratio), 2) if ad_ratio is not None else None,
+            'up': res.get('market_up') if msf else None,
+            'down': res.get('market_down') if msf else None,
+            'ad_available': bool(res.get('ad_available', False)) if msf else False,
+            'ad_status': res.get('ad_status', 'missing') if msf else 'missing',
+            'ad_source': res.get('ad_source', 'unknown') if msf else 'unknown',
             '情绪': sentiment,
             '情绪颜色': sentiment_color,
             '龙头首板日期': current_lt_sb_date,
@@ -483,7 +588,11 @@ def analyze_lianban(zt_data, dt_data):
     # === 后处理: 对 up=0 且 down=0 的日期, 直接从 LongHu API 补全 ===
     # 这解决了 price_cache 陈旧时 MarketSentimentFactor 返回 fallback 值的问题
     if 'up' in final_df.columns and 'down' in final_df.columns:
-        missing_mask = (final_df['up'] == 0) & (final_df['down'] == 0)
+        missing_mask = (
+            ~final_df.get('ad_available', pd.Series(False, index=final_df.index)).fillna(False)
+            | final_df['up'].isna()
+            | final_df['down'].isna()
+        )
         missing_dates = final_df[missing_mask]['日期'].tolist()
         # 只补最近60天, 更早的不太重要
         if len(missing_dates) > 60:
@@ -524,6 +633,9 @@ def analyze_lianban(zt_data, dt_data):
                                 final_df.at[idx, 'up'] = up_val
                                 final_df.at[idx, 'down'] = down_val
                                 final_df.at[idx, '涨跌比'] = round(up_val / max(up_val + down_val, 1), 2)
+                                final_df.at[idx, 'ad_available'] = True
+                                final_df.at[idx, 'ad_status'] = 'api_fallback'
+                                final_df.at[idx, 'ad_source'] = 'longhu_api'
                                 filled += 1
                 except Exception:
                     pass

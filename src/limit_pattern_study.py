@@ -20,6 +20,7 @@ import sys
 import warnings
 from collections import defaultdict
 from datetime import datetime
+from math import ceil
 
 import pandas as pd
 
@@ -34,6 +35,7 @@ if sys.platform == 'win32':
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from paths import ZT_CACHE_FILE, SENTIMENT_CACHE, PRICE_CACHE, OUTPUT_DIR  # noqa: E402
+from time_utils import filter_completed_rows  # noqa: E402
 
 
 # ─────────────────────────────────────────────────────────────
@@ -42,6 +44,7 @@ from paths import ZT_CACHE_FILE, SENTIMENT_CACHE, PRICE_CACHE, OUTPUT_DIR  # noq
 def _load_zt_cache() -> pd.DataFrame:
     df = pd.read_csv(ZT_CACHE_FILE, encoding='utf-8-sig', dtype={'日期': str})
     df.columns = [c.strip().lstrip('﻿') for c in df.columns]
+    df = filter_completed_rows(df, '日期')
     df['日期'] = df['日期'].astype(str).str.strip()
     df = df[df['日期'].str.len() == 8].copy()
     df['连板数'] = pd.to_numeric(df['连板数'], errors='coerce').fillna(1).astype(int)
@@ -51,6 +54,7 @@ def _load_zt_cache() -> pd.DataFrame:
 def _load_sentiment() -> pd.DataFrame:
     df = pd.read_csv(SENTIMENT_CACHE, encoding='utf-8-sig', dtype={'日期': str})
     df.columns = [c.strip().lstrip('﻿') for c in df.columns]
+    df = filter_completed_rows(df, '日期')
     for col in ('up', 'down', 'zt', 'dt'):
         df[col] = pd.to_numeric(df[col], errors='coerce')
     df = df.dropna(subset=['up', 'down'])
@@ -63,6 +67,7 @@ def _load_sentiment() -> pd.DataFrame:
 
 def _load_price_cache() -> pd.DataFrame:
     df = pd.read_csv(PRICE_CACHE)
+    df = filter_completed_rows(df, 'date')
     df['date'] = df['date'].astype(str).str.replace('-', '', regex=False)
     df['close'] = pd.to_numeric(df['close'], errors='coerce')
     return df.dropna(subset=['close'])
@@ -109,19 +114,42 @@ def analyze_limit_patterns(zt: pd.DataFrame, sent: pd.DataFrame) -> list[str]:
     lines.append('| 从N板打到N+1板 | 成功率 |')
     lines.append('|---|---|')
 
+    transition_rates = {}
+    transition_samples = {}
     for h in range(1, min(max_height, 7)):
         cur = int(total_by_height.get(h, 0))
         nxt = int(total_by_height.get(h + 1, 0))
         rate = nxt / cur * 100 if cur else 0
+        if cur:
+            transition_rates[h] = rate
+            transition_samples[h] = cur
         lines.append(f'| {h}板 → {h+1}板 | {rate:.1f}% |')
 
     lines.append('')
-    lines.append('**关键发现**: **一进二最难**(只有 12% 能成), 但**能到 3 板以上的股票, 继续晋级的概率反而高**(30%-45%)')
+    first_rate = transition_rates.get(1)
+    higher_rates = [v for h, v in transition_rates.items() if h >= 3]
+    if first_rate is not None:
+        finding = (
+            f'**关键发现**: 一进二历史样本 {transition_samples[1]} 组，晋级率 '
+            f'**{first_rate:.1f}%**'
+        )
+        if higher_rates:
+            finding += f'；3板以上各层平均晋级率 **{sum(higher_rates) / len(higher_rates):.1f}%**'
+        finding += '。以上为当前缓存统计，不代表下一交易日必然重复。'
+        lines.append(finding)
+    else:
+        lines.append('**关键发现**: 一进二没有足够历史样本，暂不输出固定晋级结论。')
     lines.append('')
     lines.append('**怎么操作**:')
-    lines.append('- 首板股谨慎追高, 大部分明天就死')
-    lines.append('- 一旦一只票走到 3 板以上, 说明确实是龙头, 可以跟')
-    lines.append('- 5-7 板阶段是"龙头加速期", 不要轻易下车')
+    if first_rate is not None:
+        lines.append(f'- 首板转二板的历史晋级率为 {first_rate:.1f}%，追高前先确认题材和封单质量')
+    else:
+        lines.append('- 首板晋级样本不足，暂不依据历史晋级率做方向判断')
+    if higher_rates:
+        lines.append('- 3板以上按各高度分别观察，不把“高板”直接等同于“龙头”')
+    else:
+        lines.append('- 3板以上样本不足，暂不输出中高位晋级结论')
+    lines.append('- 任何晋级率都要结合当日数据质量、梯队完整度和次日实际回顾')
     lines.append('')
 
     # 高潮/冰点次日
@@ -228,9 +256,26 @@ def analyze_index_sentiment(sent: pd.DataFrame) -> list[str]:
             lines.append(f'| 周{name} | {avg:.0f}% | {crash:.0f}% | {surge:.0f}% |')
     lines.append('')
     lines.append('**怎么操作**:')
-    lines.append('- **周四最危险**, 是全周唯一崩塌概率 > 大涨概率的一天, 高位股周四减仓')
-    lines.append('- **周三最稳**, 崩塌概率最低, 可以正常持仓')
-    lines.append('- 周一开盘常常先崩, 别急着追早盘')
+    weekday_stats = {}
+    for d, name in dow_names.items():
+        sub = sent_sorted[sent_sorted['dow'] == d]
+        if len(sub):
+            crash = (sub['ad_ratio'] < 0.3).sum() / len(sub) * 100
+            surge = (sub['ad_ratio'] > 0.7).sum() / len(sub) * 100
+            weekday_stats[d] = {'name': name, 'crash': crash, 'surge': surge, 'n': len(sub)}
+    if weekday_stats:
+        risky = max(weekday_stats.values(), key=lambda x: x['crash'] - x['surge'])
+        stable = min(weekday_stats.values(), key=lambda x: x['crash'])
+        lines.append(
+            f'- 当前样本中周{risky["name"]}的“大跌-大涨”差值最高 '
+            f'({risky["crash"] - risky["surge"]:+.0f} 个百分点)，高位仓位需要更谨慎'
+        )
+        lines.append(
+            f'- 当前样本中周{stable["name"]}的大跌概率最低 '
+            f'({stable["crash"]:.0f}%，{stable["n"]} 个样本)，但仍需结合当日盘面'
+        )
+    else:
+        lines.append('- 星期分布样本不足，暂不输出固定的周内效应结论')
     lines.append('')
 
     # 连续性
@@ -262,19 +307,32 @@ def analyze_top_board_features(zt: pd.DataFrame, price: pd.DataFrame,
     days = sorted(zt_only['日期'].unique())
     daily_max = zt_only.groupby('日期')['连板数'].max()
 
+    if daily_max.empty:
+        return lines + ['样本不足：当前缓存没有可用的涨停连板记录，暂不输出最高板结论。', '']
+
     med = int(daily_max.median())
-    n_6 = int((daily_max >= 6).sum())  # type: ignore[operator]
-    n_8 = int((daily_max >= 8).sum())  # type: ignore[operator]
-    p_6 = n_6 / len(daily_max) * 100
-    p_8 = n_8 / len(daily_max) * 100
+    high_threshold = max(med + 1, int(ceil(float(daily_max.quantile(0.75)))))
+    extreme_threshold = max(high_threshold + 1, int(ceil(float(daily_max.quantile(0.9)))))
+    p_high = (daily_max >= high_threshold).sum() / len(daily_max) * 100
+    p_extreme = (daily_max >= extreme_threshold).sum() / len(daily_max) * 100
 
     lines.append('### 1. 市场龙头一般能走多高')
     lines.append('')
-    lines.append(f'- **正常情况市场最高连板 = {med} 板** (一半以上的日子都在这个高度)')
-    lines.append(f'- **{p_6:.0f}% 的日子会出 6 板以上** — 主升行情的正常特征')
-    lines.append(f'- **{p_8:.0f}% 的日子会出 8 板以上** — 是"妖股周期"信号')
+    lines.append(f'- **当前样本最高连板中位数 = {med} 板**')
+    lines.append(f'- **{p_high:.0f}% 的日子达到 {high_threshold} 板以上** — 作为高位情绪观察线')
+    lines.append(f'- **{p_extreme:.0f}% 的日子达到 {extreme_threshold} 板以上** — 作为极端高度观察线')
     lines.append('')
-    lines.append('**怎么操作**: 市场最高板超过 6 板, 说明有主升情绪, 可以放胆做题材; 长期只有 3-4 板, 就是纯题材博弈, 不要重仓')
+    if p_high >= 50:
+        action = (
+            f'达到 {high_threshold} 板以上的日子占比 {p_high:.0f}%，高位情绪并不罕见；'
+            '仍要结合梯队完整度和次日数据质量，不因高度单独加仓'
+        )
+    else:
+        action = (
+            f'达到 {high_threshold} 板以上的日子占比仅 {p_high:.0f}%，当前更接近低高度博弈；'
+            '高位股以兑现和次日确认优先'
+        )
+    lines.append(f'**怎么操作**: {action}')
     lines.append('')
 
     # 各高度断板率
@@ -409,27 +467,47 @@ def analyze_top_board_features(zt: pd.DataFrame, price: pd.DataFrame,
 # ─────────────────────────────────────────────────────────────
 # 结尾: 总操作口令
 # ─────────────────────────────────────────────────────────────
-def build_summary_playbook() -> list[str]:
+def build_summary_playbook(zt: pd.DataFrame, sent: pd.DataFrame) -> list[str]:
     lines = ['## 四、每日实操口令表', '']
     lines.append('把上面的规律浓缩成"看到什么, 做什么":')
     lines.append('')
+
+    daily = zt.groupby(['日期', '类型']).size().unstack(fill_value=0)
+    for col in ('ZT', 'DT'):
+        if col not in daily.columns:
+            daily[col] = 0
+    zt_p90 = int(daily['ZT'].quantile(0.9)) if len(daily) else 0
+    zt_p10 = int(daily['ZT'].quantile(0.1)) if len(daily) else 0
+    sent_sorted = sent.sort_values('日期').reset_index(drop=True)
+    sent_p10 = sent_sorted['ad_ratio'].quantile(0.1) if len(sent_sorted) else None
+    sent_p90 = sent_sorted['ad_ratio'].quantile(0.9) if len(sent_sorted) else None
+
     lines.append('| 观察到 | 明天怎么做 |')
     lines.append('|---|---|')
-    lines.append('| 涨停 ≥ 126 家 (高潮) | 减仓, 别追高 |')
-    lines.append('| 涨停 ≤ 46 家 (冰点) | 逢低加, 大概率反弹 |')
-    lines.append('| 红盘率 < 20% | 强反弹信号, 敢加仓 |')
-    lines.append('| 红盘率 > 85% | 别追, 收益到头 |')
+    if zt_p90:
+        lines.append(f'| 涨停 ≥ {zt_p90} 家 (当前样本 P90) | 减仓, 别追高 |')
+    if zt_p10:
+        lines.append(f'| 涨停 ≤ {zt_p10} 家 (当前样本 P10) | 先确认数据完整，再观察情绪修复 |')
+    if sent_p10 is not None:
+        lines.append(f'| 红盘率 < {sent_p10:.0%} (当前样本 P10) | 只作为观察信号，不单凭概率加仓 |')
+    if sent_p90 is not None:
+        lines.append(f'| 红盘率 > {sent_p90:.0%} (当前样本 P90) | 不追高，优先评估兑现压力 |')
     lines.append('| 连续 2 天大涨 | 第 3 天警觉, 兑现节奏前置 |')
-    lines.append('| 今天是周四 | 高位股减仓, 全周最危险 |')
-    lines.append('| 今天是周五冰点 | 周一低开有 66% 概率反弹 |')
-    lines.append('| 手里持首板 / 2 板 | 尾盘减仓, 明天大概率死 |')
-    lines.append('| 手里持 3-6 板 | 拿住, 能到这的都是硬货 |')
+    lines.append('| 今天是周内风险差值最高日 | 高位股降低仓位，等待次日确认 |')
+    lines.append('| 今天是周五冰点 | 只有在历史样本达到门槛且命中率真实计算后，才考虑反弹预案 |')
+    lines.append('| 手里持首板 / 2 板 | 参考对应高度的动态晋级率，不使用固定经验值 |')
+    lines.append('| 手里持 3-6 板 | 逐层核对梯队完整度、断板率和数据质量 |')
     lines.append('| 出现孤峰(龙一 8 板, 下面 5 板都没) | 全场明天转弱, 高位股先出 |')
     lines.append('| 龙一 ≥ 4 板 | 早盘冲高不追, 回踩再进 |')
     lines.append('')
     lines.append('---')
     lines.append('')
-    lines.append('*报告基于近 8 个月共 179 个交易日、17086 条涨停记录统计得出。规律有胜率不是必然, 只是"下注方向"更清晰。*')
+    date_count = int(zt['日期'].nunique()) if not zt.empty else 0
+    record_count = int(len(zt))
+    lines.append(
+        f'*报告基于当前缓存 {date_count} 个交易日、{record_count} 条涨停/跌停记录动态计算。'
+        '所有概率均需结合样本量、数据质量和 T+1/T+3 实际回顾，不代表未来必然重复。*'
+    )
     return lines
 
 
@@ -455,7 +533,7 @@ def main():
     all_lines += analyze_index_sentiment(sent) + ['']
     print(f'[{datetime.now():%H:%M:%S}] C. 龙头股规律...')
     all_lines += analyze_top_board_features(zt, price, sent) + ['']
-    all_lines += build_summary_playbook()
+    all_lines += build_summary_playbook(zt, sent)
 
     out_txt = '\n'.join(all_lines)
 

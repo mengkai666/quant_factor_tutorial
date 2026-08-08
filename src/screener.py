@@ -1,6 +1,8 @@
 import pandas as pd
 
-def generate_focus_pool(ml_strength, echelon, top30_data, sentiment_df, output_path="focus_pool.csv"):
+from report_logic import filter_tradeable_pool
+
+def generate_focus_pool(ml_strength, echelon, top30_data, sentiment_df, output_path="focus_pool.csv", security_master=None):
     """
     自动化生成“明日核心股票池”与“操作预案”
     """
@@ -59,10 +61,17 @@ def generate_focus_pool(ml_strength, echelon, top30_data, sentiment_df, output_p
                     '防守位': '有效跌破20日均线无条件斩仓'
                 })
                 
-    # 生成 DataFrame 并去重
-    df = pd.DataFrame(pool)
+    # 统一经过可交易过滤器：股票池是报告的决策出口，不能只依赖上游缓存名称。
+    # 这里同时过滤 ST、停牌、退市、不可交易和无有效代码的记录，避免历史缓存或摘帽变更
+    # 直接穿透到 focus_pool.csv。
+    filtered_pool = filter_tradeable_pool(
+        pool,
+        include_bj=True,
+        security_master=security_master,
+    )
+    df = pd.DataFrame(filtered_pool)
     if not df.empty:
-        df = df.drop_duplicates(subset=['股票'])
+        df = df.drop_duplicates(subset=['代码'])
         if len(df) > 10:
             df = df.head(10)
         try:

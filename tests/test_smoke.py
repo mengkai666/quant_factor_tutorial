@@ -219,3 +219,68 @@ def test_audit_clips_to_price_window(tmp_path, monkeypatch):
 
     # 20250919 宽度为 0 但在区间外 (真源不覆盖) → 只提示不计缺陷
     assert adi.audit_sentiment({'20260623', '20260701'}, quiet=True) == []
+
+
+def test_ai_legacy_schema_is_normalized_for_guarded_output():
+    import ai_rebound
+    output, source = ai_rebound.normalize_ai_output({
+        'market_summary': '结构性反弹',
+        'active_comment': '主线有承接',
+        'follow_comment': '跟随盘谨慎',
+        'gap_comment': '中间档位缺失',
+        'evolution': '关注轮动',
+        'operation': '等待确认',
+    })
+    assert source == 'legacy'
+    assert output['facts'] == ['结构性反弹']
+    assert '主动主线: 主线有承接' in output['observations']
+    assert output['decision'] == '等待确认'
+
+
+def test_ai_canonical_schema_renders_without_legacy_fields():
+    import ai_rebound
+    html = ai_rebound.render_ai_rebound_html(
+        {'observations': ['主动主线有承接', '跟随盘谨慎'],
+         'risks': ['高度断层'], 'conditions': ['明日看承接'],
+         'decision': '等待确认'},
+        {'market_char': '数据不足', 'char_desc': 'A/D 未取得'}, '#8b949e')
+    assert '主动主线有承接' in html
+    assert '高度断层' in html
+    assert '等待确认' in html
+
+
+def test_missing_ad_is_not_classified_as_market_decline():
+    import importlib.util
+    import pandas as pd
+    spec = importlib.util.spec_from_file_location(
+        'mztrack_missing_ad', os.path.join(_ROOT, 'src', '主线强度追踪.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module._analyze_active_mainlines = lambda: ('', '', [], [])
+    html = module.generate_rebound_analysis(
+        {'up': None, 'down': None, 'ad_available': False, 'ad_status': 'missing'},
+        pd.DataFrame({'up': [None, 1200, 900]}), [],
+        {'publication_mode': 'facts_only'},
+    )
+    assert '涨跌家数数据不足' in html
+    assert '普跌弱势' not in html
+    assert '数据不足' in html
+
+
+def test_market_sentiment_missing_snapshot_keeps_counts_unknown(monkeypatch):
+    import pandas as pd
+    from limit_ratio_factor import MarketSentimentFactor
+
+    factor = MarketSentimentFactor()
+    frame = pd.DataFrame([{
+        'date': '20260806', 'limit_up': 4, 'limit_down': 2,
+        'market_up': None, 'market_down': None, 'market_flat': None,
+        'ad_ratio': None, 'ad_available': False, 'ad_status': 'missing',
+        'ad_source': 'unavailable', 'raw_score': None, 'score_ema': None,
+    }])
+    monkeypatch.setattr(factor, '_get_composite_data', lambda: frame)
+    result = factor.calculate_factor('20260806')
+    assert result['market_up'] is None
+    assert result['market_down'] is None
+    assert result['ad_available'] is False
+    assert result['status'] == 'missing'

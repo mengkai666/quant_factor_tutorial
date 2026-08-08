@@ -101,6 +101,7 @@ def build_dashboard_ctx(timing=None, advance_decline=None, sentiment_df=None,
         advance_decline.get('up', _up),
         advance_decline.get('down', _dn),
         advance_decline.get('market_total'),
+        preserve_missing=True,
     )
     ladder, h3, h4, h5, h6p = _compute_ladder(echelon)
     ladder_metrics = compute_ladder_metrics(
@@ -853,6 +854,74 @@ def _quality_scope_summary(quality: dict, publication_label: str, prefix: str) -
         f'<span>限制项：{_esc(limited_text)}</span></div>'
     )
 
+
+def _quality_module_source_summary(quality: dict, *, field: str = 'source') -> str:
+    """返回报表实际参与的模块来源，优先使用 lineage.source_chain。"""
+    modules = quality.get('modules') if isinstance(quality.get('modules'), dict) else {}
+    rows = []
+    for key in ('price_raw', 'breadth'):
+        module = modules.get(key) if isinstance(modules.get(key), dict) else {}
+        lineage = module.get('lineage') if isinstance(module.get('lineage'), dict) else {}
+        chain = lineage.get('source_chain')
+        if isinstance(chain, (list, tuple)):
+            chain = [str(item).strip() for item in chain if str(item).strip()]
+        else:
+            chain = []
+        if field == 'fallback':
+            value = lineage.get('fallback_source') or module.get('fallback_source')
+            if not value and len(chain) > 1:
+                value = ' → '.join(chain[1:])
+        elif chain:
+            value = ' → '.join(chain)
+        else:
+            value = module.get('source')
+        if not value:
+            value = '未声明' if field != 'fallback' else '未配置'
+        rows.append(f'{_MODULE_LABELS.get(key, key)}：{value}')
+    return '；'.join(rows)
+
+
+def _quality_module_fallback_summary(quality: dict) -> str:
+    modules = quality.get('modules') if isinstance(quality.get('modules'), dict) else {}
+    rows = []
+    for key in ('price_raw', 'breadth'):
+        module = modules.get(key) if isinstance(modules.get(key), dict) else {}
+        lineage = module.get('lineage') if isinstance(module.get('lineage'), dict) else {}
+        used = bool(lineage.get('used_fallback', module.get('used_fallback')))
+        rows.append(f'{_MODULE_LABELS.get(key, key)}={"是" if used else "否"}')
+    return '；'.join(rows)
+
+
+def _quality_price_gap_summary(quality: dict) -> str:
+    """显示前复权缺口及北交所 raw-only 口径，避免只给出笼统缺字段。"""
+    modules = quality.get('modules') if isinstance(quality.get('modules'), dict) else {}
+    module = modules.get('price_qfq') if isinstance(modules.get('price_qfq'), dict) else {}
+    lineage = module.get('lineage') if isinstance(module.get('lineage'), dict) else {}
+    missing_by_market = lineage.get('qfq_missing_by_market')
+    if not isinstance(missing_by_market, dict):
+        missing_by_market = module.get('qfq_missing_by_market')
+    if not isinstance(missing_by_market, dict):
+        missing_by_market = {}
+    bj_raw_only = lineage.get('bj_raw_only_count')
+    if bj_raw_only is None:
+        bj_raw_only = module.get('bj_raw_only_count')
+    try:
+        bj_raw_only = int(bj_raw_only or 0)
+    except (TypeError, ValueError):
+        bj_raw_only = 0
+    sh_missing = missing_by_market.get('sh', 0)
+    sz_missing = missing_by_market.get('sz', 0)
+    try:
+        sh_missing = int(sh_missing or 0)
+    except (TypeError, ValueError):
+        sh_missing = 0
+    try:
+        sz_missing = int(sz_missing or 0)
+    except (TypeError, ValueError):
+        sz_missing = 0
+    return f'沪 qfq 缺失 {sh_missing}、深 qfq 缺失 {sz_missing}、北交所 raw-only {bj_raw_only}'
+
+
 def _quality_html(ctx: dict, prefix: str = '') -> str:
     """渲染统一的数据质量摘要，避免把内部字段或 Python None 泄漏到 HTML。"""
     quality = _quality_view(ctx)
@@ -876,6 +945,9 @@ def _quality_html(ctx: dict, prefix: str = '') -> str:
         coverage_text = '未声明/未提供'
     primary = _esc(quality.get('primary_source') or '未声明')
     fallback = _esc(quality.get('fallback_source') or '未配置')
+    module_sources = _esc(_quality_module_source_summary(quality))
+    module_fallbacks = _esc(_quality_module_fallback_summary(quality))
+    price_gap_summary = _esc(_quality_price_gap_summary(quality))
     scope = _esc(quality.get('market_scope') or '沪深北全A')
     prefixes = _esc(','.join(quality.get('market_prefixes') or ()) or '未获取')
     fallback_used = '是' if quality.get('used_fallback') else '否'
@@ -912,6 +984,8 @@ def _quality_html(ctx: dict, prefix: str = '') -> str:
       <div class="{prefix}quality-items">
         <span>数据源：{primary}</span>
         <span>备用源：{fallback}</span>
+        <span>模块来源：{module_sources}</span>
+        <span>模块备用源启用：{module_fallbacks}</span>
         <span>市场范围：{scope}</span>
         <span>代码前缀：{prefixes}</span>
         <span>覆盖率：{_esc(coverage_text)}</span>
@@ -919,6 +993,7 @@ def _quality_html(ctx: dict, prefix: str = '') -> str:
         <span>stale：{stale}</span>
         <span>新鲜度：{_esc(freshness_text)}</span>
         <span>报告可用范围：{_esc(publication_label)}</span>
+        <span>qfq 口径：{price_gap_summary}</span>
       </div>
       <div class="{prefix}quality-layers">
         <span>行情时间：{data_timestamp}</span>
@@ -1211,7 +1286,15 @@ def _lianban_review_html(ctx: dict, prefix: str = '') -> str:
     first = review.get('first_board_to_second') if isinstance(review.get('first_board_to_second'), dict) else {}
     streak = review.get('streak_pool_promotion') if isinstance(review.get('streak_pool_promotion'), dict) else {}
     negative = review.get('negative_feedback') if isinstance(review.get('negative_feedback'), dict) else {}
-    status = '样本充分' if str(review.get('status')) == 'ok' else '样本不足'
+    status = {
+        'ok': '样本充分',
+        'partial': '部分可用',
+        'insufficient': '样本不足',
+    }.get(str(review.get('status') or 'insufficient'), '样本不足')
+    available_metrics = review.get('available_metrics') or []
+    missing_metrics = review.get('missing_metrics') or []
+    available_text = '、'.join(str(item) for item in available_metrics) or '—'
+    missing_text = '、'.join(str(item) for item in missing_metrics) or '—'
     return f'''
     <div class="{cls}">
       <div class="{title}">连板复盘</div>
@@ -1226,8 +1309,10 @@ def _lianban_review_html(ctx: dict, prefix: str = '') -> str:
         <span>昨日连板池晋级率：{_esc(streak.get('text') or '样本不足')}</span>
         <span>负反馈：{_esc(negative.get('text') or '样本不足')}</span>
         <span>状态：{_esc(status)}</span>
+        <span>可用指标：{_esc(available_text)}</span>
+        <span>缺失指标：{_esc(missing_text)}</span>
       </div>
-      <div class="{note}">{_esc(review.get('conclusion') or '连板复盘结论未就位')}；所有晋级率均展示真实前后交易日匹配分母。</div>
+      <div class="{note}">{_esc(review.get('conclusion') or '连板复盘结论未就位')}；所有晋级率均展示真实前后交易日匹配分母。{_esc(review.get('sample_note') or '')}</div>
     </div>'''
 
 
@@ -1317,6 +1402,24 @@ def _review_closure_html(ctx: dict, prefix: str = '') -> str:
             f'<div style="{muted_style}">缺少上一交易日结构化快照；历史 HTML 不作为计算源。</div>'
         )
 
+    limit_pool = daily_delta.get('limit_pool') if isinstance(daily_delta.get('limit_pool'), dict) else {}
+    limit_pool_items = []
+    if limit_pool.get('available'):
+        counts = limit_pool.get('counts') if isinstance(limit_pool.get('counts'), dict) else {}
+        limit_pool_items.extend([
+            f'<div style="{item_style}"><b>涨停池变化</b>：新增 {_esc(_fmt(counts.get("new"), "0"))}（新增首板 {_esc(_fmt(counts.get("new_first_board"), "0"))}） · '
+            f'晋级 {_esc(_fmt(counts.get("promoted"), "0"))} · 断板 {_esc(_fmt(counts.get("broken"), "0"))} · '
+            f'消失 {_esc(_fmt(counts.get("missing"), "0"))} · 未变 {_esc(_fmt(counts.get("unchanged"), "0"))}</div>'
+        ])
+        for key, label in (('new_first_board', '新增首板'), ('promoted', '晋级'), ('broken', '断板')):
+            rows = [row for row in list(limit_pool.get(key) or [])[:3] if isinstance(row, dict)]
+            if rows:
+                names = '、'.join(_esc(row.get('name') or row.get('code') or '未知标的') for row in rows)
+                limit_pool_items.append(f'<div style="{muted_style}">{label}：{names}</div>')
+    else:
+        reason = limit_pool.get('reason') or '缺少结构化逐股快照'
+        limit_pool_items.append(f'<div style="{warning_style}">涨停池逐股变化不可用：{_esc(reason)}</div>')
+
     status_labels = {
         'promoted': '晋级',
         'broken_positive': '断板收红',
@@ -1362,12 +1465,23 @@ def _review_closure_html(ctx: dict, prefix: str = '') -> str:
     prediction_count = prediction.get('prediction_count', prediction.get('total', 0))
     matured_count = prediction.get('matured_count', prediction.get('matured', 0))
     pending_count = prediction.get('pending_count', prediction.get('pending', 0))
+    incomplete_count = prediction.get('incomplete_count', prediction.get('incomplete', 0))
+    scored_count = prediction.get('scored_count')
+    hit_rate = prediction.get('hit_rate')
+    confidence = prediction.get('confidence_interval') if isinstance(prediction.get('confidence_interval'), dict) else {}
     brier = prediction.get('brier_score')
     brier_text = f' · Brier {_fmt(brier)}' if brier is not None else ''
+    scored_text = f' · 可评分 {_fmt(scored_count, "0")} 条' if scored_count is not None else ''
+    rate_text = ''
+    if hit_rate is not None:
+        rate_text = f' · T+3结果 {_fmt(float(hit_rate) * 100, "—")}% '
+        if confidence.get('lower') is not None and confidence.get('upper') is not None:
+            rate_text += f'（Wilson {_fmt(float(confidence["lower"]) * 100, "—")}–{_fmt(float(confidence["upper"]) * 100, "—")}%）'
     prediction_html = (
         f'<div style="{item_style}">历史记录 {_esc(_fmt(prediction_count, "0"))} 条 · '
-        f'已到期 {_esc(_fmt(matured_count, "0"))} 条 · 待验证 {_esc(_fmt(pending_count, "0"))} 条'
-        f'{_esc(brier_text)}</div>'
+        f'已到期 {_esc(_fmt(matured_count, "0"))} 条 · 部分回填 {_esc(_fmt(incomplete_count, "0"))} 条 · '
+        f'待验证 {_esc(_fmt(pending_count, "0"))} 条'
+        f'{_esc(scored_text)}{_esc(rate_text)}{_esc(brier_text)}</div>'
     )
 
     extra_panels = []
@@ -1407,7 +1521,7 @@ def _review_closure_html(ctx: dict, prefix: str = '') -> str:
     block = f'{prefix}review-closure'
     return f'''
     <div class="{block}" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;margin:16px 0 20px">
-      <div style="{panel_style}"><div style="{title_style}">今日相对昨日</div>{''.join(delta_items)}</div>
+      <div style="{panel_style}"><div style="{title_style}">今日相对昨日</div>{''.join(delta_items)}{''.join(limit_pool_items)}</div>
       <div style="{panel_style}"><div style="{title_style}">昨日连板反馈</div>{''.join(progression_items)}</div>
       <div style="{panel_style}"><div style="{title_style}">数据来源与质量</div>{''.join(lineage_items)}</div>
       <div style="{panel_style}"><div style="{title_style}">历史预测复盘</div>{prediction_html}</div>
@@ -1896,17 +2010,18 @@ def generate_dashboard_html(ctx: dict) -> str:
 
   {review_closure_html}
 
+  {quality_html}
+  {ladder_quality_html}
+  {data_credibility_html}
+  {lianban_review_html}
+  {mainline_review_html}
+
   {playbook_html}
 
   {scenario_block}
 
   <div class="section-title">{"股票池未发布" if policy['facts_only'] else "观察名单（非推荐）" if policy['observation_only'] else "明日核心股票池"}<span class="st-sub">{"数据阻断" if policy['facts_only'] else "仅供观察 · 条件触发" if policy['observation_only'] else "具体标的 · 入场条件 · 防守位"}</span></div>
   {focus_rows_html}
-  {quality_html}
-  {ladder_quality_html}
-  {data_credibility_html}
-  {lianban_review_html}
-  {mainline_review_html}
 
   <details class="evidence">
     <summary>数据佐证 · 盘面因子明细 与 历史同型样本</summary>
@@ -2399,17 +2514,18 @@ def generate_dashboard_section(ctx: dict) -> str:
 
   {review_closure_html}
 
+  {quality_html}
+  {ladder_quality_html}
+  {data_credibility_html}
+  {lianban_review_html}
+  {mainline_review_html}
+
   {playbook_html}
 
   {scenario_block}
 
   <div class="dbd-section-title">{"股票池未发布" if policy['facts_only'] else "观察名单（非推荐）" if policy['observation_only'] else "明日核心股票池"} · {"数据阻断" if policy['facts_only'] else "仅供观察 · 条件触发" if policy['observation_only'] else "具体标的与入场条件"}</div>
   {focus_rows_inline}
-  {quality_html}
-  {ladder_quality_html}
-  {data_credibility_html}
-  {lianban_review_html}
-  {mainline_review_html}
 
   <details class="dbd-evidence">
     <summary>数据佐证 · 盘面因子明细</summary>

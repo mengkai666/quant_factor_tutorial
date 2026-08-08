@@ -21,6 +21,7 @@
 import os
 import json
 import time
+import hashlib
 import requests
 
 
@@ -65,6 +66,20 @@ ANTHROPIC_BASE_URL = os.environ.get("ANTHROPIC_BASE_URL", "").strip()
 # 部分中转强制要求显式启用 1M 上下文 beta (如 anyrouter: 不带此头直接 400
 # "请启用 1m 上下文")。留空则不发 anthropic-beta 头 (官方/多数中转无需)。
 ANTHROPIC_BETA = os.environ.get("ANTHROPIC_BETA", "").strip()
+# 主模型失败后的可选备用模型；未配置时保持原有两次主模型重试行为。
+ANTHROPIC_FALLBACK_MODEL = os.environ.get("ANTHROPIC_FALLBACK_MODEL", "").strip()
+
+
+def _env_float(name: str, default: float, minimum: float, maximum: float) -> float:
+    try:
+        value = float(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        value = default
+    return max(minimum, min(value, maximum))
+
+
+AI_RETRY_BASE_DELAY = _env_float("AI_RETRY_BASE_DELAY", 1.0, 0.0, 60.0)
+AI_RETRY_MAX_DELAY = _env_float("AI_RETRY_MAX_DELAY", 5.0, 0.0, 120.0)
 
 _API_VERSION = "2023-06-01"
 
@@ -87,6 +102,123 @@ def ai_enabled() -> bool:
     return ANTHROPIC_ENABLE and bool(ANTHROPIC_API_KEY)
 
 
+def _as_text(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, (list, tuple)):
+        return "；".join(str(item) for item in value if item not in (None, ""))
+    return str(value)
+
+
+def _as_list(value) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple)):
+        return [str(item) for item in value if item not in (None, "")]
+    return [str(value)] if str(value) else []
+
+
+def normalize_ai_output(raw: dict) -> tuple[dict, str] | tuple[None, str]:
+    """把 canonical 与旧版反弹字段统一为 report AI output/v1。"""
+    if not isinstance(raw, dict):
+        return None, "invalid"
+    canonical_keys = {"facts", "observations", "conditions", "risks", "decision"}
+    has_canonical = bool(canonical_keys & set(raw))
+    if has_canonical:
+        output = {
+            "facts": _as_list(raw.get("facts")),
+            "observations": _as_list(raw.get("observations")),
+            "conditions": _as_list(raw.get("conditions")),
+            "risks": _as_list(raw.get("risks")),
+            "decision": _as_text(raw.get("decision")),
+        }
+        return output, "canonical"
+
+    # 旧版字段来自 generate_ai_rebound 的 prompt；保留语义，避免升级后被过滤成空输出。
+    observations = []
+    for key, label in (("active_comment", "主动主线"), ("follow_comment", "跟随提醒"),
+                       ("gap_comment", "梯队结构"), ("evolution", "进化研判")):
+        value = _as_text(raw.get(key))
+        if value:
+            observations.append(f"{label}: {value}")
+    risks = []
+    gap = _as_text(raw.get("gap_comment"))
+    if gap:
+        risks.append(gap)
+    output = {
+        "facts": [_as_text(raw.get("market_summary"))] if _as_text(raw.get("market_summary")) else [],
+        "observations": observations,
+        "conditions": [],
+        "risks": risks,
+        "decision": _as_text(raw.get("operation")),
+    }
+    return output, "legacy"
+
+
+def run_guarded_ai(facts: dict, policy, *, caller=None, timeout: int = 45) -> dict:
+    """按发布策略控制 AI 调用、输出范围和审计指纹。"""
+    from report_logic import ReportPolicy, scan_forbidden_semantics
+
+    active = policy if isinstance(policy, ReportPolicy) else ReportPolicy.from_mode(policy)
+    payload = {"schema_version": "report-facts/v1", "publication_mode": active.mode, "facts": dict(facts or {})}
+    fingerprint = hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+    quality_snapshot = facts.get("quality_snapshot") if isinstance(facts, dict) else None
+    quality_payload = quality_snapshot if isinstance(quality_snapshot, dict) else {
+        "status": facts.get("quality_status") if isinstance(facts, dict) else None,
+    }
+    quality_fingerprint = hashlib.sha256(
+        json.dumps(quality_payload, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()
+    lineage = {
+        "model": ANTHROPIC_MODEL,
+        "input_fingerprint": fingerprint,
+        "input_quality_status": quality_payload.get("status"),
+        "input_quality_fingerprint": quality_fingerprint,
+        "publication_mode": active.mode,
+    }
+    if not active.allow_ai:
+        return {"status": "skipped", "reason": "发布策略禁止 AI", "output": None, "lineage": lineage}
+    try:
+        diagnostics = {}
+        if caller is None:
+            raw, diagnostics = generate_ai_rebound(
+                payload["facts"], timeout=timeout, return_diagnostics=True,
+            )
+        else:
+            raw = caller(payload)
+    except Exception as exc:
+        return {"status": "failed", "reason": str(exc), "output": None, "lineage": lineage}
+    if diagnostics:
+        for key in (
+            "attempt_count", "http_status", "fallback_model",
+            "fallback_attempt_count", "model_attempts",
+        ):
+            value = diagnostics.get(key)
+            if value is not None:
+                lineage[key] = value
+    output, normalized_from = normalize_ai_output(raw)
+    if output is None:
+        return {
+            "status": "fallback",
+            "reason": diagnostics.get("reason") or "AI 无结构化输出",
+            "output": None,
+            "lineage": lineage,
+        }
+    lineage["normalized_from"] = normalized_from
+    output["schema_version"] = "ai-output/v1"
+    status = "ok"
+    if not active.allow_actions or not active.allow_positions or not active.allow_probabilities:
+        output["decision"] = ""
+        for key in ("observations", "conditions", "risks"):
+            values = output.get(key, [])
+            if not isinstance(values, list):
+                values = [str(values)] if values else []
+            output[key] = [str(item) for item in values if not scan_forbidden_semantics(str(item), active)]
+        status = "sanitized"
+    lineage["output_fingerprint"] = hashlib.sha256(json.dumps(output, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+    return {"status": status, "reason": "", "output": output, "lineage": lineage}
+
+
 def _build_prompt(facts: dict) -> str:
     """把结构化事实拼成给 AI 的指令。事实以 JSON 传入, 保证 AI 不臆造数据。"""
     return (
@@ -103,63 +235,174 @@ def _build_prompt(facts: dict) -> str:
         "规则可能误判之处)。语气专业、干练,有交易语感,不说套话废话。\n\n"
         "严格只输出如下 JSON(不要 markdown 代码块、不要多余文字):\n"
         "{\n"
-        '  "market_summary": "一句话市场定性研判,可在规则定性基础上修正措辞",\n'
-        '  "active_comment": "对主动主线的点评与操作建议,无则写空评价",\n'
-        '  "follow_comment": "对跟随盘的提醒,无则留空字符串",\n'
-        '  "gap_comment": "对梯队/高度断层结构的解读",\n'
-        '  "evolution": "你自行进化的独立判断:规则未覆盖的洞察、轮动关系、明日关注点或风险提示",\n'
-        '  "operation": "一句话落地操作建议(仓位/追与不追/规避方向)"\n'
+        '  "facts": ["只复述输入中对判断有帮助的客观事实"],\n'
+        '  "observations": ["主动主线、跟随盘、轮动或情绪变化的观察"],\n'
+        '  "conditions": ["明日需要验证的条件,没有则为空数组"],\n'
+        '  "risks": ["梯队断层、数据不足或持续性风险,没有则为空数组"],\n'
+        '  "decision": "一句话落地建议; 若发布策略不允许动作则写空字符串"\n'
         "}"
     )
 
 
-def generate_ai_rebound(facts: dict, timeout: int = 45) -> dict | None:
-    """调用 Claude API 生成研判, 返回结构化 dict; 任何失败返回 None。
+def generate_ai_rebound(
+    facts: dict, timeout: int = 45, *, return_diagnostics: bool = False,
+) -> dict | None | tuple[dict | None, dict]:
+    """调用 Claude API 生成研判，并保留可审计的重试/备用模型诊断。
 
-    返回字段: market_summary / active_comment / follow_comment /
-             gap_comment / evolution / operation
+    主模型最多请求两次；对 429/5xx 和网络异常使用短指数退避。主模型连续
+    失败后，如果配置了 ANTHROPIC_FALLBACK_MODEL，则只向备用模型请求一次。
+    任一模型失败都只返回 None/fallback，不阻断日报生成。
     """
-    if not ai_enabled():
-        return None
-    try:
-        payload = {
-            "model": ANTHROPIC_MODEL,
-            "max_tokens": 1500,
-            "messages": [
-                {"role": "user", "content": _build_prompt(facts)},
-            ],
-        }
-        headers = {
-            "x-api-key": ANTHROPIC_API_KEY,
-            "anthropic-version": _API_VERSION,
-            "content-type": "application/json",
-        }
-        if ANTHROPIC_BETA:
-            headers["anthropic-beta"] = ANTHROPIC_BETA
-        # 中转易抽风: 429/5xx 视为临时错误, 退避重试最多 3 次
-        resp = None
-        for attempt in range(3):
-            resp = requests.post(_resolve_api_url(), headers=headers, json=payload, timeout=timeout)
-            if resp.status_code == 200:
-                break
-            print(f"  [警告] AI 研判 API 返回 {resp.status_code} (第{attempt+1}/3次): {resp.text[:160]}")
-            if resp.status_code not in (429, 500, 502, 503, 504):
-                return None
-            if attempt < 2:
-                time.sleep(2 * (attempt + 1))
-        if resp is None or resp.status_code != 200:
-            return None
-        data = resp.json()
-        # Claude messages API: content 是 block 数组, 取 text
-        blocks = data.get("content", [])
-        text = "".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
-        if not text:
-            return None
-        return _parse_json(text)
-    except Exception as e:
-        print(f"  [警告] AI 研判调用失败, 回退规则模板: {e}")
-        return None
+    retryable_statuses = {429, 500, 502, 503, 504}
+    model_attempts = []
 
+    def finish(result, *, reason="", attempt_count=0, http_status=None,
+               fallback_model="", fallback_attempt_count=0):
+        if not return_diagnostics:
+            return result
+        diagnostics = {
+            "reason": reason,
+            "attempt_count": attempt_count,
+            "fallback_model": fallback_model,
+            "fallback_attempt_count": fallback_attempt_count,
+            "model_attempts": list(model_attempts),
+        }
+        if http_status is not None:
+            diagnostics["http_status"] = http_status
+        return result, diagnostics
+
+    if not ai_enabled():
+        return finish(None, reason="AI 未启用或缺少 API Key")
+
+    headers = {
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": _API_VERSION,
+        "content-type": "application/json",
+    }
+    if ANTHROPIC_BETA:
+        headers["anthropic-beta"] = ANTHROPIC_BETA
+
+    def request_model(model: str, max_attempts: int):
+        last_response = None
+        last_error = None
+        for attempt in range(1, max_attempts + 1):
+            payload = {
+                "model": model,
+                "max_tokens": 1500,
+                "messages": [{"role": "user", "content": _build_prompt(facts)}],
+            }
+            try:
+                response = requests.post(
+                    _resolve_api_url(), headers=headers, json=payload, timeout=timeout,
+                )
+            except requests.RequestException as exc:
+                last_error = exc
+                model_attempts.append({
+                    "model": model,
+                    "attempt": attempt,
+                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                })
+                print(f"  [警告] AI 研判请求异常 (模型 {model}, 第{attempt}/{max_attempts}次): {exc}")
+                if attempt < max_attempts:
+                    delay = min(AI_RETRY_MAX_DELAY, AI_RETRY_BASE_DELAY * (2 ** (attempt - 1)))
+                    time.sleep(max(0.0, delay))
+                continue
+            except Exception as exc:
+                last_error = exc
+                model_attempts.append({
+                    "model": model,
+                    "attempt": attempt,
+                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                })
+                print(f"  [警告] AI 研判调用异常 (模型 {model}, 第{attempt}/{max_attempts}次): {exc}")
+                if attempt < max_attempts:
+                    delay = min(AI_RETRY_MAX_DELAY, AI_RETRY_BASE_DELAY * (2 ** (attempt - 1)))
+                    time.sleep(max(0.0, delay))
+                continue
+
+            last_response = response
+            status = getattr(response, "status_code", None)
+            attempt_record = {"model": model, "attempt": attempt, "status_code": status}
+            if status != 200:
+                attempt_record["error"] = str(getattr(response, "text", "") or "")[:300]
+            model_attempts.append(attempt_record)
+            if status == 200:
+                return response, attempt
+            print(
+                f"  [警告] AI 研判 API 返回 {status} "
+                f"(模型 {model}, 第{attempt}/{max_attempts}次): "
+                f"{str(getattr(response, 'text', '') or '')[:160]}"
+            )
+            if status not in retryable_statuses or attempt >= max_attempts:
+                break
+            retry_after = None
+            if status == 429:
+                try:
+                    retry_after = float((getattr(response, "headers", {}) or {}).get("Retry-After"))
+                except (AttributeError, TypeError, ValueError):
+                    retry_after = None
+            delay = retry_after if retry_after is not None else AI_RETRY_BASE_DELAY * (2 ** (attempt - 1))
+            time.sleep(max(0.0, min(delay, AI_RETRY_MAX_DELAY)))
+        return last_response, max_attempts if last_response is not None or last_error is not None else 0
+
+    def parse_response(response):
+        if response is None or getattr(response, "status_code", None) != 200:
+            return None, "上游接口未成功返回（模型请求失败）"
+        try:
+            data = response.json()
+            blocks = data.get("content", [])
+            text = "".join(
+                block.get("text", "") for block in blocks if block.get("type") == "text"
+            ).strip()
+        except Exception as exc:
+            return None, f"AI 响应解析失败：{exc}"
+        if not text:
+            return None, "AI 返回空内容"
+        parsed = _parse_json(text)
+        if parsed is None:
+            return None, "AI 返回无法解析的结构化结果"
+        return parsed, ""
+
+    primary_response, primary_attempts = request_model(ANTHROPIC_MODEL, 2)
+    primary_status = getattr(primary_response, "status_code", None)
+    primary_result, primary_parse_reason = parse_response(primary_response)
+    if primary_result is not None:
+        return finish(primary_result, attempt_count=primary_attempts, http_status=primary_status)
+
+    fallback_attempt_count = 0
+    fallback_reason = ""
+    if ANTHROPIC_FALLBACK_MODEL and ANTHROPIC_FALLBACK_MODEL != ANTHROPIC_MODEL:
+        fallback_response, fallback_attempt_count = request_model(ANTHROPIC_FALLBACK_MODEL, 1)
+        fallback_status = getattr(fallback_response, "status_code", None)
+        fallback_result, fallback_reason = parse_response(fallback_response)
+        if fallback_result is not None:
+            return finish(
+                fallback_result,
+                attempt_count=primary_attempts,
+                http_status=fallback_status,
+                fallback_model=ANTHROPIC_FALLBACK_MODEL,
+                fallback_attempt_count=fallback_attempt_count,
+            )
+
+    final_status = getattr(primary_response, "status_code", None)
+    if primary_attempts and final_status is not None:
+        reason = f"上游接口连续 {primary_attempts} 次返回 {final_status}"
+    elif primary_parse_reason:
+        reason = primary_parse_reason
+    else:
+        reason = "AI 请求未获得响应"
+    if fallback_reason and ANTHROPIC_FALLBACK_MODEL and ANTHROPIC_FALLBACK_MODEL != ANTHROPIC_MODEL:
+        reason = f"{reason}；备用模型失败：{fallback_reason}"
+    return finish(
+        None,
+        reason=reason,
+        attempt_count=primary_attempts,
+        http_status=final_status,
+        fallback_model=ANTHROPIC_FALLBACK_MODEL,
+        fallback_attempt_count=fallback_attempt_count,
+    )
 
 def _parse_json(text: str) -> dict | None:
     """从模型输出里稳健地抽出 JSON (容忍 ```json 代码块包裹)。"""
@@ -205,7 +448,22 @@ def render_ai_rebound_html(ai: dict, facts: dict, char_clr: str) -> str:
                 f'<span style="color:#8b949e;">{label}:</span> '
                 f'<span style="color:{clr};">{_esc(val)}</span></div>')
 
-    evolution = _esc(ai.get("evolution", ""))
+    def _field(legacy_key, value=None, default=""):
+        if value is None:
+            value = ai.get(legacy_key)
+        if isinstance(value, list):
+            value = "；".join(str(item) for item in value if item not in (None, ""))
+        return str(value or default)
+
+    observations = ai.get("observations") if isinstance(ai.get("observations"), list) else []
+    conditions = ai.get("conditions") if isinstance(ai.get("conditions"), list) else []
+    risks = ai.get("risks") if isinstance(ai.get("risks"), list) else []
+    market_summary = _esc(_field("market_summary", default=market_char))
+    active_comment = _field("active_comment", observations[0] if observations else None)
+    follow_comment = _field("follow_comment", observations[1] if len(observations) > 1 else None)
+    gap_comment = _field("gap_comment", risks[0] if risks else (observations[2] if len(observations) > 2 else None))
+    evolution = _esc(_field("evolution", conditions[0] if conditions else (observations[-1] if observations else None)))
+    operation = _esc(_field("operation", ai.get("decision")))
     evolution_block = (
         f'<div style="margin-top:14px;padding:12px 14px;background:rgba(88,166,255,0.08);'
         f'border-left:3px solid #58a6ff;border-radius:8px;">'
@@ -214,7 +472,6 @@ def render_ai_rebound_html(ai: dict, facts: dict, char_clr: str) -> str:
         f'<div style="color:#e6edf3;font-size:14px;line-height:1.7;">{evolution}</div></div>'
         if evolution else "")
 
-    operation = _esc(ai.get("operation", ""))
     operation_block = (
         f'<div style="margin-top:12px;padding:10px 14px;background:rgba(248,81,73,0.08);'
         f'border-radius:8px;color:#ffa657;font-size:14px;font-weight:bold;">'
@@ -225,13 +482,13 @@ def render_ai_rebound_html(ai: dict, facts: dict, char_clr: str) -> str:
     <div style="background:#0d1117;border:1px solid #30363d;border-left:4px solid {char_clr};
                 border-radius:12px;padding:22px;margin-bottom:30px;color:#c9d1d9;">
         <h2 style="color:{char_clr};font-size:19px;margin:0 0 14px;display:flex;align-items:center;gap:10px;">
-            🧭 反弹分类复盘 · AI 研判: {_esc(ai.get("market_summary", market_char))}
+            🧭 反弹分类复盘 · AI 研判: {market_summary}
         </h2>
         <div style="color:#e6edf3;font-size:14px;line-height:1.7;">
             <div><span style="color:#8b949e;">当日定性:</span> {_esc(char_desc)}</div>
-            {_block("主动主线", ai.get("active_comment", ""), "#f85149")}
-            {_block("跟随提醒", ai.get("follow_comment", ""), "#d29922")}
-            {_block("梯队结构", ai.get("gap_comment", ""))}
+            {_block("主动主线", active_comment, "#f85149")}
+            {_block("跟随提醒", follow_comment, "#d29922")}
+            {_block("梯队结构", gap_comment)}
         </div>
         {evolution_block}
         {operation_block}

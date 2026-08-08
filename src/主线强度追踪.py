@@ -18,7 +18,37 @@
 import pandas as pd
 import numpy as np
 import os, sys, json, time, hashlib, requests, socket  # type: ignore
+import html as html_lib
 from timing_signal import generate_timing_signal
+from report_logic import (
+    ReportContext,
+    ReportPolicy,
+    apply_price_cache_breadth_calibration,
+    assess_data_quality,
+    reconcile_limit_pool,
+    build_market_state,
+    build_scenario_probabilities,
+    build_data_credibility_summary,
+    build_lianban_review,
+    build_mainline_review,
+    compute_ladder_metrics,
+    compute_mainline_concentration,
+    normalize_stock_code,
+    policy_from_quality,
+    sanitize_html_for_policy,
+)
+from data_sources.universe_provider import UniverseProvider
+from data_sources.quality_gate import build_module_quality, aggregate_report_quality
+from data_sources.price_provider import (
+    normalize_price_frame,
+    merge_price_frames,
+    price_value_column,
+    price_coverage,
+)
+from review_metrics import build_progression_chain, build_daily_delta_snapshot
+from report_audit import write_report_audit
+from prediction_review import append_prediction_once, build_prediction_review
+from ai_rebound import run_guarded_ai
 from market_stance import classify_market_stance, render_stance_html
 from screener import generate_focus_pool
 import smtplib
@@ -27,7 +57,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
 from datetime import datetime, timedelta
 from fupan_report import FuPanZhangTingYuanYin
-from time_utils import get_latest_date
+from time_utils import filter_completed_rows, get_latest_date
 
 try:
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')  # type: ignore
@@ -46,7 +76,8 @@ from paths import (
     DATA_DIR,
     ZT_CACHE_FILE, PRICE_CACHE, INDUSTRY_CACHE,
     SENTIMENT_CACHE, CLS_PLATE_CACHE, OUTPUT_HTML,
-    SITE_DIR, SITE_URL,
+    SITE_DIR, SITE_URL, SECURITY_MASTER_CACHE,
+    PREDICTION_HISTORY, DAILY_SNAPSHOT_DIR, AUDIT_DIR,
 )
 CACHE_DIR = DATA_DIR  # 向后兼容: 旧代码引用 CACHE_DIR 的地方仍指向数据目录
 
@@ -652,6 +683,82 @@ def load_and_classify_zt(n_days=60):
     df[['细分板块', '大主线']] = df.apply(apply_cls, axis=1)
     return df
 
+
+def _load_local_limit_fact_ladder(report_date):
+    """从本地不可变涨停缓存构建指定交易日事实池。
+
+    FuPan 的历史 Day 参数无法可靠证明返回的是请求日期，因此历史回放时
+    不允许把 FuPan 天梯当作权威事实。当天落盘的涨停缓存则按日期和类型
+    读取，作为报告事实层的唯一优先来源；DT 只用于跌停统计，不进入涨停池。
+    """
+    if not os.path.exists(ZT_CACHE_FILE):
+        return None
+    target = str(report_date or '').replace('-', '').strip()
+    if len(target) != 8 or not target.isdigit():
+        return None
+    try:
+        frame = pd.read_csv(
+            ZT_CACHE_FILE,
+            dtype={'日期': str, '类型': str, '代码': str, '名称': str, '连板数': str},
+        )
+    except Exception as exc:
+        print(f"  ⚠️ 本地涨停事实缓存读取失败: {exc}")
+        return None
+    required = {'日期', '类型', '代码'}
+    if not required.issubset(frame.columns):
+        return None
+
+    frame = frame.copy()
+    frame['日期'] = frame['日期'].astype(str).str.replace('-', '', regex=False).str.strip()
+    frame['类型'] = frame['类型'].astype(str).str.strip().str.upper()
+    day = frame[frame['日期'] == target].copy()
+    if day.empty:
+        return None
+
+    rows_by_code = {}
+    category = {'3板及以上': [], '2板': [], '首板': []}
+    for _, raw in day[day['类型'] == 'ZT'].iterrows():
+        code = normalize_stock_code(raw.get('代码'))
+        if not code or code in rows_by_code:
+            continue
+        try:
+            level = max(1, int(float(raw.get('连板数') or 1)))
+        except (TypeError, ValueError):
+            level = 1
+        row = {
+            'code': code,
+            'name': str(raw.get('名称') or '').strip(),
+            'level': level,
+            'trade_date': target,
+            'bucket': '3板及以上' if level >= 3 else ('2板' if level == 2 else '首板'),
+        }
+        rows_by_code[code] = row
+        category[row['bucket']].append(row)
+
+    if not rows_by_code:
+        return None
+
+    total_fact_count = int(len(day))
+    dt_count = int((day['类型'] == 'DT').sum())
+    ladder = {
+        'source': 'daily_snapshot',
+        'snapshot_source': 'daily_snapshot',
+        'date': target,
+        'trade_date': target,
+        'date_verified': True,
+        'date_verification': 'local_immutable_cache',
+        'immutable': True,
+        'category': category,
+        'sector_summary': {},
+    }
+    return {
+        'ladder': ladder,
+        'total_fact_count': total_fact_count,
+        'limit_up_count': len(rows_by_code),
+        'limit_down_count': dt_count,
+        'cache': ZT_CACHE_FILE,
+    }
+
 def build_echelon_table(cls_data, zt_today=None):
     """构建涨停梯队属性梳理表。
 
@@ -667,7 +774,7 @@ def build_echelon_table(cls_data, zt_today=None):
     for plate in ps:
         pname = plate.get('secu_name', '') or plate.get('plate_name', '')
         for s in plate.get('stock_list', []):
-            code = s.get('secu_code', '')
+            code = normalize_stock_code(s.get('secu_code', ''))
             tags = s.get('up_tags', [])
             stock_plates.setdefault(code, []).extend(tags)
             if pname and pname not in stock_plates[code]:
@@ -699,7 +806,7 @@ def build_echelon_table(cls_data, zt_today=None):
         stock_names = []
         stock_details = []
         for _, row in grp.iterrows():
-            code = str(row['代码'])
+            code = normalize_stock_code(row['代码'])
             name = str(row['名称'])
             stock_names.append(name)
             for p in stock_plates.get(code, []):
@@ -794,7 +901,7 @@ def build_mainline_ladder(price_df, classified, zt_today=None, ret_window=20):
         return {}
 
     # 1. 全市场 N 日涨幅
-    p_df = price_df.pivot(index='date', columns='code', values='close').ffill()
+    p_df = _price_matrix(price_df, 'qfq', allow_legacy=True).ffill()
     if len(p_df) <= ret_window:
         return {}
     latest = p_df.iloc[-1]
@@ -895,8 +1002,11 @@ def build_mainline_ladder(price_df, classified, zt_today=None, ret_window=20):
                 break
         if grade is None:
             continue
+        name = code_to_name.get(code, code)
+        if _is_non_tradeable_security_name(name):
+            continue
         ladder[grade].append({
-            'name': code_to_name.get(code, code),
+            'name': name,
             'code': code, 'sub': sub, 'ml': ml,
             'score': round(score, 1),
         })
@@ -923,6 +1033,252 @@ ACTIVE_ML_RECENT = 5       # 观察窗口 (交易日)
 # 又不会误伤 513涨/4580跌 (合计5093) 这类合法的极端普跌日。
 MIN_MARKET_BREADTH = 4000
 
+def _is_non_tradeable_security_name(name):
+    """交易观察层排除 ST、退市等不可交易证券名称。"""
+    text = str(name or '').strip().upper().replace(' ', '')
+    return text.startswith('ST') or text.startswith('*ST') or text.startswith('退')
+
+
+
+def _load_market_universe(report_date=None):
+    """加载沪深北全 A 证券主数据，并按报告日选择可证明的状态快照。"""
+    result = UniverseProvider(SECURITY_MASTER_CACHE).load_or_refresh(
+        refresh=not os.path.exists(SECURITY_MASTER_CACHE)
+    )
+    records = list(result.get('records') or [])
+    if report_date:
+        result['security_master'] = UniverseProvider.security_master_as_of(records, str(report_date))
+        result['security_effective_date'] = str(report_date)
+        unknown = sum(row.get('status_as_of') == 'unknown' for row in result['security_master'].values())
+        if unknown:
+            result.setdefault('errors', []).append(
+                f'证券状态历史快照缺失: {unknown} 只无法证明截至 {str(report_date)[:10]} 的状态'
+            )
+    else:
+        result['security_master'] = {
+            row['code']: row for row in records if row.get('code')
+        }
+    return result
+
+
+def _flatten_echelon_rows(rows):
+    """把梯队分组展开为逐股记录，供晋级链路和集中度复用。"""
+    flattened = []
+    for group in rows or []:
+        height = group.get('height') if isinstance(group, dict) else None
+        for detail in (group.get('stock_details') or []) if isinstance(group, dict) else []:
+            item = dict(detail)
+            item['height'] = height
+            item['mainline'] = item.get('ml') or item.get('大主线') or ''
+            flattened.append(item)
+    return flattened
+
+
+def _price_change_map(price_df, report_date):
+    """用相邻两个真实交易日收盘价计算逐股当日涨跌幅。"""
+    column = _price_column(price_df, 'raw', allow_legacy=True)
+    if price_df is None or price_df.empty or not column:
+        return {}, set()
+    frame = price_df[['code', 'date', column]].copy()
+    frame['date'] = frame['date'].astype(str)
+    frame[column] = pd.to_numeric(frame[column], errors='coerce')
+    target = str(report_date)
+    if len(target) == 8 and target.isdigit():
+        target = f'{target[:4]}-{target[4:6]}-{target[6:]}'
+    dates = sorted(d for d in frame['date'].dropna().unique() if d <= target)
+    if not dates:
+        return {}, set()
+    current_date = dates[-1]
+    previous_date = dates[-2] if len(dates) > 1 else None
+    current = {
+        normalize_stock_code(code): close
+        for code, close in frame.loc[frame['date'] == current_date, ['code', column]].itertuples(index=False, name=None)
+        if normalize_stock_code(code) and pd.notna(close)
+    }
+    if previous_date is None:
+        return {}, set(current)
+    previous = {
+        normalize_stock_code(code): close
+        for code, close in frame.loc[frame['date'] == previous_date, ['code', column]].itertuples(index=False, name=None)
+        if normalize_stock_code(code) and pd.notna(close)
+    }
+    changes = {
+        code: round((close / previous[code] - 1) * 100, 4)
+        for code, close in current.items()
+        if code in previous and previous[code]
+    }
+    return changes, set(current)
+
+
+def _build_progression_inputs(previous_echelon, current_echelon, price_df, report_date, security_master):
+    """补齐昨日连板股今日收盘状态，避免仅靠今日涨停池误判。"""
+    previous_rows = _flatten_echelon_rows(previous_echelon)
+    current_rows = _flatten_echelon_rows(current_echelon)
+    changes, current_codes = _price_change_map(price_df, report_date)
+    by_code = {}
+    for row in current_rows:
+        code = normalize_stock_code(row.get('code'))
+        if not code:
+            continue
+        master = (security_master or {}).get(code, {})
+        status_as_of = master.get('status_as_of', master.get('status'))
+        if status_as_of in (None, '', 'unknown'):
+            status_as_of = 'unknown'
+        by_code[code] = {
+            **row,
+            'code': code,
+            'name': master.get('name_as_of') or master.get('name') or row.get('name') or '',
+            'pct_change': changes.get(code, 10.0),
+            'status': status_as_of,
+            'status_as_of': status_as_of,
+            'state_unknown_reason': master.get('state_unknown_reason', ''),
+        }
+    for row in previous_rows:
+        code = normalize_stock_code(row.get('code'))
+        if not code or code in by_code:
+            continue
+        master = (security_master or {}).get(code, {})
+        status_as_of = master.get('status_as_of', master.get('status'))
+        if status_as_of in (None, '', 'unknown'):
+            status_as_of = 'unknown'
+        status = str(status_as_of).lower()
+        tradable_as_of = master.get('tradable_as_of', master.get('tradable'))
+        if code in current_codes:
+            by_code[code] = {
+                'code': code,
+                'name': master.get('name_as_of') or master.get('name') or row.get('name') or '',
+                'height': 0,
+                'pct_change': changes.get(code, 0.0),
+                'status': status_as_of,
+                'status_as_of': status_as_of,
+                'state_unknown_reason': master.get('state_unknown_reason', ''),
+            }
+        elif status in {'suspended', '停牌'} or tradable_as_of is False:
+            by_code[code] = {
+                'code': code,
+                'name': master.get('name_as_of') or master.get('name') or row.get('name') or '',
+                'height': 0,
+                'pct_change': 0.0,
+                'status': 'suspended',
+                'status_as_of': status_as_of,
+                'state_unknown_reason': master.get('state_unknown_reason', ''),
+            }
+    return previous_rows, list(by_code.values())
+
+
+def _normalize_snapshot_date(value):
+    raw = str(value or '').strip()
+    digits = ''.join(ch for ch in raw if ch.isdigit())
+    return digits[:8] if len(digits) >= 8 else ''
+
+
+def _stable_fingerprint(value):
+    """对一次运行的事实输入做稳定 SHA-256 指纹。"""
+    payload = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(',', ':'),
+        default=str,
+    )
+    return hashlib.sha256(payload.encode('utf-8')).hexdigest()
+
+
+def _snapshot_source_is_usable(snapshot, report_date):
+    """判断对象是否能作为指定日期的权威快照。
+
+    FuPan 的 Day 参数在历史回放场景并不可靠；未验证日期的 FuPan 结果
+    只能用于当前运行的事实层，不能写入或覆盖 daily snapshot。
+    """
+    if not isinstance(snapshot, dict):
+        return False
+    target = _normalize_snapshot_date(report_date)
+    if not target or snapshot.get('date_verified') is not True:
+        return False
+    source = str(snapshot.get('source') or snapshot.get('snapshot_source') or '').strip().lower()
+    snapshot_date = _normalize_snapshot_date(
+        snapshot.get('report_date') or snapshot.get('date') or snapshot.get('requested_date')
+    )
+    if snapshot_date != target:
+        return False
+    if source in {'fupan', 'fupan_ladder', 'fupan-history', 'fupan_history'}:
+        return False
+    return source in {'daily_snapshot', 'snapshot', 'daily-fact-snapshot'} or bool(snapshot.get('immutable'))
+
+
+def _load_previous_daily_snapshot(report_date):
+    """读取严格早于报告日的最近结构化快照，不调用 FuPan 历史接口。"""
+    target = str(report_date)
+    candidates = []
+    if os.path.isdir(DAILY_SNAPSHOT_DIR):
+        for name in os.listdir(DAILY_SNAPSHOT_DIR):
+            if not name.endswith('.json'):
+                continue
+            date_key = name[:-5]
+            if date_key < target:
+                candidates.append((date_key, os.path.join(DAILY_SNAPSHOT_DIR, name)))
+    if not candidates:
+        return {}
+    _, path = max(candidates)
+    try:
+        with open(path, 'r', encoding='utf-8') as handle:
+            snapshot = json.load(handle)
+        if not isinstance(snapshot, dict):
+            return {}
+        if not _snapshot_source_is_usable(snapshot, os.path.basename(path)[:-5]):
+            print(f'  [提示] 忽略未通过日期/不可变校验的历史快照: {os.path.basename(path)}')
+            return {}
+        return snapshot
+    except Exception as exc:
+        print(f'  [提示] 上一交易日结构化快照读取失败: {exc}')
+        return {}
+
+
+def _write_daily_snapshot(report_date, snapshot):
+    """原子写入每日结构化快照；同一报告日已存在时保持不可变。"""
+    os.makedirs(DAILY_SNAPSHOT_DIR, exist_ok=True)
+    path = os.path.join(DAILY_SNAPSHOT_DIR, f'{report_date}.json')
+    # 先到者原则：同一报告日的文件一旦落盘，不允许后续运行覆盖。
+    if os.path.exists(path):
+        return path
+    source = str((snapshot or {}).get('source') or (snapshot or {}).get('snapshot_source') or '').strip().lower()
+    if source in {'fupan', 'fupan_ladder', 'fupan-history', 'fupan_history'} and not (snapshot or {}).get('date_verified'):
+        print(f'  [提示] 拒绝将未验证日期的 FuPan 结果写入历史快照: {report_date}')
+        return path
+    tmp = path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as handle:
+        json.dump(snapshot, handle, ensure_ascii=False, indent=2, default=str)
+        handle.write('\n')
+        handle.flush()
+        os.fsync(handle.fileno())
+    if os.path.exists(path):
+        try:
+            os.remove(tmp)
+        except FileNotFoundError:
+            pass
+        return path
+    try:
+        os.rename(tmp, path)
+    except FileExistsError:
+        # 并发运行时另一进程可能已经完成首次落盘；保留先到者。
+        try:
+            os.remove(tmp)
+        except FileNotFoundError:
+            pass
+    return path
+
+
+def _resolve_snapshot_limit_up_count(authoritative_count=None, reported_count=None, fallback_count=None):
+    """为日报快照选择涨停事实数量，权威事实池优先于摘要或旧回退值。"""
+    for value in (authoritative_count, reported_count, fallback_count):
+        try:
+            count = int(float(value))
+        except (TypeError, ValueError):
+            continue
+        if count >= 0:
+            return count
+    return 0
+
 
 def is_ad_incomplete(up, down):
     """市场宽度体检: up+down 低于全市场规模阈值 = 残缺快照, 不可作权威值发布。
@@ -933,19 +1289,37 @@ def is_ad_incomplete(up, down):
         return True
 
 
-def generate_rebound_analysis(advance_decline, sentiment_df, echelon):
+def generate_rebound_analysis(advance_decline, sentiment_df, echelon, market_state=None):
     """数据驱动的反弹分类复盘: 市场定性 + 主动/跟随主线 + 高度断层预警。
 
     完全基于缓存数据计算, 每日结论不同, 无需大模型 API。
     分类框架: 主动反弹(可追) / 跟随反弹(减亏离场) / 高度断层(风险)。
     """
     try:
-        up = float(advance_decline.get('up', 0) or 0)
-        down = float(advance_decline.get('down', 0) or 0)
-        ad = up / max(down, 1)
+        mode = str((market_state or {}).get('publication_mode') or 'decision').lower()
+        if mode not in {'decision', 'observation', 'facts_only'}:
+            mode = 'decision'
 
-        # 1. 市场定性
-        if ad > REBOUND_STRONG_AD:
+        if not isinstance(advance_decline, dict):
+            advance_decline = {}
+        raw_up = advance_decline.get('up')
+        raw_down = advance_decline.get('down')
+        ad_available = advance_decline.get('ad_available')
+        if ad_available is None:
+            ad_available = raw_up is not None and raw_down is not None
+        try:
+            up = float(raw_up) if ad_available and raw_up is not None else None
+            down = float(raw_down) if ad_available and raw_down is not None else None
+        except (TypeError, ValueError):
+            up, down, ad_available = None, None, False
+        ad = up / max(down, 1) if ad_available and up is not None and down is not None else None
+
+        # 1. 市场定性：没有有效 A/D 时只报告“数据不足”，不能伪装成普跌。
+        if ad is None:
+            market_char = '涨跌家数数据不足'
+            char_desc = '涨跌家数未取得或未通过质量校验，无法对市场做普涨/普跌定性。'
+            char_clr = '#8b949e'
+        elif ad > REBOUND_STRONG_AD:
             market_char = '普涨反弹'
             char_desc = f'涨跌家数 {int(up)}涨/{int(down)}跌, 多头明显占优, 属全面反弹。'
             char_clr = '#f85149'
@@ -962,10 +1336,10 @@ def generate_rebound_analysis(advance_decline, sentiment_df, echelon):
             char_desc = f'涨跌家数 {int(up)}涨/{int(down)}跌, 跌多于涨, 非反弹日, 资金避险。'
             char_clr = '#58a6ff'
 
-        # 2. 情绪趋势 (近 4 日 up 走向)
+        # 2. 情绪趋势：只使用有效观测，缺失日不能参与升降判断。
         trend_desc = ''
         if sentiment_df is not None and not sentiment_df.empty and 'up' in sentiment_df.columns:
-            ups = pd.to_numeric(sentiment_df['up'], errors='coerce').fillna(0).tolist()[-4:]
+            ups = pd.to_numeric(sentiment_df['up'], errors='coerce').dropna().tolist()[-4:]
             if len(ups) >= 3:
                 if ups[-1] > ups[-2] > ups[-3]:
                     trend_desc = '情绪连续回暖 (up 值连升), 赚钱效应扩散中。'
@@ -975,6 +1349,8 @@ def generate_rebound_analysis(advance_decline, sentiment_df, echelon):
                     trend_desc = '情绪较昨日修复, 但未成趋势, 属弱反抽。'
                 else:
                     trend_desc = '情绪较昨日回落, 反弹持续性存疑。'
+            elif ups:
+                trend_desc = '情绪历史有效样本不足，暂不判断趋势。'
 
         # 3. 高度断层检测 (echelon 连板梯队)
         heights = []
@@ -1004,13 +1380,23 @@ def generate_rebound_analysis(advance_decline, sentiment_df, echelon):
                 gap_warn = f'梯队相对连续 (最高{max_h}板), 存在承接。'
 
         # 4. 主动主线 vs 跟随盘: 近 N 日各主线涨停持续度
-        active_html, follow_html, active, follow = _analyze_active_mainlines()
+        _, _, active, follow = _analyze_active_mainlines()
+        active_html, follow_html = _render_active_follow_html(
+            active, follow, publication_mode=mode,
+        )
 
         # 5. 组装结构化事实 (供 AI 研判 / 规则渲染共用)
         facts = {
             'market_char': market_char,
             'char_desc': char_desc,
-            'ad': {'up': int(up), 'down': int(down), 'ratio': round(ad, 2)},
+            'ad': {
+                'up': int(up) if up is not None else None,
+                'down': int(down) if down is not None else None,
+                'ratio': round(ad, 2) if ad is not None else None,
+                'available': bool(ad_available),
+                'status': advance_decline.get('ad_status', 'available' if ad_available else 'missing'),
+                'source': advance_decline.get('ad_source') or advance_decline.get('source', 'unknown'),
+            },
             'trend_desc': trend_desc,
             'gap_warn': gap_warn,
             'heights': heights,
@@ -1025,16 +1411,18 @@ def generate_rebound_analysis(advance_decline, sentiment_df, echelon):
         }
 
         # 6. 优先走 AI 研判 (判断+按模板填充+自行进化); 失败静默回落规则模板
-        try:
-            from ai_rebound import generate_ai_rebound, render_ai_rebound_html
-            ai = generate_ai_rebound(facts)
-            if ai:
-                return render_ai_rebound_html(ai, facts, char_clr)
-        except Exception as e:
-            print(f"  [提示] AI 研判不可用, 回落规则模板: {e}")
+        if mode == 'decision':
+            try:
+                from ai_rebound import generate_ai_rebound, render_ai_rebound_html
+                ai = generate_ai_rebound(facts)
+                if ai:
+                    return render_ai_rebound_html(ai, facts, char_clr)
+            except Exception as e:
+                print(f"  [提示] AI 研判不可用, 回落规则模板: {e}")
 
         return _render_rebound_html(market_char, char_desc, char_clr,
-                                    trend_desc, gap_warn, active_html, follow_html)
+                                    trend_desc, gap_warn, active_html, follow_html,
+                                    publication_mode=mode)
     except Exception as e:
         print(f"  [警告] 反弹分类复盘生成失败: {e}")
         return ''
@@ -1120,8 +1508,63 @@ def _analyze_active_mainlines():
         return '', '', [], []
 
 
+def _render_active_follow_html(active, follow, publication_mode='decision'):
+    """按发布状态渲染主动/跟随主线, 不信任旧的 HTML 片段。"""
+    mode = str(publication_mode or 'decision').lower()
+    if mode not in {'decision', 'observation', 'facts_only'}:
+        mode = 'decision'
+    active = active or []
+    follow = follow or []
+
+    if active:
+        if mode == 'facts_only':
+            active_label = '主动主线事实'
+            active_desc = '近窗口涨停数居前'
+        elif mode == 'observation':
+            active_label = '主动主线观察'
+            active_desc = '持续性较强, 等待后续数据确认'
+        else:
+            active_label = '主动反弹主线 (可追)'
+            active_desc = '资金持续主动流入, 反弹持续性好, 可追'
+        items = ''.join(
+            f'<li style="margin:4px 0;"><b style="color:#f85149;">{ml}</b> '
+            f'(今日涨停 {c}只, 近{ACTIVE_ML_RECENT}日 {ld}天居前) '
+            f'<span style="color:#8b949e;">— {active_desc}。</span></li>'
+            for ml, c, ld in active
+        )
+        active_html = (
+            f'<div style="margin-top:12px;"><span style="color:#f85149;font-weight:bold;">'
+            f'✅ {active_label}:</span><ul style="margin:6px 0;padding-left:20px;">{items}</ul></div>'
+        )
+    else:
+        active_html = (
+            '<div style="margin-top:12px;color:#8b949e;font-size:13px;">'
+            '暂无持续居前的主线事实。</div>'
+        )
+
+    if follow:
+        names = '、'.join(f'{ml}({c})' for ml, c in follow)
+        if mode == 'facts_only':
+            follow_label = '跟随主线事实'
+            follow_desc = '当日有涨停但近窗口持续性不足'
+        elif mode == 'observation':
+            follow_label = '跟随主线观察'
+            follow_desc = '近期持续性不足, 等待后续确认'
+        else:
+            follow_label = '跟随反弹 (减亏离场)'
+            follow_desc = '当日有涨停但近期不持续, 无梯队支撑, 反弹即减亏离场'
+        follow_html = (
+            f'<div style="margin-top:8px;"><span style="color:#d29922;font-weight:bold;">'
+            f'⚠️ {follow_label}:</span> <span style="color:#e6edf3;">{names}</span> '
+            f'<span style="color:#8b949e;font-size:13px;">— {follow_desc}。</span></div>'
+        )
+    else:
+        follow_html = ''
+    return active_html, follow_html
+
+
 def _render_rebound_html(market_char, char_desc, char_clr,
-                         trend_desc, gap_warn, active_html='', follow_html=''):
+                         trend_desc, gap_warn, active_html='', follow_html='', publication_mode='decision'):
     """渲染反弹分类复盘 HTML 卡片 (深色主题, 对齐报告风格)。"""
     gap_clr = '#f85149' if gap_warn.startswith('⚠️') else '#8b949e'
     trend_block = (f'<div style="margin-top:8px;color:#e6edf3;font-size:14px;">'
@@ -1130,6 +1573,14 @@ def _render_rebound_html(market_char, char_desc, char_clr,
     gap_block = (f'<div style="margin-top:8px;font-size:14px;color:{gap_clr};">'
                  f'<span style="color:#8b949e;">梯队结构:</span> {gap_warn}</div>'
                  if gap_warn else '')
+    mode = str(publication_mode or 'decision').lower()
+    if mode == 'facts_only':
+        footer_text = '事实口径: 仅展示涨跌家数、情绪趋势、梯队高度和主线涨停统计, 不构成交易建议。'
+    elif mode == 'observation':
+        footer_text = '分类逻辑: 主动主线、跟随主线和梯队结构均为观察项, 需等待条件触发后再形成决策。'
+    else:
+        footer_text = '分类逻辑: 主动反弹(资金主动选择、持续吸金→可追) / 跟随反弹(无梯队支撑→减亏离场) / 高度断层(龙头孤悬→回避追高)。数据驱动, 每日自动更新。'
+
     return f'''
     <div style="background:#0d1117;border:1px solid #30363d;border-left:4px solid {char_clr};
                 border-radius:12px;padding:22px;margin-bottom:30px;color:#c9d1d9;">
@@ -1145,8 +1596,7 @@ def _render_rebound_html(market_char, char_desc, char_clr,
         {follow_html}
         <div style="margin-top:14px;padding-top:12px;border-top:1px dashed #30363d;
                     font-size:12px;color:#8b949e;">
-            分类逻辑: 主动反弹(资金主动选择、持续吸金→可追) / 跟随反弹(无梯队支撑→减亏离场) /
-            高度断层(龙头孤悬→回避追高)。数据驱动, 每日自动更新。
+            {footer_text}
         </div>
     </div>'''
 
@@ -1245,7 +1695,7 @@ def calc_subsector_returns(classified_df, price_df, dates, periods=[5, 10, 20, 3
         sector_to_codes.setdefault(sector, []).append(code)
 
     # 2. 准备价格矩阵
-    p_df = price_df.pivot(index='date', columns='code', values='close')
+    p_df = _price_matrix(price_df, 'qfq', allow_legacy=True)
     # 核心：双向填充。先前向填充(停牌)，再后向填充(上市初期或窗口起点缺失)
     p_df = p_df.ffill().bfill()
     
@@ -1408,7 +1858,7 @@ def get_nday_leaders(classified_df, price_df, group_col='细分板块'):
         return {}
     
     t0 = time.time()
-    p_df = price_df.pivot(index='date', columns='code', values='close')
+    p_df = _price_matrix(price_df, 'qfq', allow_legacy=True)
     p_df = p_df.ffill()
     
     code_to_name = classified_df.drop_duplicates('代码').set_index('代码')['名称'].to_dict()
@@ -1509,12 +1959,52 @@ def rate_sub(series):
 # ============================================================
 # N日涨幅排名 (baostock)
 # ============================================================
-def load_price_cache():
+def load_price_cache(*, include_future=False, report_date=None):
+    """读取价格缓存；默认仅返回报告截止日及之前的数据。"""
     if os.path.exists(PRICE_CACHE):
         df = pd.read_csv(PRICE_CACHE, dtype={'code': str})
         if not df.empty:
-            return df
+            df = normalize_price_frame(df)
+            # 旧版本缓存只有 date/code/close。读取时立即落成统一契约，避免
+            # 后续跑批每次都把同一份旧缓存当成“未迁移”数据，也让审计文件
+            # 能明确看到 close_legacy/price_basis，而不是再次看到旧表头。
+            canonical_columns = [
+                'date', 'code', 'close_raw', 'close_qfq', 'close_legacy',
+                'price_basis', 'source', 'source_timestamp',
+            ]
+            try:
+                current_columns = list(pd.read_csv(PRICE_CACHE, nrows=0).columns)
+                if current_columns != canonical_columns:
+                    df.to_csv(PRICE_CACHE, index=False)
+                    trim_cache_file(PRICE_CACHE, date_col='date', encoding='utf-8')
+                    print('  🔧 价格缓存已迁移为统一 raw/qfq/legacy 结构')
+            except Exception as exc:
+                print(f'  ⚠️ 价格缓存结构迁移失败, 继续使用内存数据: {exc}')
+            if include_future:
+                return df
+            return filter_completed_rows(
+                df,
+                'date',
+                report_date=report_date,
+            )
     return pd.DataFrame()
+
+
+def _price_column(price_df, basis='qfq', allow_legacy=True):
+    """返回报表计算使用的价格列；新缓存优先双口径，旧缓存仅作降级。"""
+    if price_df is None or price_df.empty:
+        return None
+    return price_value_column(price_df, basis, allow_legacy=allow_legacy)
+
+
+def _price_matrix(price_df, basis='qfq', allow_legacy=True):
+    """把指定价格口径转换为统一的日期×代码矩阵。"""
+    column = _price_column(price_df, basis, allow_legacy=allow_legacy)
+    if not column:
+        return pd.DataFrame()
+    frame = price_df[['date', 'code', column]].copy()
+    frame[column] = pd.to_numeric(frame[column], errors='coerce')
+    return frame.pivot(index='date', columns='code', values=column).sort_index()
 
 def _check_bs_login():
     """测试 baostock 登录连通性 (供多进程超时调用)"""
@@ -1601,7 +2091,8 @@ def _fetch_tencent_close(all_codes, trade_date_str, retry=3, prev_close_map=None
     一次请求可取数百只, 全市场 5000+ 只约 2 秒, 且不走系统代理 (直连)。
     all_codes: ['sh600000', 'sz000001', ...]  trade_date_str: 'YYYY-MM-DD'
     prev_close_map: {code: close} — 本地价格缓存里"最新已知一天"的收盘价; 用于识别陈旧快照。
-    返回 [{'date', 'code', 'close'}, ...]; 失败/陈旧快照返回 []。
+    返回 [{'date', 'code', 'close_raw', 'price_basis', 'source'}, ...];
+    失败/陈旧快照返回 []。
 
     注意: 腾讯接口只返回"当前/最新"收盘价, 仅适用于补当天。历史缺口仍需 baostock。
 
@@ -1646,7 +2137,13 @@ def _fetch_tencent_close(all_codes, trade_date_str, retry=3, prev_close_map=None
                         try:
                             close_val = float(parts[3])
                             if close_val > 0:
-                                rows.append({'date': trade_date_str, 'code': code, 'close': close_val})
+                                rows.append({
+                                    'date': trade_date_str,
+                                    'code': code,
+                                    'close_raw': close_val,
+                                    'price_basis': 'raw',
+                                    'source': 'tencent',
+                                })
                         except (ValueError, IndexError):
                             pass
                 ok = True
@@ -1666,7 +2163,7 @@ def _fetch_tencent_close(all_codes, trade_date_str, retry=3, prev_close_map=None
             if prev is None:
                 continue
             compared += 1
-            if abs(r['close'] - prev) < 1e-6:
+            if abs(r['close_raw'] - prev) < 1e-6:
                 identical += 1
         if compared > 0 and identical / compared > 0.9:
             print(f"    🚫 腾讯快照与本地最新日 close 逐股相同占比 {identical}/{compared}"
@@ -1676,19 +2173,38 @@ def _fetch_tencent_close(all_codes, trade_date_str, retry=3, prev_close_map=None
     return rows
 
 
-def _fetch_tencent_ad(all_codes, retry=2):
-    """用腾讯行情批量算全市场涨跌家数 (绕过系统代理, 本机+CI 都通)。
-    返回 (up_count, down_count); 失败返回 (0, 0)。
-    字段索引 32 = 涨跌幅(%)。替代被本机 Clash 代理墙掉的东财 stock_zh_a_spot_em。
+def _fetch_tencent_ad(all_codes, retry=2, return_meta=False):
+    """用腾讯行情批量计算涨跌家数，并返回可审计的覆盖元数据。
+
+    默认仍返回旧版 ``(up, down)``，生产调用方传 ``return_meta=True`` 后获得
+    ``covered/requested/flat/errors``，避免把 ``up + down`` 当成覆盖股票数，
+    也避免平盘股票和失败批次被静默丢失。
     """
+    requested_codes = []
+    seen = set()
+    for raw_code in all_codes or []:
+        code = normalize_stock_code(raw_code)
+        if code and code not in seen:
+            seen.add(code)
+            requested_codes.append(code)
+    result = {
+        'up': 0,
+        'down': 0,
+        'flat': 0,
+        'covered': 0,
+        'requested': len(requested_codes),
+        'errors': [],
+    }
     session = requests.Session()
     session.trust_env = False
     session.proxies = {'http': None, 'https': None}  # type: ignore
-    up = down = 0
     batch = 800
-    for i in range(0, len(all_codes), batch):
-        chunk = all_codes[i:i + batch]
+    expected = set(requested_codes)
+    for i in range(0, len(requested_codes), batch):
+        chunk = requested_codes[i:i + batch]
         url = f'https://qt.gtimg.cn/q={",".join(chunk)}'
+        parsed_codes = set()
+        batch_error = None
         for attempt in range(retry):
             try:
                 resp = session.get(url, timeout=10)
@@ -1700,32 +2216,118 @@ def _fetch_tencent_ad(all_codes, retry=2):
                     eq = line.find('="')
                     if eq < 0:
                         continue
+                    raw_code = line[2:eq]
+                    code = normalize_stock_code(raw_code)
+                    if code not in expected or code in parsed_codes:
+                        continue
                     parts = line[eq + 2:].rstrip('"').split('~')
-                    if len(parts) > 32 and parts[32]:
-                        try:
-                            pct = float(parts[32])
-                            if pct > 0:
-                                up += 1
-                            elif pct < 0:
-                                down += 1
-                        except ValueError:
-                            pass
+                    if len(parts) <= 32 or not parts[32]:
+                        continue
+                    try:
+                        pct = float(parts[32])
+                    except (TypeError, ValueError):
+                        continue
+                    parsed_codes.add(code)
+                    result['covered'] += 1
+                    if pct > 0:
+                        result['up'] += 1
+                    elif pct < 0:
+                        result['down'] += 1
+                    else:
+                        result['flat'] += 1
+                batch_error = None
                 break
-            except Exception:
+            except Exception as exc:
+                batch_error = str(exc)
                 if attempt < retry - 1:
                     time.sleep(0.5)
-                continue
-    return up, down
+        if batch_error:
+            result['errors'].append(f'batch {i // batch + 1}: {batch_error}')
+        elif len(parsed_codes) < len(chunk):
+            result['errors'].append(
+                f'batch {i // batch + 1}: parsed {len(parsed_codes)}/{len(chunk)}'
+            )
+    if return_meta:
+        return result
+    return result['up'], result['down']
+
+
+def _validate_tencent_ad_meta(meta, universe_total=None):
+    """校验腾讯逐股 A/D 结果是否可以进入报告事实层。"""
+    data = meta or {}
+
+    def _count(name):
+        try:
+            return max(0, int(data.get(name, 0) or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    up = _count('up')
+    down = _count('down')
+    flat = _count('flat')
+    covered = _count('covered')
+    requested = _count('requested')
+    coverage_pct = round(covered / requested * 100, 2) if requested else None
+    partition_ok = up + down + flat == covered
+    reasons = []
+    if not requested:
+        reasons.append('requested=0，未取得有效股票池')
+    if covered > requested:
+        reasons.append(f'covered={covered} 超过 requested={requested}')
+    if not partition_ok:
+        reasons.append(
+            f'涨跌平不闭合: up={up}, down={down}, flat={flat}, covered={covered}'
+        )
+    if coverage_pct is None or coverage_pct < 90:
+        reasons.append(f'覆盖率不足: {coverage_pct if coverage_pct is not None else "未知"}%')
+    if covered < MIN_MARKET_BREADTH:
+        reasons.append(f'有效覆盖数 {covered} 小于门槛 {MIN_MARKET_BREADTH}')
+    if universe_total is not None:
+        try:
+            universe_total = max(0, int(universe_total or 0))
+        except (TypeError, ValueError):
+            universe_total = 0
+        if universe_total and requested > universe_total:
+            reasons.append(
+                f'requested={requested} 超过沪深北全A分母 universe_total={universe_total}'
+            )
+    return {
+        'accepted': not reasons,
+        'up': up,
+        'down': down,
+        'flat': flat,
+        'covered': covered,
+        'requested': requested,
+        'coverage_pct': coverage_pct,
+        'partition_ok': partition_ok,
+        'reasons': reasons,
+    }
 
 
 def _fetch_bs_chunk(args):
-    codes, start, end = args
+    """抓取一批沪深历史价格，并返回逐代码/逐口径诊断。
+
+    默认只返回 rows 以兼容旧调用；第四个参数为 True 时返回
+    (rows, diagnostics)。北交所没有可靠的 Baostock 前复权路径，
+    因此明确记为 unsupported/raw-only，不伪造 close_qfq。
+    """
+    if len(args) >= 4:
+        codes, start, end, return_diagnostics = args
+    else:
+        codes, start, end = args
+        return_diagnostics = False
     import socket
-    socket.setdefaulttimeout(15)  # 防止 socket 挂起导致进程死锁
+    socket.setdefaulttimeout(15)
     # pyrefly: ignore [missing-import]
     import baostock as bs
     import sys, os
-    
+
+    requested_codes = [str(code or '').strip() for code in codes if str(code or '').strip()]
+    raw_seen, qfq_seen = set(), set()
+    unsupported = set()
+    query_errors = []
+    rows = []
+
     old_stdout = sys.stdout
     sys.stdout = open(os.devnull, 'w')
     try:
@@ -1733,41 +2335,94 @@ def _fetch_bs_chunk(args):
     finally:
         sys.stdout.close()
         sys.stdout = old_stdout
-        
-    rows = []
-    for code_str in codes:
-        if code_str.startswith('sh') or code_str.startswith('sz'):
-            bs_code = code_str[:2] + '.' + code_str[2:]
-        else:
-            continue
-        rs = bs.query_history_k_data_plus(
-            bs_code, "date,code,close",
-            start_date=start, end_date=end,
-            frequency="d", adjustflag="2"
-        )
-        if rs and rs.error_code == '0':
-            while rs.next():
-                row = rs.get_row_data()
-                # 串号护栏: baostock 批量/多进程下偶发对 query(A) 返回 B 的 K 线;
-                # 用返回行 row[1] 裸码校验, 不符即丢弃, 防相邻代码 close 张冠李戴污染 A/D。
-                ret_code = row[1].replace('.', '') if row[1] else ''
-                if ret_code and ret_code != code_str:
-                    continue
-                rows.append({
-                    'date': row[0],
-                    'code': code_str,
-                    'close': float(row[2])
-                })
-                
-    old_stdout = sys.stdout
-    sys.stdout = open(os.devnull, 'w')
+
     try:
-        bs.logout()
+        for code_str in requested_codes:
+            if code_str.startswith('sh') or code_str.startswith('sz'):
+                bs_code = code_str[:2] + '.' + code_str[2:]
+            else:
+                unsupported.add(code_str)
+                continue
+            for adjustflag, value_key, basis, covered in (
+                ('3', 'close_raw', 'raw', raw_seen),
+                ('2', 'close_qfq', 'qfq', qfq_seen),
+            ):
+                try:
+                    rs = bs.query_history_k_data_plus(
+                        bs_code, 'date,code,close',
+                        start_date=start, end_date=end,
+                        frequency='d', adjustflag=adjustflag
+                    )
+                except Exception as exc:
+                    query_errors.append({
+                        'code': code_str, 'basis': basis, 'adjustflag': adjustflag,
+                        'error': str(exc), 'error_type': type(exc).__name__,
+                    })
+                    continue
+                error_code = str(getattr(rs, 'error_code', '') or '')
+                if error_code != '0':
+                    query_errors.append({
+                        'code': code_str, 'basis': basis, 'adjustflag': adjustflag,
+                        'error_code': error_code,
+                        'error_msg': str(getattr(rs, 'error_msg', '') or ''),
+                    })
+                    continue
+                try:
+                    while rs.next():
+                        row = rs.get_row_data()
+                        if len(row) < 3:
+                            continue
+                        ret_code = str(row[1] or '').replace('.', '')
+                        if ret_code and ret_code != code_str:
+                            continue
+                        try:
+                            close_value = float(row[2])
+                        except (TypeError, ValueError):
+                            continue
+                        rows.append({
+                            'date': row[0], 'code': code_str, value_key: close_value,
+                            'price_basis': basis, 'source': 'baostock',
+                        })
+                        covered.add(code_str)
+                except Exception as exc:
+                    query_errors.append({
+                        'code': code_str, 'basis': basis, 'adjustflag': adjustflag,
+                        'error': str(exc), 'error_type': type(exc).__name__,
+                    })
     finally:
-        sys.stdout.close()
-        sys.stdout = old_stdout
-        
-    return rows
+        old_stdout = sys.stdout
+        sys.stdout = open(os.devnull, 'w')
+        try:
+            bs.logout()
+        finally:
+            sys.stdout.close()
+            sys.stdout = old_stdout
+
+    market_codes = {}
+    for code in requested_codes:
+        market_codes.setdefault(code[:2] if len(code) >= 2 else 'unknown', set()).add(code)
+    missing_raw = sorted(set(requested_codes) - raw_seen)
+    missing_qfq = sorted(set(requested_codes) - qfq_seen)
+    missing_qfq_by_market = {
+        market: sorted(set(codes_for_market) & set(missing_qfq))
+        for market, codes_for_market in market_codes.items()
+        if set(codes_for_market) & set(missing_qfq)
+    }
+    diagnostics = {
+        'requested_count': len(requested_codes),
+        'requested_codes': requested_codes,
+        'raw_covered_count': len(raw_seen),
+        'qfq_covered_count': len(qfq_seen),
+        'raw_covered_codes': sorted(raw_seen),
+        'qfq_covered_codes': sorted(qfq_seen),
+        'missing_raw_codes': missing_raw,
+        'missing_qfq_codes': missing_qfq,
+        'missing_qfq_codes_by_market': missing_qfq_by_market,
+        'unsupported_codes': sorted(unsupported),
+        'qfq_raw_only_markets': ['bj'] if any(code.startswith('bj') for code in requested_codes) else [],
+        'query_errors': query_errors,
+    }
+    return (rows, diagnostics) if return_diagnostics else rows
 
 def _drop_stale_latest_day(price_df, threshold=0.9):
     """体检价格缓存最新一天是否为前一交易日的陈旧副本; 命中则剔除该日并返回。
@@ -1782,10 +2437,13 @@ def _drop_stale_latest_day(price_df, threshold=0.9):
     if len(dates) < 2:
         return price_df
     latest, prev = dates[-1], dates[-2]
+    column = _price_column(price_df, 'raw', allow_legacy=True)
+    if not column:
+        return price_df
     cur_map = dict(zip(price_df.loc[price_df['date'] == latest, 'code'],
-                       price_df.loc[price_df['date'] == latest, 'close']))
+                       price_df.loc[price_df['date'] == latest, column]))
     prev_map = dict(zip(price_df.loc[price_df['date'] == prev, 'code'],
-                        price_df.loc[price_df['date'] == prev, 'close']))
+                        price_df.loc[price_df['date'] == prev, column]))
     common = set(cur_map) & set(prev_map)
     if len(common) < 500:
         return price_df
@@ -1799,12 +2457,122 @@ def _drop_stale_latest_day(price_df, threshold=0.9):
     return price_df
 
 
-def update_price_cache(classified_df):
-    price_df = load_price_cache()
-    
-    latest_zt_date = classified_df['日期'].max()
+def update_price_cache(classified_df, return_meta=False):
+    latest_zt_date = str(classified_df['日期'].max())
     latest_zt_dt = datetime.strptime(latest_zt_date, '%Y%m%d')
-    latest_zt_str = latest_zt_dt.strftime('%Y-%m-%d')
+    target_report_date_str = latest_zt_dt.strftime('%Y-%m-%d')
+    source_events = []
+    bs_diagnostics = []
+
+    def _coverage(frame, column):
+        if frame is None or frame.empty or column not in frame.columns:
+            return 0
+        rows = frame[frame['date'] == target_report_date_str]
+        return len(set(rows.loc[rows[column].notna(), 'code']) & set(all_codes))
+
+    def _finish(frame):
+        chain = list(dict.fromkeys([*source_events, 'price_cache_raw']))
+        raw_covered_codes = set()
+        qfq_covered_codes = set()
+        if frame is not None and not frame.empty and 'date' in frame.columns:
+            latest_rows = frame[frame['date'] == target_report_date_str]
+            if 'code' in latest_rows.columns:
+                if 'close_raw' in latest_rows.columns:
+                    raw_covered_codes = set(latest_rows.loc[latest_rows['close_raw'].notna(), 'code']) & set(all_codes)
+                if 'close_qfq' in latest_rows.columns:
+                    qfq_covered_codes = set(latest_rows.loc[latest_rows['close_qfq'].notna(), 'code']) & set(all_codes)
+        missing_qfq_codes = sorted(set(all_codes) - qfq_covered_codes)
+        missing_raw_codes = sorted(set(all_codes) - raw_covered_codes)
+        missing_qfq_codes_by_market = {}
+        for code in missing_qfq_codes:
+            missing_qfq_codes_by_market.setdefault(str(code)[:2] or 'unknown', []).append(code)
+        for market in missing_qfq_codes_by_market:
+            missing_qfq_codes_by_market[market] = sorted(missing_qfq_codes_by_market[market])
+        unsupported_codes = sorted({
+            code for diag in bs_diagnostics for code in (diag.get('unsupported_codes') or [])
+        } | {code for code in missing_qfq_codes if str(code).startswith('bj')})
+        query_errors = [
+            error for diag in bs_diagnostics for error in (diag.get('query_errors') or [])
+        ]
+        qfq_raw_only_markets = sorted({
+            market for diag in bs_diagnostics for market in (diag.get('qfq_raw_only_markets') or [])
+        } | ({'bj'} if any(str(code).startswith('bj') for code in all_codes) else set()))
+        meta = {
+            'source_chain': chain,
+            'primary_source': chain[0] if chain else 'price_cache_raw',
+            'fallback_source': ' → '.join(chain[1:]) if len(chain) > 1 else '',
+            'used_fallback': bool(source_events),
+            'initial_raw_covered': initial_raw_covered,
+            'initial_raw_coverage_pct': round(initial_raw_covered / len(all_codes) * 100, 1) if all_codes else 0.0,
+            'final_raw_covered': len(raw_covered_codes),
+            'final_raw_coverage_pct': round(len(raw_covered_codes) / len(all_codes) * 100, 1) if all_codes else 0.0,
+            'final_qfq_covered': len(qfq_covered_codes),
+            'final_qfq_coverage_pct': round(len(qfq_covered_codes) / len(all_codes) * 100, 1) if all_codes else 0.0,
+            'report_date': target_report_date_str,
+            'requested_count': len(all_codes),
+            'raw_covered_codes': sorted(raw_covered_codes),
+            'qfq_covered_codes': sorted(qfq_covered_codes),
+            'missing_raw_codes': missing_raw_codes,
+            'missing_qfq_codes': missing_qfq_codes,
+            'missing_qfq_codes_by_market': missing_qfq_codes_by_market,
+            'qfq_raw_only_markets': qfq_raw_only_markets,
+            'bj_qfq_policy': 'raw_only' if 'bj' in qfq_raw_only_markets else 'supported_or_not_present',
+            'bj_qfq_total': sum(1 for code in all_codes if str(code).startswith('bj')),
+            'bj_qfq_covered': sum(1 for code in qfq_covered_codes if str(code).startswith('bj')),
+            'bj_raw_only_count': max(
+                0,
+                sum(1 for code in all_codes if str(code).startswith('bj'))
+                - sum(1 for code in qfq_covered_codes if str(code).startswith('bj')),
+            ),
+            'qfq_missing_by_market': {
+                market: len(codes)
+                for market, codes in missing_qfq_codes_by_market.items()
+            },
+            'qfq_missing_codes_sample': [
+                code for code in missing_qfq_codes
+                if not str(code).startswith('bj')
+            ][:30],
+            'qfq_backup_source': 'price_cache_only',
+            'qfq_diagnostics': bs_diagnostics,
+            'query_errors': query_errors,
+        }
+        return (frame, meta) if return_meta else frame
+
+    latest_zt_str = target_report_date_str
+
+    # 价格更新的统计范围必须与报告质量门禁使用同一份沪深北全 A 主表。
+    # 行业缓存只保留作兼容兜底，不能因为它缺北交所而悄悄缩小覆盖分母。
+    all_codes = []
+    if os.path.exists(SECURITY_MASTER_CACHE):
+        try:
+            sm_df = pd.read_csv(SECURITY_MASTER_CACHE, dtype=str)
+            if not sm_df.empty and 'code' in sm_df.columns:
+                all_codes = [normalize_stock_code(code) for code in sm_df['code'].tolist()]
+                all_codes = list(dict.fromkeys(code for code in all_codes if code))
+        except Exception as e:
+            print(f'  ⚠️ 证券主表读取失败, 继续尝试行业缓存: {e}')
+    if not all_codes and os.path.exists(INDUSTRY_CACHE):
+        try:
+            idf = pd.read_csv(INDUSTRY_CACHE, dtype=str)
+            if not idf.empty and 'code' in idf.columns:
+                all_codes = [normalize_stock_code(code) for code in idf['code'].tolist()]
+                all_codes = list(dict.fromkeys(code for code in all_codes if code))
+        except Exception as e:
+            print(f'  ⚠️ 行业缓存读取失败, 用涨停股列表兜底: {e}')
+    if not all_codes:
+        all_codes = [normalize_stock_code(code) for code in classified_df['代码'].unique()]
+        all_codes = list(dict.fromkeys(code for code in all_codes if code))
+    if not all_codes:
+        all_codes = ['sh600000']
+
+    # 磁盘缓存保留原始记录（包括未来日期），报表计算只使用报告日及之前的数据。
+    price_cache_all_df = load_price_cache(include_future=True)
+    price_df = filter_completed_rows(
+        price_cache_all_df,
+        'date',
+        report_date=latest_zt_date,
+    )
+    initial_raw_covered = _coverage(price_df, 'close_raw')
     
     if not price_df.empty:
         # 陈旧副本体检 (2026-08-03 事故): 旧实现只比日期就 return, 若最新一天的
@@ -1813,32 +2581,40 @@ def update_price_cache(classified_df):
         # 被调用, 污染永久留存 —— 下游 A/D 全成 flat (08-03 实测 up+down 仅 80)。
         # 判据与 _fetch_tencent_close 同源: 与前一交易日 close 逐股完全相同
         # 占比 >90% = 陈旧副本; 命中则剔除该日, 让后续流程重抓。
-        price_df = _drop_stale_latest_day(price_df)
+        checked_price_df = _drop_stale_latest_day(price_df)
+        if len(checked_price_df) != len(price_df):
+            dropped_dates = set(price_df['date']) - set(checked_price_df['date'])
+            price_cache_all_df = price_cache_all_df[
+                ~price_cache_all_df['date'].isin(dropped_dates)
+            ].reset_index(drop=True)
+        price_df = checked_price_df
         if price_df.empty:
             start_date_dt = latest_zt_dt - timedelta(days=90)
             start_date_str = start_date_dt.strftime('%Y-%m-%d')
         else:
             max_price_date = price_df['date'].max()
+            latest_rows = price_df[price_df['date'] == latest_zt_str]
+            latest_raw_codes = set(
+                latest_rows.loc[latest_rows.get('close_raw', pd.Series(index=latest_rows.index)).notna(), 'code']
+            ) if not latest_rows.empty else set()
+            latest_qfq_codes = set(
+                latest_rows.loc[latest_rows.get('close_qfq', pd.Series(index=latest_rows.index)).notna(), 'code']
+            ) if not latest_rows.empty else set()
+            latest_raw_ready = len(latest_raw_codes & set(all_codes)) >= len(all_codes)
+            latest_qfq_ready = len(latest_qfq_codes & set(all_codes)) >= len(all_codes)
+            if max_price_date >= latest_zt_str and latest_raw_ready and latest_qfq_ready:
+                return _finish(price_df)
             if max_price_date >= latest_zt_str:
-                return price_df
-
-            start_date_dt = datetime.strptime(max_price_date, '%Y-%m-%d') + timedelta(days=1)
-            start_date_str = start_date_dt.strftime('%Y-%m-%d')
+                # 缓存已有报告日的 legacy/qfq 数据，但缺少可审计的 raw 或 qfq。
+                # 不能拼出“报告日之后至报告日”的反向区间；应从报告日重抓
+                # 缺失口径，失败时保留降级数据并由质量门禁阻断强结论。
+                start_date_str = latest_zt_str
+            else:
+                start_date_dt = datetime.strptime(max_price_date, '%Y-%m-%d') + timedelta(days=1)
+                start_date_str = start_date_dt.strftime('%Y-%m-%d')
     else:
         start_date_dt = latest_zt_dt - timedelta(days=90)
         start_date_str = start_date_dt.strftime('%Y-%m-%d')
-    
-    # 获取全市场活跃股票以保证N日数据完整性
-    all_codes = list(classified_df['代码'].unique())
-    if os.path.exists(INDUSTRY_CACHE):
-        try:
-            idf = pd.read_csv(INDUSTRY_CACHE, dtype=str)
-            if not idf.empty and 'code' in idf.columns:
-                all_codes = idf['code'].unique().tolist()
-        except Exception as e:
-            print(f'  ⚠️ 行业缓存读取失败, 用涨停股列表兜底: {e}')
-    if not all_codes:
-        all_codes = ['sh600000']
     
     print(f"  📥 价格数据落后, 需全量获取 {len(all_codes)} 只股票数据 ({start_date_str} 至 {latest_zt_str})...")
     
@@ -1858,26 +2634,45 @@ def update_price_cache(classified_df):
     _max_price_ymd = price_df['date'].max().replace('-', '') if not price_df.empty else ''
     _missing_trading = [d for d in _trading_days if d > _max_price_ymd and d <= latest_zt_date]
     _only_latest_missing = (not price_df.empty) and _missing_trading == [latest_zt_date]
-    if _only_latest_missing:
-        print(f"    ⚡ 仅缺最新交易日 ({latest_zt_str}), 尝试腾讯快照秒补...")
+    _latest_rows = price_df[price_df['date'] == latest_zt_str] if not price_df.empty else pd.DataFrame()
+    _latest_raw_codes = set(
+        _latest_rows.loc[_latest_rows.get('close_raw', pd.Series(index=_latest_rows.index)).notna(), 'code']
+    ) if not _latest_rows.empty else set()
+    _need_latest_raw = len(_latest_raw_codes & set(all_codes)) < len(all_codes)
+    if _need_latest_raw:
+        print(f"    ⚡ 报告日 raw 覆盖不足 ({len(_latest_raw_codes & set(all_codes))}/{len(all_codes)}), 尝试腾讯快照补齐...")
         try:
             # 构造 "最新已知一日" close 映射, 供腾讯 fastpath 做陈旧快照身份比对。
             # 若 >90% 股票的腾讯 close 与该映射逐股相同, 判定为未开盘/陈旧, 整批弃收。
             _max_local_date = price_df['date'].max()
+            _prev_column = _price_column(price_df, 'raw', allow_legacy=True)
             _prev_close_map = dict(zip(
                 price_df.loc[price_df['date'] == _max_local_date, 'code'],
-                price_df.loc[price_df['date'] == _max_local_date, 'close']
-            ))
+                price_df.loc[price_df['date'] == _max_local_date, _prev_column]
+            )) if _prev_column else {}
             tx_rows = _fetch_tencent_close(all_codes, latest_zt_str, prev_close_map=_prev_close_map)
             if tx_rows and len(tx_rows) > len(all_codes) * 0.8:
-                print(f"    ✅ 腾讯快照获取 {len(tx_rows)} 条 (耗时 {time.time()-t0:.1f}s), 跳过 baostock")
+                print(f"    ✅ 腾讯快照获取 {len(tx_rows)} 条 (耗时 {time.time()-t0:.1f}s)")
+                source_events.append('tencent')
                 tx_df = pd.DataFrame(tx_rows)
-                combined_df = pd.concat([price_df, tx_df], ignore_index=True)
-                combined_df = combined_df.drop_duplicates(subset=['code', 'date'])
-                combined_df = combined_df.sort_values(['code', 'date']).reset_index(drop=True)
+                price_cache_all_df = merge_price_frames(price_cache_all_df, tx_df)
+                price_df = filter_completed_rows(
+                    price_cache_all_df,
+                    'date',
+                    report_date=latest_zt_date,
+                )
+                latest_rows = price_df[price_df['date'] == latest_zt_str]
+                latest_raw_codes = set(
+                    latest_rows.loc[latest_rows['close_raw'].notna(), 'code']
+                ) if 'close_raw' in latest_rows.columns else set()
+                latest_qfq_codes = set(
+                    latest_rows.loc[latest_rows['close_qfq'].notna(), 'code']
+                ) if 'close_qfq' in latest_rows.columns else set()
+                combined_df = price_cache_all_df
                 combined_df.to_csv(PRICE_CACHE, index=False)
                 trim_cache_file(PRICE_CACHE, date_col='date', encoding='utf-8')
-                return combined_df
+                if len(latest_raw_codes & set(all_codes)) >= len(all_codes) and len(latest_qfq_codes & set(all_codes)) >= len(all_codes):
+                    return _finish(price_df)
             else:
                 got = len(tx_rows) if tx_rows else 0
                 print(f"    ⚠️ 腾讯快照覆盖不足 ({got}/{len(all_codes)}), 回退 baostock")
@@ -1933,8 +2728,13 @@ def update_price_cache(classified_df):
                 print(f"    🚀 baostock + {cores} 进程, 共 {len(chunks)} 个任务块...")
                 
                 with multiprocessing.Pool(cores) as pool:
-                    for i, res in enumerate(pool.imap_unordered(_fetch_bs_chunk, [(c, start_date_str, latest_zt_str) for c in chunks])):
-                        new_rows.extend(res)
+                    for i, res in enumerate(pool.imap_unordered(_fetch_bs_chunk, [(c, start_date_str, latest_zt_str, True) for c in chunks])):
+                        if isinstance(res, tuple):
+                            chunk_rows, chunk_diag = res
+                            new_rows.extend(chunk_rows)
+                            bs_diagnostics.append(chunk_diag or {})
+                        else:
+                            new_rows.extend(res or [])
                         if (i + 1) % 5 == 0 or (i + 1) == len(chunks):
                             pc = min(len(all_codes), (i + 1) * chunk_size)
                             elapsed = time.time() - t0
@@ -1944,34 +2744,34 @@ def update_price_cache(classified_df):
                             break
                 if new_rows:
                     print(f"    ✅ baostock 成功获取 {len(new_rows)} 条记录")
+                    source_events.append('baostock')
     except Exception as e:
         print(f"    ⚠️ baostock 异常: {e}")
 
     # (历史备用源: 腾讯快速路径 + baostock 已覆盖, 新浪/东财兜底已移除)
     elapsed = time.time() - t0
     if new_rows:
-        new_df = pd.DataFrame(new_rows)
-        if not price_df.empty:
-            combined_df = pd.concat([price_df, new_df], ignore_index=True)
-            combined_df = combined_df.drop_duplicates(subset=['code', 'date'])
-            combined_df = combined_df.sort_values(['code', 'date']).reset_index(drop=True)
-        else:
-            combined_df = new_df.sort_values(['code', 'date']).reset_index(drop=True)
+        new_df = normalize_price_frame(pd.DataFrame(new_rows))
+        combined_df = merge_price_frames(price_cache_all_df, new_df)
             
         combined_df.to_csv(PRICE_CACHE, index=False)
         trim_cache_file(PRICE_CACHE, date_col='date', encoding='utf-8')
         print(f"  ✅ 价格缓存已更新, 新增 {len(new_df)} 条记录 (耗时 {elapsed:.1f}s)")
-        return combined_df
+        return _finish(filter_completed_rows(
+            combined_df,
+            'date',
+            report_date=latest_zt_date,
+        ))
     else:
         print("  ⚠️ 未获取到新价格数据, 使用现有缓存继续运行")
-        return price_df
+        return _finish(price_df)
 
 def calc_nday_returns(price_df, periods=[5, 10, 20, 60]):
     if price_df.empty:
         return pd.DataFrame()
     
     # 1. 快速透视，转换为以日期为行、代码为列的宽表
-    p_df = price_df.pivot(index='date', columns='code', values='close').ffill()
+    p_df = _price_matrix(price_df, 'qfq', allow_legacy=True).ffill()
     
     # 2. 提取最新日期和最新价格
     latest_date = p_df.index[-1]
@@ -2062,7 +2862,7 @@ def build_sector_heatmap(classified_df, price_df, echelon):
         sector_to_codes.setdefault(sector, []).append(code)
 
     # === 2. 价格矩阵 + 各周期涨幅 ===
-    p_df = price_df.pivot(index='date', columns='code', values='close').ffill().bfill()
+    p_df = _price_matrix(price_df, 'qfq', allow_legacy=True).ffill().bfill()
     n_rows = len(p_df)
     if n_rows < 6:
         return ''
@@ -2251,10 +3051,63 @@ def build_sector_heatmap(classified_df, price_df, echelon):
     </table>
     <div style="color:#6e7681;font-size:12px;margin-top:8px;text-align:right;">点击板块行展开 连板/领涨/中军 详情 · 按5日涨幅排序 · ★新起=5日强但20日弱 · ▲加速=近5日>前5日</div>
     </div>''', top_sectors
+def _publication_timing(timing_res, market_state=None):
+    """按统一发布状态收敛择时雷达，阻断/降级时不得泄漏操作口令。"""
+    result = dict(timing_res or {})
+    state = market_state if isinstance(market_state, dict) else {}
+    mode = str(state.get('publication_mode') or 'decision').lower()
+    if mode == 'facts_only':
+        return {
+            **result,
+            'action': '数据未就位 / 仅展示事实',
+            'desc': '核心行情数据未通过质量校验，本页仅展示盘面事实与数据质量。',
+            'level': '数据阻断',
+            'position': '',
+            'color': '#8b949e',
+        }
+    if mode == 'observation':
+        return {
+            **result,
+            'action': '观察 / 等待条件触发',
+            'desc': '数据处于降级状态，本页仅展示观察项与条件触发规则。',
+            'level': '数据降级',
+            'position': '',
+            'color': '#d29922',
+        }
+    return result
+
+
+def _render_timing_radar_html(timing_res, market_state=None):
+    """渲染主报告择时雷达；仓位只在完整决策模式出现。"""
+    timing = _publication_timing(timing_res, market_state)
+    mode = str((market_state or {}).get('publication_mode') or 'decision').lower()
+    decision_ready = mode == 'decision'
+    scope_label = '预警级别' if decision_ready else '报告可用范围'
+    scope_value = timing.get('level') or ('完整决策' if decision_ready else '仅事实层')
+    position_html = (
+        f"<div style=\"color: #fff; font-size: 18px; font-weight: 800;\">建议仓位: {timing.get('position') or '未发布'}</div>"
+        if decision_ready else ''
+    )
+    return f'''\n    <div style="background: rgba(0,0,0,0.5); border: 2px solid {timing.get('color', '#8b949e')}; border-radius: 12px; padding: 20px; margin-bottom: 30px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 0 15px {timing.get('color', '#8b949e')}40;">\n        <div style="flex: 1;">\n            <div style="color: #8b949e; font-size: 13px; font-weight: bold; margin-bottom: 5px; text-transform: uppercase;">量化择时雷达 (Quant Timing Radar)</div>\n            <div style="font-size: 26px; font-weight: 800; color: {timing.get('color', '#8b949e')}; margin-bottom: 8px;">{timing.get('action', '待核验')}</div>\n            <div style="color: #e6edf3; font-size: 14px;">{timing.get('desc', '')}</div>\n        </div>\n        <div style="text-align: right; background: {timing.get('color', '#8b949e')}20; padding: 15px 25px; border-radius: 10px; border: 1px solid {timing.get('color', '#8b949e')}60;">\n            <div style="color: {timing.get('color', '#8b949e')}; font-size: 16px; font-weight: bold; margin-bottom: 5px;">{scope_label}: {scope_value}</div>\n            {position_html}\n        </div>\n    </div>\n    '''
+
 def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thresh,
                   leaders, dates, ratings, sub_ratings,
-                  echelon, top30_data, advance_decline, nday_leaders=None, wc_data=None, sentiment_df=None, plates=None, classified_df=None, return_leaders=None, mainline_ladder=None, sub_leaderboard=None, sub_tracks=None, price_df=None, focus_df=None, focus_catalysts=None):
-    
+                  echelon, top30_data, advance_decline, nday_leaders=None, wc_data=None, sentiment_df=None, plates=None, classified_df=None, return_leaders=None, mainline_ladder=None, sub_leaderboard=None, sub_tracks=None, price_df=None, focus_df=None, focus_catalysts=None, timing_result=None, market_state=None, previous_echelon=None, report_context=None):
+
+    unified_context = dict(report_context or {})
+    policy = ReportPolicy.from_mode(
+        unified_context.get('publication_mode')
+        or (market_state or {}).get('publication_mode')
+    )
+    state = dict(
+        (unified_context.get('facts') or {}).get('market_state')
+        or market_state
+        or {}
+    )
+    publication_mode = policy.mode
+    facts_only = publication_mode == 'facts_only'
+    observation_only = publication_mode == 'observation'
+
     if len(dates) > 65:
         dates = dates[-65:]
     if ml_strength is not None:
@@ -3023,6 +3876,39 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
                 </div>
             </div>
         </div>'''
+        _mood_last = float(mood_vals[-1]) if mood_vals else None
+        _mood_last_text = f"{_mood_last:g}%" if _mood_last is not None else '---'
+        _mood_last_state = (
+            '🔥 极度亢奋' if _mood_last is not None and _mood_last > 85 else
+            '🌤️ 赚钱效应活跃' if _mood_last is not None and _mood_last > 65 else
+            '⚖️ 震荡分歧' if _mood_last is not None and _mood_last > 35 else
+            '☁️ 亏钱效应加剧' if _mood_last is not None and _mood_last > 15 else
+            '❄️ 情绪冰点' if _mood_last is not None else '数据不足'
+        )
+        if facts_only:
+            mood_card_html = f'''
+        <div style="min-width:260px;max-width:320px;background:var(--card-bg);border:1px solid var(--border-color);border-radius:12px;padding:20px;backdrop-filter:var(--glass-blur);box-shadow:0 4px 24px rgba(0,0,0,0.3);display:flex;flex-direction:column;gap:12px;">
+            <div style="text-align:center;font-size:16px;font-weight:800;color:#8b949e;border-bottom:1px solid var(--border-color);padding-bottom:10px;">📊 情绪事实</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span style="color:var(--text-secondary);font-size:12px;">最新情绪值</span>
+                <span style="font-size:20px;font-weight:800;color:#8b949e;">{_mood_last_text}</span>
+            </div>
+            <div style="color:var(--text-secondary);font-size:12px;line-height:1.7;">数据质量未通过校验，仅展示已获取的情绪事实，不生成方向、区间或仓位解读。</div>
+        </div>'''
+        elif observation_only:
+            mood_card_html = f'''
+        <div style="min-width:260px;max-width:320px;background:var(--card-bg);border:1px solid var(--border-color);border-radius:12px;padding:20px;backdrop-filter:var(--glass-blur);box-shadow:0 4px 24px rgba(0,0,0,0.3);display:flex;flex-direction:column;gap:12px;">
+            <div style="text-align:center;font-size:16px;font-weight:800;color:#d29922;border-bottom:1px solid var(--border-color);padding-bottom:10px;">📊 情绪观察</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span style="color:var(--text-secondary);font-size:12px;">最新情绪值</span>
+                <span style="font-size:20px;font-weight:800;color:#d29922;">{_mood_last_text}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span style="color:var(--text-secondary);font-size:12px;">当前状态</span>
+                <span style="font-size:14px;font-weight:700;color:#e6edf3;">{_mood_last_state}</span>
+            </div>
+            <div style="color:var(--text-secondary);font-size:12px;line-height:1.7;">仅用于观察和条件触发，数据恢复正常前不发布确定仓位或买卖动作。</div>
+        </div>'''
 
         sentiment_charts_html = f'''
         <h2 class="section-title">🔥 冰火之歌：短线情绪周期统计 <span class="help-icon" data-tip="0-100分制。反映市场短线投机活跃度，20分以下为极冷冰点，80分以上为极热高潮。">?</span></h2>
@@ -3376,27 +4262,48 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
 
 
     # 数据驱动的反弹分类复盘 (每日自动更新)
-    rebound_html = generate_rebound_analysis(advance_decline, sentiment_df, echelon)
+    rebound_html = generate_rebound_analysis(
+        advance_decline, sentiment_df, echelon,
+        market_state=market_state,
+    )
 
     # 择时档位判断 + 转向扳机清单 (进攻/防御/观望, 纯规则可回溯)
     stance = classify_market_stance(advance_decline, sentiment_df, echelon)
-    stance_html = render_stance_html(stance)
+    if facts_only:
+        stance_html = '''
+        <div style="background:rgba(0,0,0,0.5);border:2px solid #8b949e;border-radius:12px;padding:20px;margin-bottom:30px;box-shadow:0 0 15px #8b949e40;">
+            <div style="color:#8b949e;font-size:13px;font-weight:bold;text-transform:uppercase;margin-bottom:6px;">📐 择时档位 · 发布范围</div>
+            <div style="font-size:26px;font-weight:800;color:#8b949e;margin-bottom:8px;">数据阻断 · 仅事实层</div>
+            <div style="color:#e6edf3;font-size:14px;margin-bottom:6px;">核心数据未通过质量校验，当前仅展示盘面事实、来源状态和缺口。</div>
+            <div style="color:#8b949e;font-size:13px;">不发布确定仓位、买卖动作或情景概率。</div>
+        </div>'''
+    elif observation_only:
+        stance_html = '''
+        <div style="background:rgba(0,0,0,0.5);border:2px solid #d29922;border-radius:12px;padding:20px;margin-bottom:30px;box-shadow:0 0 15px #d2992240;">
+            <div style="color:#8b949e;font-size:13px;font-weight:bold;text-transform:uppercase;margin-bottom:6px;">📐 择时档位 · 发布范围</div>
+            <div style="font-size:26px;font-weight:800;color:#d29922;margin-bottom:8px;">数据降级 · 观察模式</div>
+            <div style="color:#e6edf3;font-size:14px;margin-bottom:6px;">数据覆盖或统计样本不足，仅保留可回溯事实和条件触发项。</div>
+            <div style="color:#8b949e;font-size:13px;">未满足条件前不发布确定仓位或无条件买卖动作。</div>
+        </div>'''
+    else:
+        stance_html = render_stance_html(stance)
 
-    # 动态生成量化择时模块
-    timing_res = generate_timing_signal(sentiment_df, advance_decline, echelon)
-    timing_html = f'''
-    <div style="background: rgba(0,0,0,0.5); border: 2px solid {timing_res['color']}; border-radius: 12px; padding: 20px; margin-bottom: 30px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 0 15px {timing_res['color']}40;">
-        <div style="flex: 1;">
-            <div style="color: #8b949e; font-size: 13px; font-weight: bold; margin-bottom: 5px; text-transform: uppercase;">量化择时雷达 (Quant Timing Radar)</div>
-            <div style="font-size: 26px; font-weight: 800; color: {timing_res['color']}; margin-bottom: 8px;">{timing_res['action']}</div>
-            <div style="color: #e6edf3; font-size: 14px;">{timing_res['desc']}</div>
-        </div>
-        <div style="text-align: right; background: {timing_res['color']}20; padding: 15px 25px; border-radius: 10px; border: 1px solid {timing_res['color']}60;">
-            <div style="color: {timing_res['color']}; font-size: 16px; font-weight: bold; margin-bottom: 5px;">预警级别: {timing_res['level']}</div>
-            <div style="color: #fff; font-size: 18px; font-weight: 800;">建议仓位: {timing_res['position']}</div>
-        </div>
-    </div>
-    '''
+    # 指数阶段 × 板块共振 (阶段自动识别: 顶→底→见底脉冲→震荡/趋势→最新日)
+    # 独立模块, 失败静默返回空串, 不影响主流程
+    phase_html = ''
+    try:
+        from phase_resonance import build_phase_resonance, render_phase_resonance_html
+        print(f"\n[{datetime.now().strftime('%H:%M:%S')}] 阶段共振分析 (指数阶段 × 板块)...")
+        phase_html = render_phase_resonance_html(build_phase_resonance())
+        if facts_only:
+            phase_html = ''
+    except Exception as e:
+        print(f"  [警告] 阶段共振模块失败 (不影响主流程): {e}")
+
+    # 动态生成量化择时模块：必须服从统一三态发布策略。
+    timing_res = dict(timing_result or generate_timing_signal(sentiment_df, advance_decline, echelon))
+    timing_res = _publication_timing(timing_res, market_state)
+    timing_html = _render_timing_radar_html(timing_res, market_state)
 
     # 内嵌决策看板 section (方案 2: 主报告顶部内嵌一份完整决策看板, 无需跳转)
     # report_date 用 dates[-1] (generate_html 作用域内已知), 不是 main 的 latest_date
@@ -3406,12 +4313,67 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
         _report_date = dates[-1] if dates else None
         _dash_ctx = build_dashboard_ctx(
             timing=timing_res, advance_decline=advance_decline,
-            sentiment_df=sentiment_df, echelon=echelon, report_date=_report_date,
-            focus_df=focus_df, focus_catalysts=focus_catalysts,
+            sentiment_df=sentiment_df, echelon=echelon, previous_echelon=previous_echelon,
+            report_date=_report_date, focus_df=focus_df, focus_catalysts=focus_catalysts,
+            report_context=report_context,
         )
         dashboard_section_html = generate_dashboard_section(_dash_ctx)
     except Exception as e:
         print(f"  [警告] 内嵌决策看板 section 生成失败 (不影响主流程): {e}")
+
+    # 把交易日、市场数据截止、证券状态生效日和报告生成时间拆开，
+    # 避免把宿主机生成时间误标成行情数据更新时间。
+    _report_quality_view = unified_context.get('quality') if isinstance(unified_context.get('quality'), dict) else {}
+    _report_trade_date = dates[-1] if dates else '---'
+    _market_cutoff = (
+        advance_decline.get('data_timestamp')
+        or advance_decline.get('source_timestamp')
+        or _report_quality_view.get('source_timestamp')
+        or '未提供'
+    )
+    _security_effective_date = _report_quality_view.get('security_effective_date') or _report_trade_date
+    _report_generated_at = datetime.now().astimezone().isoformat(timespec='seconds')
+    _report_lineage_view = unified_context.get('lineage') if isinstance(unified_context.get('lineage'), dict) else {}
+    _run_view = _report_lineage_view.get('run') if isinstance(_report_lineage_view.get('run'), dict) else {}
+    _run_id_display = html_lib.escape(str(_run_view.get('run_id') or '未提供'))
+    _input_fingerprint_display = html_lib.escape(str(_run_view.get('input_fingerprint') or '未提供')[:16])
+    _snapshot_fingerprint_display = html_lib.escape(str(_run_view.get('snapshot_fingerprint') or '未提供')[:16])
+    _daily_delta_view = unified_context.get('daily_delta') if isinstance(unified_context.get('daily_delta'), dict) else {}
+    if _daily_delta_view.get('available'):
+        _delta_items = []
+        for _item in (_daily_delta_view.get('highlights') or [])[:5]:
+            _label = html_lib.escape(str(_item.get('label') or _item.get('key') or '指标'))
+            _cur = html_lib.escape(str(_item.get('current', '—')))
+            _prev = html_lib.escape(str(_item.get('previous', '—')))
+            _delta_items.append(f'<span style="margin-right:18px;"><b>{_label}</b> {_prev} → {_cur}</span>')
+        _limit_pool_view = _daily_delta_view.get('limit_pool') if isinstance(_daily_delta_view.get('limit_pool'), dict) else {}
+        if _limit_pool_view.get('available'):
+            _limit_pool_counts = _limit_pool_view.get('counts') if isinstance(_limit_pool_view.get('counts'), dict) else {}
+            _delta_items.append(
+                '<span style="display:block;margin-top:6px;"><b>涨停池变化</b> '
+                f'新增 {html_lib.escape(str(_limit_pool_counts.get("new", 0)))}（新增首板 {html_lib.escape(str(_limit_pool_counts.get("new_first_board", 0)))}） · '
+                f'晋级 {html_lib.escape(str(_limit_pool_counts.get("promoted", 0)))} · '
+                f'断板 {html_lib.escape(str(_limit_pool_counts.get("broken", 0)))} · '
+                f'消失 {html_lib.escape(str(_limit_pool_counts.get("missing", 0)))} · '
+                f'未变 {html_lib.escape(str(_limit_pool_counts.get("unchanged", 0)))}</span>'
+            )
+        else:
+            _limit_pool_reason = html_lib.escape(str(_limit_pool_view.get('reason') or '缺少结构化逐股快照'))
+            _delta_items.append(
+                f'<span style="display:block;margin-top:6px;color:#d29922;"><b>涨停池变化</b> 不可用：{_limit_pool_reason}</span>'
+            )
+        _daily_delta_html = (
+            '<div style="background:rgba(22,27,34,.72);border:1px solid #30363d;border-radius:10px;padding:12px 16px;margin-bottom:22px;">'
+            '<div style="color:#58a6ff;font-weight:800;margin-bottom:7px;">今日相对昨日</div>'
+            '<div style="color:#c9d1d9;font-size:13px;line-height:1.8;">' + (''.join(_delta_items) or '结构化快照无明显变化') + '</div></div>'
+        )
+    else:
+        _daily_delta_html = (
+            '<div style="background:rgba(22,27,34,.72);border:1px solid #30363d;border-radius:10px;padding:12px 16px;margin-bottom:22px;color:#8b949e;font-size:13px;">'
+            '<b style="color:#d29922;">今日相对昨日：</b>缺少上一交易日结构化快照；历史 HTML 不作为计算源。'
+            '<br/><b style="color:#d29922;">涨停池变化：</b>逐股变化不可用：缺少结构化逐股快照。'
+            '</div>'
+        )
 
     html = f'''<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8">
@@ -3609,10 +4571,14 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     <div class="dashboard-header">
         <h1>🔍 主线强度追踪终端 <small style="font-size: 12px; background: #238636; color: #fff; padding: 2px 8px; border-radius: 10px; vertical-align: middle;">V3.0 专业版</small></h1>
         <div class="subtitle">量化维度: 财联社CLS全域概念 / 涨停能量矩阵 / 多周期强度映射</div>
-        <div class="subtitle" style="margin-top: 15px;">数据更新时间: <span style="color: var(--accent-blue); font-weight: bold;">{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</span>  |  交易日: <span style="color: var(--accent-yellow); font-weight: bold;">{dates[-1] if dates else '---'}</span></div>
+        <div class="subtitle" style="margin-top: 15px;">报告交易日: <span style="color: var(--accent-yellow); font-weight: bold;">{_report_trade_date}</span>  |  市场数据截止: <span style="color: var(--accent-blue); font-weight: bold;">{html_lib.escape(str(_market_cutoff))}</span></div>
+        <div class="subtitle" style="margin-top: 6px;">证券状态生效日: <span style="color: var(--accent-yellow); font-weight: bold;">{_security_effective_date}</span>  |  报告生成时间: <span style="color: var(--text-secondary); font-weight: bold;">{_report_generated_at}</span></div>
+        <div class="subtitle" style="margin-top: 6px;">运行 ID: <span style="color: var(--accent-blue); font-weight: bold;">{_run_id_display}</span>  |  输入指纹: <span style="color: var(--text-secondary); font-weight: bold;">{_input_fingerprint_display}</span>  |  快照指纹: <span style="color: var(--text-secondary); font-weight: bold;">{_snapshot_fingerprint_display}</span></div>
     </div>
 
     {timing_html}
+
+    {_daily_delta_html}
 
     {dashboard_section_html}
 
@@ -3620,6 +4586,8 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
         <div style="flex:1;min-width:420px;">{stance_html}</div>
         {mood_card_html}
     </div>
+
+    {phase_html}
 
     <div class="summary-grid">
         <div class="summary-card">
@@ -3712,6 +4680,7 @@ window.addEventListener('resize',function(){{c.resize();}});}})();
 
 </script></body></html>'''
 
+    html = sanitize_html_for_policy(html, policy)
     with open(OUTPUT_HTML, 'w', encoding='utf-8') as f:
         f.write(html)
 
@@ -3719,6 +4688,8 @@ window.addEventListener('resize',function(){{c.resize();}});}})();
 # 主入口
 # ============================================================
 def main():
+    requested_at = datetime.now().astimezone().isoformat(timespec="seconds")
+    report_cutoff = get_latest_date().strftime("%Y%m%d")
     print("=" * 60)
     print("  主线强度追踪系统 V3 — 概念板块版")
     print("=" * 60)
@@ -3733,7 +4704,12 @@ def main():
     # 1. 更新涨停数据 & 获取连板分析情绪
     sentiment_df = None
     try:
-        from lianban_analysis import fetch_zt_pool_data, analyze_lianban
+        from lianban_analysis import (
+            fetch_zt_pool_data,
+            analyze_lianban,
+            get_cached_trading_dates,
+            get_trading_dates,
+        )
         print("\n[1/7] 更新涨停池数据...")
         zt_data, dt_data = fetch_zt_pool_data(n_trading_days=120)
         
@@ -3761,19 +4737,40 @@ def main():
     print(f"\n[{datetime.now().strftime('%H:%M:%S')}] [2/7] 加载并分类涨停股票...")
     classified = load_and_classify_zt(n_days=90)
     
-    # === 新增：过滤掉非交易日（规避节假日及周末） ===
+    # === 过滤掉非交易日（规避节假日及周末） ===
+    # 优先复用刚刚加载/更新的涨停事实缓存。此前这里无条件调用
+    # ak.tool_trade_date_hist_sina()，该接口没有超时参数，网络抖动会让整份日报
+    # 卡在第 2 步；lianban_analysis 已提供带本地缓存优先和隔离超时的统一入口。
     try:
-        import akshare as ak
-        trade_df = ak.tool_trade_date_hist_sina()
-        trade_dates_set = set(trade_df['trade_date'].astype(str).apply(lambda x: x.replace('-', '')).tolist())
+        classified_date_count = int(classified['日期'].astype(str).nunique())
+        cached_trade_dates = get_cached_trading_dates()
+        if len(cached_trade_dates) >= classified_date_count:
+            trade_dates_set = set(cached_trade_dates)
+            calendar_source = "local_zt_cache"
+        else:
+            trade_dates_set = set(get_trading_dates(max(120, classified_date_count)))
+            calendar_source = "local_plus_external_or_weekday_fallback"
         
         classified = classified[classified['日期'].isin(trade_dates_set)]
         if sentiment_df is not None and not sentiment_df.empty:
             sentiment_df = sentiment_df[sentiment_df['日期'].isin(trade_dates_set)]
             
-        print(f"  🧹 节假日剔除: 保留了 {len(classified['日期'].unique())} 个有效交易日")
+        print(
+            f"  🧹 节假日剔除: 保留了 {len(classified['日期'].unique())} 个有效交易日"
+            f"（日期源: {calendar_source}）"
+        )
     except Exception as e:
         print(f"  ⚠️ 获取交易日历失败，未能剔除非交易日数据: {e}")
+
+    # 报告只能使用已完成交易日。显式 REPORT_DATE 用于 CI/历史回放；
+    # 未显式指定时，15:30 前自动回退到上一可用交易日。
+    classified_dates = classified['日期'].astype(str)
+    future_dates = sorted(classified_dates[classified_dates > report_cutoff].unique())
+    if future_dates:
+        print(f"  🛡️ 未来/未收盘数据隔离: {', '.join(future_dates)}；报告上限 {report_cutoff}")
+    classified = classified[classified_dates <= report_cutoff]
+    if sentiment_df is not None and not sentiment_df.empty:
+        sentiment_df = sentiment_df[sentiment_df['日期'].astype(str) <= report_cutoff]
 
     if classified.empty:
         print("[错误] 无已分类涨停数据 (或剔除节假日后为空)")
@@ -3783,7 +4780,7 @@ def main():
     latest_date = dates[-1]
 
     print(f"\n[{datetime.now().strftime('%H:%M:%S')}] [交叉校验] 更新价格以验证收盘状态...")
-    price_df = update_price_cache(classified)
+    price_df, _price_meta = update_price_cache(classified, return_meta=True)
     
     latest_date_dt = f"{latest_date[:4]}-{latest_date[4:6]}-{latest_date[6:]}"
     if not price_df.empty and latest_date_dt not in price_df['date'].unique():
@@ -3805,65 +4802,198 @@ def main():
     echelon = []
     wc_data = {}
     plates_data = None
-    advance_decline = {}
+    market_meta = _load_market_universe(latest_date_dt)
+    advance_decline = {
+        'primary_source': 'fupan',
+        'fallback_source': 'tencent',
+        'used_fallback': False,
+        'used_stale': False,
+        'market_total': market_meta.get('market_total', 0),
+        'market_covered': 0,
+        'market_scope': '沪深北全A',
+        'market_prefixes': market_meta.get('market_prefixes', []),
+        'missing_fields': market_meta.get('missing_fields', []),
+        # 证券主数据错误属于 universe 模块，不能重复污染 breadth。
+        'errors': [],
+        'warnings': [],
+        'trade_day': True,
+        'source_chain': [],
+        'calibration_source': None,
+        'ad_incomplete': True,
+        'ad_reconciliation_enabled': False,
+        'requested_at': requested_at,
+        'received_at': None,
+        'data_timestamp': None,
+        'source_timestamp': None,
+        'report_generated_at': datetime.now().astimezone().isoformat(timespec="seconds"),
+    }
 
     fupan_api = FuPanZhangTingYuanYin()
     f_date = f"{latest_date[:4]}-{latest_date[4:6]}-{latest_date[6:]}"
     
     cls_today = fetch_cls_plate_data(latest_date)
     f_data = fupan_api.get_data(f_date)
+    _local_limit_fact_meta = _load_local_limit_fact_ladder(latest_date)
+    _authoritative_ladder = (
+        _local_limit_fact_meta.get('ladder')
+        if _local_limit_fact_meta
+        else (f_data.get('ladder') if f_data else None)
+    )
+    if _local_limit_fact_meta:
+        print(
+            "  ✅ 使用本地不可变涨停事实快照 "
+            f"{latest_date}: ZT={_local_limit_fact_meta.get('limit_up_count', 0)}, "
+            f"DT={_local_limit_fact_meta.get('limit_down_count', 0)}；FuPan 仅作补充来源"
+        )
+    elif f_data and f_data.get('ladder'):
+        print("  ⚠️ 本地涨停事实快照不可用，当前仅能使用未验证 FuPan 结果（不写入历史快照）")
+    _today_classified_base = (
+        classified[classified['日期'].astype(str) == str(latest_date)].copy()
+        if not classified.empty and '日期' in classified.columns else pd.DataFrame()
+    )
+    _limit_pool_reconciliation = reconcile_limit_pool(
+        _authoritative_ladder,
+        _today_classified_base.to_dict(orient='records') if not _today_classified_base.empty else [],
+        expected_date=latest_date,
+    )
+    _authoritative_limit_rows = _limit_pool_reconciliation.get('authoritative_rows', [])
+    _authoritative_zt_today = pd.DataFrame([
+        {
+            '代码': row.get('code', ''),
+            '名称': row.get('name', ''),
+            '连板数': max(1, int(float(row.get('level') or 1))),
+        }
+        for row in _authoritative_limit_rows
+    ]) if _authoritative_limit_rows else pd.DataFrame(columns=['代码', '名称', '连板数'])
+    received_at = datetime.now().astimezone().isoformat(timespec="seconds")
+    advance_decline['received_at'] = received_at
+
+    previous_echelon = None
+    previous_date = None
+    if not classified.empty and '日期' in classified.columns:
+        _classified_dates = sorted(str(x) for x in classified['日期'].dropna().unique())
+        _prior_dates = [x for x in _classified_dates if x < str(latest_date)]
+        previous_date = _prior_dates[-1] if _prior_dates else None
 
     if cls_today:
-        # 当天涨停记录 (含连板数) 作为梯队高度真源; CLS continuous_limit_up 恒空
-        zt_today = classified[classified['日期'] == latest_date][['代码', '名称', '连板数']].copy() \
-            if not classified.empty else None
+        # FuPan 天梯是当日非 ST 涨停事实池；CLS/classified 只提供板块归因。
+        zt_today = (
+            _authoritative_zt_today.copy()
+            if not _authoritative_zt_today.empty
+            else _today_classified_base[['代码', '名称', '连板数']].copy()
+        )
         echelon = build_echelon_table(cls_today, zt_today)
         wc_data = generate_wordclouds(cls_today.get('plate_stock', []), CACHE_DIR)
 
+    if previous_date:
+        try:
+            cls_prev = fetch_cls_plate_data(previous_date)
+            cls_prev_rows = classified[classified['日期'] == previous_date][['代码', '名称', '连板数']].copy()
+            if cls_prev and not cls_prev_rows.empty:
+                previous_echelon = build_echelon_table(cls_prev, cls_prev_rows)
+        except Exception as e:
+            print(f"  [提示] 前一交易日连板梯队不可用，将显示样本不足: {e}")
+
     # 主线天梯: 全市场强势股按强度分级 (S/B/C/D/E) × 主线矩阵
-    zt_for_ladder = classified[classified['日期'] == latest_date][['代码', '名称', '连板数']].copy() \
-        if not classified.empty else None
+    zt_for_ladder = (
+        _authoritative_zt_today.copy()
+        if not _authoritative_zt_today.empty
+        else _today_classified_base[['代码', '名称', '连板数']].copy()
+    )
     mainline_ladder = build_mainline_ladder(price_df, classified, zt_for_ladder)
     
     if f_data and f_data.get('reason'):
         plates_data = f_data['reason'].get('plates', [])
         f_summary = f_data['reason'].get('summary', {})
-        advance_decline = {
+        advance_decline.update({
             'up': f_summary.get('szjs', 0),  # type: ignore
             'down': f_summary.get('xdjs', 0),  # type: ignore
             'zt': f_summary.get('ztjs', 0),  # type: ignore
             'dt': f_summary.get('dtjs', 0),  # type: ignore
             'date': latest_date,
-            'zt_max_height': 0 
-        }
-    
-    # 市场宽度体检: FuPan 家数缺失 (up=0) 或残缺 (up+down 明显小于全市场规模) 时,
-    # 用腾讯批量接口实时重算 (绕过代理, 替代被墙的东财 spot)。
-    # 关键: 不再只看 "是否为 0" —— 414涨/1274跌 这类非零但残缺的快照 (合计1688,
-    # 仅覆盖 ~1/3 市场) 过去会绕过 up==0 判断直接发布, 宽度体检能把它一并拦下。
+            'zt_max_height': 0,
+        })
+        # FuPan 只提供涨跌分类汇总，不把 up + down 冒充成全市场有效覆盖数。
+        # 覆盖数只允许由逐股行情源的去重有效记录写入。
+        advance_decline['data_timestamp'] = (
+            f"{latest_date}（交易日口径，源端未提供精确时刻）"
+        )
+        advance_decline['source_timestamp'] = received_at
+        advance_decline['source_chain'].append('fupan')
+
+    # 报告日是历史回放或周末重跑时，FuPan 的摘要和天梯可能并非请求日期。
+    # 一旦本地不可变事实快照存在，涨停/跌停统计必须与该快照一致，避免出现
+    # “报告显示 74、缓存显示 84”的跨源口径冲突。
+    if _local_limit_fact_meta:
+        _fupan_reported_zt = advance_decline.get('zt')
+        _fupan_reported_dt = advance_decline.get('dt')
+        advance_decline['fupan_reported_zt'] = _fupan_reported_zt
+        advance_decline['fupan_reported_dt'] = _fupan_reported_dt
+        advance_decline['zt'] = int(_local_limit_fact_meta.get('limit_up_count') or 0)
+        advance_decline['dt'] = int(_local_limit_fact_meta.get('limit_down_count') or 0)
+        advance_decline['source_chain'].append('daily_snapshot')
+        if _fupan_reported_zt not in (None, '', advance_decline['zt']):
+            advance_decline['warnings'].append(
+                f"FuPan 未验证涨停摘要={_fupan_reported_zt}，已忽略并采用本地不可变事实={advance_decline['zt']}"
+            )
+
+    # 市场宽度体检：FuPan 只提供涨跌汇总时，低于完整市场阈值则改用腾讯逐股重算。
+    # 备用源必须同时记录真实覆盖数；不能用 up + down 代替 covered。
     _fu_up = advance_decline.get('up', 0) or 0
     _fu_dn = advance_decline.get('down', 0) or 0
     if is_ad_incomplete(_fu_up, _fu_dn):
         try:
-            _all_codes = []
-            if os.path.exists(INDUSTRY_CACHE):
-                _idf = pd.read_csv(INDUSTRY_CACHE, dtype=str)
-                _all_codes = [c for c in _idf['code'].dropna().unique().tolist()
-                              if c.startswith('sh') or c.startswith('sz')]
+            _all_codes = market_meta.get('codes', [])
             if _all_codes:
                 if _fu_up > 0:
                     print(f"  ⚠️ FuPan 家数残缺 (涨{_fu_up}/跌{_fu_dn}, 合计{_fu_up + _fu_dn} < {MIN_MARKET_BREADTH}), 腾讯批量重算...")
                 else:
                     print("  📊 从腾讯批量接口实时算涨跌家数...")
-                up_count, down_count = _fetch_tencent_ad(_all_codes)
-                # 重算结果同样要过宽度体检, 达标才采用 (避免残缺覆盖残缺)
-                if up_count > 0 and (up_count + down_count) >= MIN_MARKET_BREADTH:
-                    advance_decline['up'] = up_count
-                    advance_decline['down'] = down_count
-                    print(f"  ✅ 腾讯实时: 涨{up_count} 跌{down_count} (合计{up_count + down_count})")
-                elif up_count > 0:
-                    print(f"  ⚠️ 腾讯重算仍残缺 (涨{up_count}/跌{down_count}, 合计{up_count + down_count}), 暂不采用")
+                ad_meta = _fetch_tencent_ad(_all_codes, return_meta=True)
+                covered = int(ad_meta.get('covered', 0) or 0)
+                requested = int(ad_meta.get('requested', 0) or 0)
+                errors = list(ad_meta.get('errors', []) or [])
+                _universe_total = int(
+                    market_meta.get('market_total') or len(_all_codes) or 0
+                )
+                ad_quality = _validate_tencent_ad_meta(
+                    ad_meta,
+                    universe_total=_universe_total,
+                )
+                coverage_pct = ad_quality.get('coverage_pct')
+                advance_decline['market_covered'] = covered
+                advance_decline['market_requested'] = requested
+                advance_decline['coverage_pct'] = coverage_pct
+                advance_decline['raw_coverage_pct'] = coverage_pct
+                advance_decline['used_fallback'] = True
+                advance_decline['source_chain'].append('tencent')
+                advance_decline['warnings'].extend(errors)
+                if ad_quality['accepted']:
+                    advance_decline.update({
+                        'up': ad_quality['up'],
+                        'down': ad_quality['down'],
+                        'flat': ad_quality['flat'],
+                        'ad_incomplete': False,
+                        'ad_reconciliation_enabled': True,
+                    })
+                    advance_decline['data_timestamp'] = (
+                        f"{latest_date}（腾讯逐股收盘快照，源端未提供精确时刻）"
+                    )
+                    advance_decline['source_timestamp'] = received_at
+                    print(f"  ✅ 腾讯实时: 涨{ad_quality['up']} 跌{ad_quality['down']} 平{ad_quality['flat']}，覆盖 {covered}/{requested} ({coverage_pct:.1f}%)")
+                else:
+                    advance_decline['errors'].extend(
+                        f"腾讯备用源质量门禁: {reason}"
+                        for reason in ad_quality['reasons']
+                    )
+                    _coverage_text = (
+                        f"{coverage_pct:.1f}%" if coverage_pct is not None else "未知"
+                    )
+                    print(f"  ⚠️ 腾讯重算未通过质量门禁: 覆盖 {covered}/{requested} ({_coverage_text})")
+            else:
+                advance_decline['errors'].append('备用源未获得可标准化的股票池')
         except Exception as e:
+            advance_decline['errors'].append(f'腾讯实时涨跌家数获取失败: {e}')
             print(f"  ⚠️ 腾讯实时涨跌家数获取失败: {e}")
 
     # === 最新日 A/D 权威校准 ===
@@ -3881,8 +5011,11 @@ def main():
             _old_dn = advance_decline.get('down', 0)
             if _rec['up'] != _old_up or _rec['down'] != _old_dn:
                 print(f"  🔧 最新日 A/D 校准: FuPan {_old_up}/{_old_dn} -> 价格缓存 {_rec['up']}/{_rec['down']}")
-            advance_decline['up'] = _rec['up']
-            advance_decline['down'] = _rec['down']
+            advance_decline = apply_price_cache_breadth_calibration(
+                advance_decline,
+                _rec,
+                source_timestamp=f_date,
+            )
     except Exception as e:
         print(f"  ⚠️ 最新日 A/D 校准跳过: {e}")
 
@@ -3994,34 +5127,46 @@ def main():
             for period in [5, 10, 20, 60]:
                 col = f'{period}日涨幅'
                 if col in returns_df.columns:
-                    sorted_df = returns_df.dropna(subset=[col]).sort_values(col, ascending=False)
+                    sorted_df = (
+                        returns_df.dropna(subset=[col])
+                        .loc[lambda frame: ~frame['name'].map(_is_non_tradeable_security_name)]
+                        .sort_values(col, ascending=False)
+                    )
                     top30_data[f'{period}日'] = [{'code': r['code'], 'name': r['name'],'pct': r[col], 'industry': r['industry'],'mainline': r['mainline'], 'sub_sector': r['sub_sector']} for _, r in sorted_df.head(100).iterrows()]
 
     # === 涨跌数据补全 (V4: 数据完整性校验 + 全量补全) ===
+    sent_cache_all_df = pd.DataFrame()
     sent_cache_df = pd.DataFrame()
     if os.path.exists(SENTIMENT_CACHE):
         try:
-            sent_cache_df = pd.read_csv(SENTIMENT_CACHE, dtype={'日期': str})
+            sent_cache_all_df = pd.read_csv(SENTIMENT_CACHE, dtype={'日期': str})
+            sent_cache_df = filter_completed_rows(
+                sent_cache_all_df, '日期', report_date=report_cutoff,
+            )
+            excluded_cache_rows = len(sent_cache_all_df) - len(sent_cache_df)
+            if excluded_cache_rows > 0:
+                print(f'  🛡️ 情绪缓存隔离 {excluded_cache_rows} 条未来或无效日期记录')
         except Exception as e:
             print(f'  ⚠️ 情绪缓存加载失败: {e}')
     
     # 检测并清理缓存中的"重复值污染" (连续多天数据完全相同 = 脏数据)
     # 降低阈值: 连续2天涨跌家数完全相同在A股中极为罕见，视为污染
     if not sent_cache_df.empty and 'up' in sent_cache_df.columns and 'down' in sent_cache_df.columns:
-        sent_cache_df['up'] = pd.to_numeric(sent_cache_df['up'], errors='coerce').fillna(0)
-        sent_cache_df['down'] = pd.to_numeric(sent_cache_df['down'], errors='coerce').fillna(0)
-        sent_cache_df['_dup_key'] = sent_cache_df['up'].astype(str) + '_' + sent_cache_df['down'].astype(str)
+        sent_cache_df['up'] = pd.to_numeric(sent_cache_df['up'], errors='coerce')
+        sent_cache_df['down'] = pd.to_numeric(sent_cache_df['down'], errors='coerce')
+        sent_cache_df['_dup_key'] = (sent_cache_df['up'].fillna(-1).astype(str) + '_'
+                                     + sent_cache_df['down'].fillna(-1).astype(str))
         sent_cache_df['_dup_group'] = (sent_cache_df['_dup_key'] != sent_cache_df['_dup_key'].shift(1)).cumsum()
         dup_sizes = sent_cache_df.groupby('_dup_group').transform('size')
         dirty_mask = dup_sizes >= 2  # 连续2天以上完全相同 = 脏数据
         # 排除 up=0 且 down=0 的行 (本身就是缺失值，不算重复)
-        zero_mask = (sent_cache_df['up'] == 0) & (sent_cache_df['down'] == 0)
-        dirty_mask = dirty_mask & ~zero_mask
+        zero_mask = (sent_cache_df['up'].fillna(-1) == 0) & (sent_cache_df['down'].fillna(-1) == 0)
+        dirty_mask = dirty_mask & ~zero_mask & sent_cache_df['up'].notna() & sent_cache_df['down'].notna()
         n_dirty = dirty_mask.sum()
         if n_dirty > 0:
             print(f"  🧹 检测到 {n_dirty} 条重复值污染的缓存数据, 清零待API补全...")
             # pyrefly: ignore [unsupported-operation]
-            sent_cache_df.loc[dirty_mask, ['up', 'down']] = 0
+            sent_cache_df.loc[dirty_mask, ['up', 'down']] = pd.NA
             if 'zt' in sent_cache_df.columns:
                 # pyrefly: ignore [unsupported-operation]
                 sent_cache_df.loc[dirty_mask, ['zt', 'dt']] = 0
@@ -4035,8 +5180,8 @@ def main():
         needed = [c for c in ['日期', 'up', 'down', 'zt', 'dt'] if c in sent_cache_df.columns]
         # 过滤掉缓存中本身就是0的行, 只保留有有效数据的缓存行
         valid_cache = sent_cache_df[needed].copy()
-        valid_cache['up'] = pd.to_numeric(valid_cache['up'], errors='coerce').fillna(0)
-        valid_cache['down'] = pd.to_numeric(valid_cache['down'], errors='coerce').fillna(0)
+        valid_cache['up'] = pd.to_numeric(valid_cache['up'], errors='coerce')
+        valid_cache['down'] = pd.to_numeric(valid_cache['down'], errors='coerce')
         valid_cache = valid_cache[(valid_cache['up'] > 0) | (valid_cache['down'] > 0)]
         
         if not valid_cache.empty:
@@ -4044,27 +5189,43 @@ def main():
             for col in ['up', 'down', 'zt', 'dt']:
                 c_cache = f'{col}_cache'
                 if c_cache in sentiment_df.columns:
-                    sentiment_df[col] = pd.to_numeric(sentiment_df[col], errors='coerce').fillna(0)
-                    sentiment_df[c_cache] = pd.to_numeric(sentiment_df[c_cache], errors='coerce').fillna(0)
-                    # 仅当主数据为 0 时才用缓存填充
-                    fill_mask = sentiment_df[col] == 0
+                    sentiment_df[col] = pd.to_numeric(sentiment_df[col], errors='coerce')
+                    sentiment_df[c_cache] = pd.to_numeric(sentiment_df[c_cache], errors='coerce')
+                    # 缺失或明确的占位 0 才允许用有效缓存填充；缓存缺失不再伪造为 0。
+                    fill_mask = sentiment_df[col].isna() | (sentiment_df[col] == 0)
                     sentiment_df.loc[fill_mask, col] = sentiment_df.loc[fill_mask, c_cache]
                     sentiment_df.drop(columns=[c_cache], inplace=True)
     
-    # 补全缺失数据 (up=0 且 down=0 的天 + 最新日期的 intraday 数据)
+    # 补全缺失数据。A/D 缺失保留为空，展示层据此输出“数据不足”。
     if sentiment_df is not None and not sentiment_df.empty:
+        for _col in ('up', 'down'):
+            if _col not in sentiment_df.columns:
+                sentiment_df[_col] = pd.NA
+            sentiment_df[_col] = pd.to_numeric(sentiment_df[_col], errors='coerce')
+        if 'ad_available' not in sentiment_df.columns:
+            sentiment_df['ad_available'] = (
+                sentiment_df['up'].notna() & sentiment_df['down'].notna()
+                & ((sentiment_df['up'] > 0) | (sentiment_df['down'] > 0))
+            )
+        if 'ad_status' not in sentiment_df.columns:
+            sentiment_df['ad_status'] = sentiment_df['ad_available'].map(
+                {True: 'cache_inferred', False: 'missing'}
+            )
         # 如果最新的一天是在 advance_decline 中获取到的，优先填入
         latest_row_idx = sentiment_df.index[-1]
         if str(sentiment_df.at[latest_row_idx, '日期']) == str(latest_date):
             # pyrefly: ignore [bad-argument-type]
-            if float(sentiment_df.at[latest_row_idx, 'up'] or 0) == 0 and advance_decline.get('up', 0) > 0:
+            current_up = sentiment_df.at[latest_row_idx, 'up']
+            if (pd.isna(current_up) or current_up == 0) and advance_decline.get('ad_available', True) and advance_decline.get('up') is not None:
                 sentiment_df.at[latest_row_idx, 'up'] = advance_decline['up']
-                sentiment_df.at[latest_row_idx, 'down'] = advance_decline['down']
+                sentiment_df.at[latest_row_idx, 'down'] = advance_decline.get('down')
                 sentiment_df.at[latest_row_idx, 'zt'] = advance_decline.get('zt', 0)
                 sentiment_df.at[latest_row_idx, 'dt'] = advance_decline.get('dt', 0)
+                sentiment_df.at[latest_row_idx, 'ad_available'] = True
+                sentiment_df.at[latest_row_idx, 'ad_status'] = advance_decline.get('ad_status', 'intraday')
 
-        sentiment_df['up'] = pd.to_numeric(sentiment_df['up'], errors='coerce').fillna(0)
-        sentiment_df['down'] = pd.to_numeric(sentiment_df['down'], errors='coerce').fillna(0)
+        sentiment_df['up'] = pd.to_numeric(sentiment_df['up'], errors='coerce')
+        sentiment_df['down'] = pd.to_numeric(sentiment_df['down'], errors='coerce')
 
         # === 最近 30 交易日: 用价格缓存 A/D 做"全量对账" ===
         # 唯一真源: 价格缓存算出的全市场涨跌家数 (MarketSentimentFactor._load_ad_cache)。
@@ -4098,7 +5259,7 @@ def main():
                 continue
             d_key = d_str.replace('-', '')
             res = ad_map.get(d_key)
-            if d_str == latest_key and not (res and res.get('up', 0) > 0):
+            if d_str == latest_key and not (res and res.get('ad_available') and res.get('up') is not None):
                 # 价格缓存还没有最新日的数据, 保留盘中 advance_decline 实时值
                 continue
             idx_list = sentiment_df.index[sentiment_df['日期'] == d_str]
@@ -4107,17 +5268,21 @@ def main():
             idx = idx_list[0]
             # up/down 列已在上方 coerce 为数值; pyrefly 对 .at[] 返回类型有误报
             # pyrefly: ignore [bad-argument-type]
-            cur_up = float(sentiment_df.at[idx, 'up'])
-            # pyrefly: ignore [bad-argument-type]
-            cur_dn = float(sentiment_df.at[idx, 'down'])
-            if res and res.get('up', 0) > 0:
+            cur_up_raw = sentiment_df.at[idx, 'up']
+            cur_dn_raw = sentiment_df.at[idx, 'down']
+            cur_up = float(cur_up_raw) if pd.notna(cur_up_raw) else None
+            cur_dn = float(cur_dn_raw) if pd.notna(cur_dn_raw) else None
+            if res and res.get('ad_available') and res.get('up') is not None and res.get('down') is not None:
                 new_up, new_dn = res['up'], res['down']
                 if new_up != cur_up or new_dn != cur_dn:
                     sentiment_df.at[idx, 'up'] = new_up
                     sentiment_df.at[idx, 'down'] = new_dn
                     reconciled += 1
+                sentiment_df.at[idx, 'ad_available'] = True
+                sentiment_df.at[idx, 'ad_status'] = res.get('ad_status', 'price_cache')
                 # zt/dt 来自涨停缓存, 已由 analyze_lianban 填好, 此处不覆盖
-            elif cur_up == 0 and cur_dn == 0:
+            elif cur_up is None or cur_dn is None:
+                sentiment_df.at[idx, 'ad_available'] = False
                 uncovered += 1
 
         print(f"  ✅ 最近 {RECENT_FILL_WINDOW} 交易日 A/D 对账完成: 更新 {reconciled} 天"
@@ -4138,8 +5303,9 @@ def main():
             if 'flat' in sentiment_df.columns: save_cols.append('flat')
             if 'date_str' in sentiment_df.columns: save_cols.append('date_str')
             save_df = sentiment_df[save_cols].copy()
-            if not sent_cache_df.empty:
-                combined = pd.concat([sent_cache_df, save_df], ignore_index=True)
+            # 保存时保留缓存中未来日期的原始行；它们只在读取/计算阶段被隔离。
+            if not sent_cache_all_df.empty:
+                combined = pd.concat([sent_cache_all_df, save_df], ignore_index=True)
                 combined.drop_duplicates(subset=['日期'], keep='last', inplace=True)
                 combined = combined.sort_values('日期').reset_index(drop=True)
             else:
@@ -4152,31 +5318,468 @@ def main():
     if sentiment_df is not None and not sentiment_df.empty:
         if 'up' in sentiment_df.columns and 'down' in sentiment_df.columns:
             def _calc_mood(r):
-                up = float(r['up']) if pd.notnull(r['up']) else 0
-                down = float(r['down']) if pd.notnull(r['down']) else 0
-                return round((up / max(up + down, 1)) * 100, 1)
+                up, down = r.get('up'), r.get('down')
+                if pd.isna(up) or pd.isna(down) or not bool(r.get('ad_available', False)):
+                    return None
+                return round((float(up) / max(float(up) + float(down), 1)) * 100, 1)
             sentiment_df['ad_mood'] = sentiment_df.apply(_calc_mood, axis=1)
         elif '涨跌比' in sentiment_df.columns:
-            sentiment_df['ad_mood'] = sentiment_df['涨跌比'].fillna(0.5) * 100
+            sentiment_df['ad_mood'] = pd.to_numeric(sentiment_df['涨跌比'], errors='coerce') * 100
         else:
-            sentiment_df['ad_mood'] = 50.0
+            sentiment_df['ad_mood'] = pd.NA
 
-    # 6. 先算股票池, 再生成 HTML (让内嵌决策看板 section 能吃到 focus_df 挂具体标的)
+    # 股票池必须等统一质量策略确定后再生成。facts_only / observation 模式下，
+    # 不拉取个股催化、不写出 focus_pool.csv，也不让下游看板误把事实数据当成策略池。
     focus_pool_path = os.path.join(os.path.dirname(OUTPUT_HTML), "focus_pool.csv")
-    focus_df = generate_focus_pool(ml_strength, echelon, top30_data, sentiment_df, focus_pool_path)
-
-    # 6.5 催化归因: 为 focus_pool 每只票拉真实新闻/公告/龙虎榜, 让"为何走强"不再口水化
-    # 单只 3-4 秒 × 6 只 ~= 20 秒, 只在跑批末尾同步一次
+    focus_df = None
     focus_catalysts = {}
-    try:
-        from catalyst_attribution import attribute_focus_pool
-        if focus_df is not None and not focus_df.empty:
-            print(f"\n  🔍 [催化归因] 为 focus_pool {len(focus_df)} 只票拉真实催化 (约 20-30 秒)...")
-            _cat_date = f"{latest_date[:4]}-{latest_date[4:6]}-{latest_date[6:]}" \
-                if len(str(latest_date)) == 8 else str(latest_date)
-            focus_catalysts = attribute_focus_pool(focus_df, trade_date=_cat_date, verbose=True)
-    except Exception as e:
-        print(f"  [警告] 催化归因跳过 (不影响主流程): {e}")
+
+    # 生成主报告前只构造一次质量与复盘上下文，所有展示面复用。
+    _report_date = (
+        f'{str(latest_date)[:4]}-{str(latest_date)[4:6]}-{str(latest_date)[6:]}'
+        if len(str(latest_date)) == 8 else str(latest_date)
+    )
+    _report_timing = generate_timing_signal(sentiment_df, advance_decline, echelon)
+    _security_master = market_meta.get('security_master', {})
+    _current_echelon_rows = _flatten_echelon_rows(echelon)
+    _previous_echelon_rows, _current_progression_rows = _build_progression_inputs(
+        previous_echelon, echelon, price_df, _report_date, _security_master,
+    )
+    _progression_chain = build_progression_chain(
+        _previous_echelon_rows, _current_progression_rows,
+    )
+    _ladder_metrics = compute_ladder_metrics(
+        _current_echelon_rows, _previous_echelon_rows,
+    )
+
+    _price_target = _report_date
+    _latest_price_rows = (
+        price_df[price_df['date'].astype(str) == _price_target]
+        if price_df is not None and not price_df.empty and 'date' in price_df.columns
+        else pd.DataFrame()
+    )
+    _universe_codes = {
+        normalize_stock_code(row.get('code', row.get('代码', row.get('证券代码', ''))))
+        for row in (market_meta.get('records') or [])
+        if isinstance(row, dict)
+    }
+    _universe_codes.discard('')
+    _universe_total = len(_universe_codes) or int(market_meta.get('market_total') or 0)
+    _universe_covered = len(_universe_codes) or min(
+        int(market_meta.get('market_total') or 0), len(market_meta.get('records') or [])
+    )
+    _price_raw_codes = {
+        normalize_stock_code(code)
+        for code in (_latest_price_rows.loc[_latest_price_rows['close_raw'].notna(), 'code'].tolist()
+                     if not _latest_price_rows.empty and {'code', 'close_raw'}.issubset(_latest_price_rows.columns) else [])
+    }
+    _price_raw_codes.discard('')
+    _price_qfq_codes = {
+        normalize_stock_code(code)
+        for code in (_latest_price_rows.loc[_latest_price_rows['close_qfq'].notna(), 'code'].tolist()
+                     if not _latest_price_rows.empty and {'code', 'close_qfq'}.issubset(_latest_price_rows.columns) else [])
+    }
+    _price_qfq_codes.discard('')
+    _price_total = max(_universe_total, 1)
+    _price_raw_covered = (
+        len(_price_raw_codes & _universe_codes)
+        if _universe_codes else min(len(_price_raw_codes), _price_total)
+    )
+    _price_qfq_covered = (
+        len(_price_qfq_codes & _universe_codes)
+        if _universe_codes else min(len(_price_qfq_codes), _price_total)
+    )
+    _today_limit_rows = _today_classified_base
+    _classified_limit_count = int(_limit_pool_reconciliation.get('classified_count') or 0)
+    _authoritative_limit_count = int(_limit_pool_reconciliation.get('authoritative_count') or 0)
+    _reported_limit_count = int(float(advance_decline.get('zt') or 0))
+    if _authoritative_limit_count:
+        _limit_total = _authoritative_limit_count
+        _limit_count = _authoritative_limit_count
+        _limit_source = str(_limit_pool_reconciliation.get('source') or 'fupan_ladder')
+        _limit_errors = []
+    else:
+        _limit_total = max(_reported_limit_count, _classified_limit_count, 1)
+        _limit_count = _classified_limit_count
+        _limit_source = 'classified_limit_pool_fallback'
+        _limit_errors = ['FuPan 当日涨停天梯不可用，事实池降级为分类缓存']
+        if not _classified_limit_count:
+            _limit_errors.append('当日涨停池为空或未就位')
+
+    _authoritative_codes = set(_limit_pool_reconciliation.get('authoritative_codes') or [])
+    _attributed_codes = set()
+    if not _today_limit_rows.empty and '代码' in _today_limit_rows.columns and '大主线' in _today_limit_rows.columns:
+        _attributed_mask = _today_limit_rows['大主线'].fillna('').astype(str).str.strip().ne('')
+        _attributed_codes = {
+            normalize_stock_code(code)
+            for code in _today_limit_rows.loc[_attributed_mask, '代码'].tolist()
+            if normalize_stock_code(code)
+        }
+    _sector_covered = len(
+        _authoritative_codes & _attributed_codes
+        if _authoritative_codes else _attributed_codes
+    )
+    _mainline_concentration = compute_mainline_concentration(
+        _current_echelon_rows,
+        authoritative_count=_authoritative_limit_count,
+        attributed_count=_sector_covered,
+    )
+    _history_rows = len(sentiment_df) if sentiment_df is not None else 0
+    _limit_lineage = {
+        key: value for key, value in _limit_pool_reconciliation.items()
+        if key != 'authoritative_rows'
+    }
+
+    _legacy_quality = assess_data_quality(
+        report_date=latest_date,
+        trade_day=advance_decline.get('trade_day', True),
+        # 总分母必须来自同一份沪深北全 A 证券主数据，不能让 A/D
+        # 备用源自带的分母覆盖证券池分母。
+        market_total=_universe_total,
+        market_covered=advance_decline.get('market_covered', 0),
+        primary_source=advance_decline.get('primary_source'),
+        fallback_source=advance_decline.get('fallback_source'),
+        used_fallback=advance_decline.get('used_fallback', False),
+        used_stale=advance_decline.get('used_stale', False),
+        ad_incomplete=advance_decline.get('ad_incomplete', False),
+        ad_up=advance_decline.get('up'), ad_down=advance_decline.get('down'),
+        ad_flat=advance_decline.get('flat'),
+        ad_reconciliation_enabled=advance_decline.get('ad_reconciliation_enabled', False),
+        market_scope='沪深北全A',
+        market_prefixes=advance_decline.get('market_prefixes', ()),
+        required_market_prefixes=('sh', 'sz', 'bj'),
+        missing_fields=advance_decline.get('missing_fields', []),
+        errors=advance_decline.get('errors', []),
+        data_timestamp=advance_decline.get('data_timestamp'),
+        source_timestamp=advance_decline.get('source_timestamp'),
+        report_generated_at=advance_decline.get('report_generated_at'),
+        max_delay_minutes=advance_decline.get('max_delay_minutes', 30),
+        stale_after_minutes=advance_decline.get('stale_after_minutes', 180),
+    )
+    _modules = {
+        'universe': build_module_quality(
+            'universe', total=_universe_total, covered=_universe_covered,
+            source=market_meta.get('source', 'security_master'),
+            source_timestamp=max((row.get('updated_at', '') for row in market_meta.get('records', [])), default=''),
+            missing_fields=market_meta.get('missing_fields', []), errors=market_meta.get('errors', []),
+            lineage={'cache': SECURITY_MASTER_CACHE, 'market_scope': '沪深北全A'},
+        ),
+        'price_raw': build_module_quality(
+            'price_raw', total=_price_total, covered=_price_raw_covered,
+            source=_price_meta.get('primary_source', 'price_cache_raw'),
+            source_timestamp=_report_date,
+            errors=[] if _price_raw_covered else ['报告日 raw 价格缓存无有效记录'],
+            lineage={
+                'cache': PRICE_CACHE,
+                'scope': '沪深北全A报告日收盘快照',
+                'price_basis': 'close_raw',
+                'legacy_rows_excluded': True,
+                **_price_meta,
+            },
+        ),
+        'price_qfq': build_module_quality(
+            'price_qfq', total=_price_total, covered=_price_qfq_covered,
+            source='price_cache_qfq', source_timestamp=_report_date, critical=False,
+            errors=[] if _price_qfq_covered else ['报告日 qfq 价格缓存无有效记录'],
+            missing_fields=[] if _price_qfq_covered >= _price_total else ['close_qfq'],
+            lineage={
+                'cache': PRICE_CACHE,
+                'price_basis': 'close_qfq',
+                'legacy_rows_excluded': True,
+                **_price_meta,
+            },
+        ),
+        'breadth': build_module_quality(
+            'breadth', total=_universe_total,
+            covered=advance_decline.get('market_covered', 0),
+            source=advance_decline.get('primary_source', ''),
+            source_timestamp=advance_decline.get('source_timestamp', ''),
+            missing_fields=list(advance_decline.get('missing_fields', [])) + (
+                ['legacy_mixed_price_basis']
+                if advance_decline.get('price_basis') == 'legacy_mixed' else []
+            ),
+            errors=list(advance_decline.get('errors', [])),
+            lineage={
+                'source_chain': advance_decline.get('source_chain', []),
+                'scope': '沪深北全A',
+                'source_market_total': advance_decline.get('market_total'),
+                'universe_total': _universe_total,
+                'price_basis': advance_decline.get('price_basis', ''),
+                'coverage_pct': advance_decline.get('coverage_pct', 0.0),
+                'used_fallback': bool(advance_decline.get('used_fallback')),
+                'warnings': advance_decline.get('warnings', []),
+            },
+        ),
+        'limit_pool': build_module_quality(
+            'limit_pool', total=_limit_total, covered=_limit_count,
+            source=_limit_source, source_timestamp=_report_date,
+            errors=_limit_errors,
+            lineage={'cache': ZT_CACHE_FILE, 'reconciliation': _limit_lineage},
+        ),
+        'echelon': build_module_quality(
+            'echelon', total=max(_limit_count, 1), covered=len(_current_echelon_rows),
+            source=f"{_limit_source}+CLS_attribution", source_timestamp=_report_date,
+            errors=[] if _current_echelon_rows else ['连板梯队不可用'], critical=False,
+            lineage={'fact_source': _limit_source, 'classification_source': 'CLS'},
+        ),
+        'sector': build_module_quality(
+            'sector', total=max(_limit_count, 1), covered=_sector_covered,
+            source='CLS+Eastmoney concepts', source_timestamp=_report_date, critical=False,
+            missing_fields=[] if _sector_covered == _limit_count else ['部分涨停股缺少主线归因'],
+            lineage={'reconciliation': _limit_lineage},
+        ),
+        'history': build_module_quality(
+            'history', total=20, covered=min(_history_rows, 20),
+            source='sentiment_cache', source_timestamp=_report_date, critical=False,
+            errors=[] if _history_rows else ['情绪历史序列不可用'],
+        ),
+    }
+    _report_quality = aggregate_report_quality(_modules)
+    _breadth_quality = _modules.get('breadth', {})
+    _report_quality.update({
+        # 顶层覆盖率只从模块质量聚合结果产生；legacy quality 只负责补充
+        # 新鲜度、备用源和 A/D 细节，避免旧入口覆盖模块质量。
+        'market_total': _modules.get('universe', {}).get('total', _universe_total),
+        'market_covered': _breadth_quality.get('covered', 0),
+        'coverage_pct': _breadth_quality.get('coverage_pct', 0.0),
+        'raw_market_covered': _breadth_quality.get('raw_covered', _legacy_quality.get('raw_market_covered', 0)),
+        'raw_coverage_pct': _breadth_quality.get('raw_coverage_pct', _legacy_quality.get('raw_coverage_pct', 0.0)),
+        'market_scope': '沪深北全A',
+        'market_prefixes': _legacy_quality.get('market_prefixes', []),
+        'used_fallback': _legacy_quality.get('used_fallback', False),
+        'used_stale': _legacy_quality.get('used_stale', False),
+        'ad_incomplete': _legacy_quality.get('ad_incomplete', False),
+        'source_timestamp': _legacy_quality.get('source_timestamp', ''),
+        'freshness_level': _legacy_quality.get('freshness_level', 'unknown'),
+        'freshness_reason': _legacy_quality.get('freshness_reason', ''),
+    })
+    _report_quality['market_scope'] = '沪深北全A'
+    _report_quality['historical_samples'] = advance_decline.get(
+        'historical_samples', (_report_timing or {}).get('historical_samples', 0)
+    )
+    _report_quality['errors'] = list(dict.fromkeys(
+        list(_report_quality.get('errors', [])) + list(_legacy_quality.get('errors', []))
+    ))
+    _report_quality['missing_fields'] = list(dict.fromkeys(
+        list(_report_quality.get('missing_fields', [])) + list(_legacy_quality.get('missing_fields', []))
+    ))
+    _policy = policy_from_quality(_report_quality)
+    _report_market_state = build_market_state(
+        _report_quality,
+        scene=(_report_timing or {}).get('scene'),
+        historical_samples=_report_quality.get('historical_samples'),
+    )
+    _report_market_state['publication_mode'] = _policy.mode
+    _report_market_state['allow_strong_conclusion'] = _policy.mode == 'decision'
+    _report_market_state['allow_observation'] = _policy.mode in {'observation', 'decision'}
+
+    # 个股策略池是报告的决策出口，只能在质量足够且进入 decision 模式时生成。
+    # facts_only / observation 只发布事实和条件性观察，避免缓存或催化接口把
+    # 未充分校验的数据包装成可执行建议。
+    if _policy.allow_focus_pool:
+        focus_df = generate_focus_pool(
+            ml_strength, echelon, top30_data, sentiment_df, focus_pool_path,
+            security_master=market_meta.get('security_master', {}),
+        )
+        try:
+            from catalyst_attribution import attribute_focus_pool
+            if focus_df is not None and not focus_df.empty:
+                focus_catalysts = attribute_focus_pool(
+                    focus_df, trade_date=_report_date, verbose=True,
+                )
+        except Exception as e:
+            print(f"  [催化归因] 本次报告跳过个股催化: {e}")
+            focus_catalysts = {}
+    else:
+        focus_df = None
+        focus_catalysts = {}
+
+    _breadth_total = float(advance_decline.get('up') or 0) + float(advance_decline.get('down') or 0)
+    _max_height = int(_ladder_metrics.get('height') or advance_decline.get('zt_max_height') or 0)
+    _gap_count = len(_ladder_metrics.get('gap_heights') or [])
+    _ladder_integrity = (
+        round(max(0.0, 1 - _gap_count / max(_max_height - 2, 1)), 4)
+        if _max_height >= 3 else None
+    )
+    _run_generated_at = datetime.now().astimezone().isoformat(timespec='seconds')
+    _current_snapshot = {
+        'snapshot_schema': 'daily-fact-snapshot/v1',
+        'snapshot_source': 'daily_snapshot',
+        'source': 'daily_snapshot',
+        'date_verified': True,
+        'immutable': True,
+        'report_date': _report_date,        'max_height': _max_height,
+        # 快照必须沿用事实池的权威分母；不能让旧的分类缓存或 FuPan 摘要
+        # 在事实池已校正后重新把 83 写回 74。
+        'limit_up': _resolve_snapshot_limit_up_count(
+            _authoritative_limit_count,
+            advance_decline.get('zt'),
+            _limit_count,
+        ),
+        'limit_down': int(float(advance_decline.get('dt') or 0)),
+        'breadth_ratio': round(float(advance_decline.get('up') or 0) / _breadth_total, 4) if _breadth_total else None,
+        'ladder_integrity': _ladder_integrity,
+        'concentration': _mainline_concentration.get('top_share'),
+        'promotion_rate': _progression_chain.get('promotion_rate'),
+        'mainline_rank': _mainline_concentration.get('top_mainline') or None,
+        'limit_pool_rows': [
+            {
+                'code': row.get('code'),
+                'name': row.get('name'),
+                'height': row.get('height', row.get('level')),
+            }
+            for row in _authoritative_limit_rows
+            if isinstance(row, dict) and row.get('code')
+        ],
+    }
+    # 指纹只覆盖事实快照本体，不把自身字段纳入计算，避免循环引用。
+    _snapshot_fingerprint = _stable_fingerprint(_current_snapshot)
+    _input_fingerprint = _stable_fingerprint({
+        'report_date': _report_date,
+        'snapshot': _current_snapshot,
+        'price_meta': _price_meta,
+        'market': {
+            'source': market_meta.get('source'),
+            'market_total': market_meta.get('market_total'),
+            'market_prefixes': market_meta.get('market_prefixes'),
+        },
+        'limit_pool_reconciliation': _limit_pool_reconciliation,
+    })
+    _run_id = (
+        f"{str(_report_date).replace('-', '')}-"
+        f"{datetime.now().astimezone().strftime('%H%M%S')}-"
+        f"{_input_fingerprint[:12]}"
+    )
+    _current_snapshot.update({
+        'run_id': _run_id,
+        'generated_at': _run_generated_at,
+        'input_fingerprint': _input_fingerprint,
+        'snapshot_fingerprint': _snapshot_fingerprint,
+    })
+    _report_quality.update({
+        'run_id': _run_id,
+        'input_fingerprint': _input_fingerprint,
+        'snapshot_fingerprint': _snapshot_fingerprint,
+        'report_generated_at': _run_generated_at,
+    })
+    _previous_snapshot = _load_previous_daily_snapshot(_report_date)
+    _daily_delta = build_daily_delta_snapshot(_current_snapshot, _previous_snapshot)
+    _write_daily_snapshot(_report_date, _current_snapshot)
+
+    _scenarios = build_scenario_probabilities(
+        scene=(_report_timing or {}).get('scene'),
+        ad_ratio=_current_snapshot.get('breadth_ratio'),
+        zt=_current_snapshot.get('limit_up'), dt=_current_snapshot.get('limit_down'),
+        curr_h=_max_height,
+        pressure_5d=(_report_timing or {}).get('pressure_5d', 0),
+        ladder=_ladder_metrics.get('ladder', 0), h5=_ladder_metrics.get('h5', 0),
+        data_quality=_report_quality,
+        historical_samples=_report_quality.get('historical_samples', 0),
+        historical_stats=advance_decline.get('historical_stats', (_report_timing or {}).get('historical_stats')),
+    )
+    _ai_facts = {
+        'report_date': _report_date,
+        'market_snapshot': _current_snapshot,
+        'daily_delta': _daily_delta,
+        'progression_chain': _progression_chain,
+        'quality_status': _report_quality.get('status'),
+        # Keep the complete module quality snapshot in the AI input lineage so
+        # later review can distinguish a weak inference from a weak data run.
+        'quality_snapshot': _report_quality,
+    }
+    _ai_result = run_guarded_ai(_ai_facts, _policy)
+    _modules['ai'] = build_module_quality(
+        'ai', total=1, covered=1 if _ai_result.get('status') in {'ok', 'sanitized', 'skipped'} else 0,
+        source='guarded_ai', source_timestamp=datetime.now().astimezone().isoformat(timespec='seconds'),
+        errors=[] if _ai_result.get('status') in {'ok', 'sanitized', 'skipped'} else [_ai_result.get('reason')],
+        critical=False, lineage=_ai_result.get('lineage', {}),
+    )
+    _report_quality['modules']['ai'] = _modules['ai']
+
+    # 三类复盘摘要统一在主流程只计算一次，主报告、独立看板和内嵌看板共用。
+    _data_credibility = build_data_credibility_summary(
+        _report_quality,
+        report_date=_report_date,
+        report_generated_at=datetime.now().astimezone().isoformat(timespec='seconds'),
+    )
+    _lianban_review = build_lianban_review(_ladder_metrics)
+    _mainline_review = build_mainline_review(
+        _mainline_concentration,
+        limit_up_count=_authoritative_limit_count or _limit_count,
+        attribution_source=(_modules.get('sector') or {}).get('source') or 'CLS+Eastmoney concepts',
+    )
+
+    _lineage = {
+        'universe': _modules['universe'],
+        'prices': {'raw': _modules['price_raw'], 'qfq': _modules['price_qfq']},
+        'breadth': _modules['breadth'],
+        'limit_pool': _modules['limit_pool'],
+        'echelon': _modules['echelon'],
+        'sector': _modules['sector'],
+        'history': _modules['history'],
+        'ai': _ai_result.get('lineage', {}),
+        'run': {
+            'run_id': _run_id,
+            'input_fingerprint': _input_fingerprint,
+            'snapshot_fingerprint': _snapshot_fingerprint,
+            'generated_at': _run_generated_at,
+        },
+    }
+    _facts_fingerprint = hashlib.sha256(
+        json.dumps(_ai_facts, ensure_ascii=False, sort_keys=True, default=str).encode('utf-8')
+    ).hexdigest()
+    if _policy.allow_scenarios:
+        append_prediction_once(
+            PREDICTION_HISTORY,
+            {
+                'prediction_id': f'{_report_date}:base',
+                'report_date': _report_date,
+                'scene': (_report_timing or {}).get('scene'),
+                'publication_mode': _policy.mode,
+                'scenario': 'base',
+                'focus_pool': [
+                    {'code': str(row.get('代码', row.get('code', ''))), 'name': str(row.get('名称', row.get('name', '')))}
+                    for row in (focus_df.to_dict('records') if focus_df is not None and not focus_df.empty else [])
+                ],
+                'facts_fingerprint': _facts_fingerprint,
+            },
+        )
+    _prediction_review = build_prediction_review(PREDICTION_HISTORY)
+    _prediction_review['matured_count'] = _prediction_review.get('completed_count', 0)
+    _prediction_review['pending_count'] = max(
+        0, _prediction_review.get('prediction_count', 0) - _prediction_review.get('completed_count', 0)
+    )
+    _report_context = ReportContext(
+        report_date=_report_date,
+        policy=_policy,
+        quality=_report_quality,
+        facts={
+            'market_state': _report_market_state,
+            'market_snapshot': _current_snapshot,
+            'progression_chain': _progression_chain,
+            'ladder_metrics': _ladder_metrics,
+            'mainline_concentration': _mainline_concentration,
+            'data_credibility': _data_credibility,
+            'lianban_review': _lianban_review,
+            'mainline_review': _mainline_review,
+            'run': {
+                'run_id': _run_id,
+                'input_fingerprint': _input_fingerprint,
+                'snapshot_fingerprint': _snapshot_fingerprint,
+            },
+        },
+        observations={'ai': _ai_result},
+        scenarios=_scenarios,
+        lineage=_lineage,
+        daily_delta=_daily_delta,
+        prediction_review=_prediction_review,
+    ).to_dict()
+    write_report_audit(
+        os.path.join(AUDIT_DIR, f'{_report_date}.json'),
+        report_date=_report_date,
+        context=_report_context,
+        lineage=_lineage,
+    )
 
     print("\n[6/6] 生成可视化...")
     generate_html(
@@ -4191,7 +5794,10 @@ def main():
         plates=plates_data, classified_df=classified, return_leaders=return_leaders,
         mainline_ladder=mainline_ladder, sub_leaderboard=sub_leaderboard,
         sub_tracks=sub_tracks, price_df=price_df, focus_df=focus_df,
-        focus_catalysts=focus_catalysts
+        focus_catalysts=focus_catalysts,
+        timing_result=_report_timing, market_state=_report_market_state,
+        previous_echelon=previous_echelon,
+        report_context=_report_context,
     )
 
     # 7.5 站点发布: 归档当日报告 + 决策看板 + 重建首页 (产品化: 首屏先给结论 + 可翻历史)
@@ -4203,31 +5809,41 @@ def main():
             _stance = classify_market_stance(advance_decline, sentiment_df, echelon)
         except Exception:
             _stance = {}
-        # 实时数据可信度: 核心输入 (涨跌家数 + 情绪序列) 是否到位, 供首屏徽标显示
-        _ad_ok = bool(advance_decline) and (
-            float(advance_decline.get('up', 0) or 0) + float(advance_decline.get('down', 0) or 0) > 0)
+        # 复用主报告已计算的质量上下文，避免站点与主报告各自判断。
+        _quality = _report_context['quality']
+        _market_state = _report_context['facts']['market_state']
         _sent_ok = sentiment_df is not None and not sentiment_df.empty
-        _data_ok = _ad_ok and _sent_ok
+        _data_ok = _quality['status'] in {'ok', 'degraded'} and _sent_ok
         _notes = []
-        if not _ad_ok:
-            _notes.append('涨跌家数缺失')
+        if _market_state.get('reason') and _quality['status'] not in {'ok'}:
+            _notes.append(_market_state['reason'])
         if not _sent_ok:
             _notes.append('情绪序列缺失')
         _summary = dict(_stance or {})
         _summary['data_ok'] = _data_ok
+        _summary['data_quality'] = _quality
+        _summary['market_state'] = _market_state
+        _summary['allow_strong_conclusion'] = bool(
+            _market_state.get('allow_strong_conclusion') and _sent_ok
+        )
         if _notes:
             _summary['data_note'] = '、'.join(_notes)
+        if not _summary['allow_strong_conclusion']:
+            _summary['stance'] = '数据待核验'
+            _summary['head'] = _market_state.get('reason') or '核心数据仍在质量校验'
+            _summary['play'] = '当前仅展示已校验事实'
+            _summary['color'] = '#8b949e'
 
         # === 决策看板: 独立 HTML 归档到 site/dashboards/ (与主报告内嵌 section 同源) ===
         _dashboard_html = None
         try:
-            from timing_signal import generate_timing_signal
             from decision_dashboard import build_dashboard_ctx, generate_dashboard_html
             _timing = generate_timing_signal(sentiment_df, advance_decline, echelon)
             _ctx = build_dashboard_ctx(
                 timing=_timing, advance_decline=advance_decline,
-                sentiment_df=sentiment_df, echelon=echelon, report_date=latest_date,
-                focus_df=focus_df, focus_catalysts=focus_catalysts,
+                sentiment_df=sentiment_df, echelon=echelon, previous_echelon=previous_echelon,
+                report_date=latest_date, focus_df=focus_df, focus_catalysts=focus_catalysts,
+                report_context=_report_context,
             )
             _dashboard_html = generate_dashboard_html(_ctx)
         except Exception as e:
@@ -4326,14 +5942,24 @@ def main():
         except Exception as e:
             print(f"  [错误] 邮件发送失败: {e}")
 
-    # 自动打开 GitHub Pages 站点 (本地跑完后; CI 无桌面, 跳过)
-    # 注: 线上页面由 CI 部署后才更新; 本地刚生成的内容先看 output/site/ 或等 Actions 完成
+    # 自动打开两个页面 (本地跑完后; CI 无桌面, 跳过):
+    #   ① 本地报告 = 刚生成的最新内容, 立刻可看
+    #   ② GitHub Pages = 线上归档站, 由 CI 部署后才更新, 二者对照
     try:
         if not IS_GITHUB_ACTIONS:
+            import webbrowser
+            # ① 本地报告
+            if os.path.exists(OUTPUT_HTML):
+                local_url = 'file:///' + os.path.abspath(OUTPUT_HTML).replace('\\', '/')
+                print(f"  🖥️  正在浏览器中打开本地报告: {OUTPUT_HTML}")
+                webbrowser.open(local_url)
+            else:
+                print(f"  [警告] 本地报告不存在, 跳过打开: {OUTPUT_HTML}")
+            # ② GitHub Pages 线上站点
             from publish_site import open_site
             open_site(SITE_URL)
     except Exception as e:
-        print(f"  [警告] 自动打开 GitHub Pages 失败: {e}")
+        print(f"  [警告] 自动打开页面失败: {e}")
 
 
 if __name__ == '__main__':

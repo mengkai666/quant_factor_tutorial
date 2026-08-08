@@ -32,6 +32,47 @@ def test_data_quality_exposes_source_coverage_and_fallback():
     assert "turnover" in got["missing_fields"]
 
 
+def test_data_credibility_summary_caps_display_coverage_but_preserves_overflow():
+    from report_logic import build_data_credibility_summary
+
+    got = build_data_credibility_summary({
+        "market_scope": "沪深北全A",
+        "market_total": 2467,
+        "market_covered": 2467,
+        "status": "blocked",
+        "modules": {
+            "price_raw": {
+                "total": 2467,
+                "covered": 5190,
+                "status": "ok",
+            }
+        },
+    })
+
+    module = got["modules"]["price_raw"]
+    assert module["covered"] == 2467
+    assert module["raw_covered"] == 5190
+    assert module["coverage_pct"] == 100.0
+    assert module["raw_coverage_pct"] > 100.0
+    assert module["status"] == "blocked"
+    assert any("COVERAGE_OVERFLOW" in reason for reason in got["reasons"])
+
+
+def test_data_credibility_summary_derives_status_when_module_status_is_missing():
+    from report_logic import build_data_credibility_summary
+
+    got = build_data_credibility_summary({
+        "market_total": 3,
+        "modules": {
+            "price_raw": {"total": 3, "covered": 3},
+            "price_qfq": {"total": 3, "covered": 0},
+        },
+    })
+
+    assert got["modules"]["price_raw"]["status"] == "ok"
+    assert got["modules"]["price_qfq"]["status"] == "unavailable"
+
+
 def test_date_only_source_timestamp_matching_report_date_is_fresh_for_eod_report():
     from report_logic import assess_data_quality
 
@@ -86,6 +127,42 @@ def test_ladder_metrics_expose_progression_and_gap():
     assert got["ladder"] == 7
     assert got["gap_heights"] == [5]
     assert got["gap_risk"] is True
+
+
+def test_ladder_metrics_separates_missing_suspended_and_limit_down_transitions():
+    from report_logic import compute_ladder_metrics
+
+    got = compute_ladder_metrics(
+        [
+            {"code": "sh600001", "height": 3},
+            {"code": "sh600002", "height": 2},
+            {"code": "sh600003", "height": 0, "status": "limit_down"},
+            {"code": "sh600004", "height": 0, "status": "suspended"},
+        ],
+        previous_echelon=[
+            {"code": "sh600001", "height": 2},
+            {"code": "sh600002", "height": 3},
+            {"code": "sh600003", "height": 2},
+            {"code": "sh600004", "height": 2},
+            {"code": "sh600005", "height": 2},
+        ],
+    )
+
+    assert got["transition_status_counts"] == {
+        "promoted": 1,
+        "continued": 0,
+        "broken_positive": 1,
+        "broken_negative": 0,
+        "limit_down": 1,
+        "suspended": 1,
+        "missing": 1,
+    }
+    assert got["streak_pool_raw_sample_size"] == 5
+    assert got["streak_pool_observed_sample_size"] == 2
+    assert got["streak_pool_promotion"]["text"] == "1/2（50%）"
+    assert got["broken_rate"]["text"] == "1/2（50%）"
+    assert got["streak_pool_limit_down_count"] == 1
+    assert got["streak_pool_missing_count"] == 1
 
 
 def test_prediction_snapshot_round_trip_and_evaluation(tmp_path):
@@ -848,6 +925,25 @@ def test_report_price_cache_excludes_rows_after_report_date(tmp_path, monkeypatc
     assert got["date"].tolist() == ["2026-08-06"]
     assert raw["date"].tolist() == ["2026-08-06", "2026-08-07"]
 
+def test_phase_index_fetch_respects_report_date_cutoff(monkeypatch):
+    import pandas as pd
+    import phase_resonance
+
+    class FakeAk:
+        @staticmethod
+        def stock_zh_index_daily(symbol):
+            return pd.DataFrame([
+                {"date": "2026-08-06", "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1},
+                {"date": "2026-08-07", "open": 2, "high": 2, "low": 2, "close": 2, "volume": 2},
+            ])
+
+    monkeypatch.setitem(__import__("sys").modules, "akshare", FakeAk())
+    monkeypatch.setenv("REPORT_DATE", "2026-08-06")
+
+    got = phase_resonance.fetch_index(lookback=20)
+
+    assert [row["date"] for row in got] == ["2026-08-06"]
+
 def test_report_price_consumers_share_report_date_cutoff(tmp_path, monkeypatch):
     import pandas as pd
     import limit_ratio_factor
@@ -908,6 +1004,7 @@ def test_price_cache_breadth_calibration_updates_coverage_and_lineage():
     assert got["primary_source"] == "price_cache"
     assert got["calibration_source"] == "price_cache"
     assert got["source_chain"] == ["fupan", "price_cache"]
+    assert got["used_fallback"] is True
     assert got["source_timestamp"] == "2026-08-06"
     assert got["flat"] is None
     assert got["ad_reconciliation_enabled"] is False
@@ -950,6 +1047,45 @@ def test_reconcile_limit_pool_separates_fupan_facts_from_classification_coverage
     assert got["source"] == "fupan_ladder"
     assert got["classification_source"] == "classified_limit_pool"
     assert ladder["category"]["首板"][0]["code"] == "430001"
+
+
+def test_reconcile_limit_pool_requires_same_trade_date_before_matching():
+    from report_logic import reconcile_limit_pool
+
+    ladder = {
+        "date": "20260807",
+        "category": {"首板": [{"code": "600001", "name": "样本", "level": 1}]},
+    }
+    classified = [
+        {"日期": "20260806", "代码": "600001", "大主线": "旧日期"},
+        {"日期": "20260807", "代码": "600001", "大主线": "当日"},
+        {"代码": "000001", "大主线": "无日期"},
+    ]
+
+    got = reconcile_limit_pool(ladder, classified, expected_date="20260807")
+
+    assert got["date_aligned"] is True
+    assert got["authoritative_date"] == "20260807"
+    assert got["classification_date"] == "20260807"
+    assert got["date_mismatch_count"] == 1
+    assert got["date_missing_count"] == 1
+    assert got["matched_count"] == 1
+    assert got["cls_only_count"] == 0
+
+
+def test_reconcile_limit_pool_rejects_unverified_classification_date():
+    from report_logic import reconcile_limit_pool
+
+    ladder = {"category": {"首板": [{"code": "600001", "level": 1}]}}
+    got = reconcile_limit_pool(
+        ladder,
+        [{"代码": "600001", "大主线": "未声明日期"}],
+        expected_date="20260807",
+    )
+
+    assert got["date_aligned"] is False
+    assert got["matched_count"] == 0
+    assert got["date_missing_count"] == 1
 
 def test_build_echelon_table_normalizes_cls_and_fupan_codes_before_attribution():
     import pandas as pd
@@ -1091,3 +1227,21 @@ def test_mainline_review_limits_conclusion_when_attribution_coverage_is_low():
     assert got["unattributed_count"] == 7
     assert got["conclusion_level"] == "insufficient"
     assert "已归因样本" in got["conclusion"]
+
+
+def test_assess_data_quality_exposes_overflow_without_publishing_invalid_coverage():
+    from report_logic import assess_data_quality
+
+    got = assess_data_quality(
+        report_date="2026-08-06",
+        market_total=2467,
+        market_covered=5190,
+        primary_source="price_cache",
+    )
+
+    assert got["market_covered"] == 2467
+    assert got["coverage_pct"] == 100.0
+    assert got["raw_market_covered"] == 5190
+    assert got["raw_coverage_pct"] == round(5190 / 2467 * 100, 1)
+    assert got["status"] == "blocked"
+    assert any("COVERAGE_OVERFLOW" in error for error in got["errors"])

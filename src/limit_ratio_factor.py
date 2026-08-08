@@ -14,14 +14,19 @@ import pandas as pd
 import os
 import requests
 import urllib3
-from time_utils import get_latest_date
+from time_utils import filter_completed_rows, get_latest_date
 
 # 禁用 SSL 警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 # 缓存文件路径 (集中在 paths.py, 单一真源)
-from paths import ZT_CACHE_FILE, PRICE_CACHE as PRICE_CACHE_FILE
+from paths import (
+    SECURITY_MASTER_CACHE,
+    ZT_CACHE_FILE,
+    PRICE_CACHE as PRICE_CACHE_FILE,
+)
+from report_logic import normalize_stock_code
 
 
 class MarketSentimentFactor:
@@ -73,13 +78,31 @@ class MarketSentimentFactor:
             if not nums:
                 return None
             
+            def _count(key):
+                value = nums.get(key)
+                if value in (None, ""):
+                    return None
+                try:
+                    return int(value)
+                except (TypeError, ValueError):
+                    return None
+
+            up = _count("SZJS")
+            down = _count("XDJS")
+            if up is None or down is None:
+                return None
+            total = up + down
             return {
                 "date": day.replace('-', ''),
-                "up": int(nums.get("SZJS", 0)),
-                "down": int(nums.get("XDJS", 0)),
-                "zt": int(nums.get("ZT", 0)),
-                "dt": int(nums.get("DT", 0)),
-                "ad_ratio": float(nums.get("SZJS", 0)) / (int(nums.get("SZJS", 0)) + int(nums.get("XDJS", 0))) if (int(nums.get("SZJS", 0)) + int(nums.get("XDJS", 0))) > 0 else 0.5
+                "up": up,
+                "down": down,
+                "flat": None,
+                "zt": _count("ZT") or 0,
+                "dt": _count("DT") or 0,
+                "ad_ratio": up / total if total > 0 else None,
+                "ad_available": total > 0,
+                "ad_status": "api" if total > 0 else "empty",
+                "source": "longhu_api",
             }
         except Exception as e:
             print(f"  ⚠️ LongHu API 请求失败: {e}")
@@ -96,6 +119,7 @@ class MarketSentimentFactor:
             
         try:
             df = pd.read_csv(ZT_CACHE_FILE, encoding='utf-8-sig', dtype={'日期': str})
+            df = filter_completed_rows(df, '日期')
             result = {}
             for date_str, gdf in df.groupby('日期'):
                 zt_count = len(gdf[gdf['类型'] == 'ZT'])
@@ -118,15 +142,98 @@ class MarketSentimentFactor:
             return {}
             
         try:
-            # 性能优化：避免 pivot (在大数据集上极慢), 改用 groupby + shift
+            # 性能优化：避免 pivot (在大数据集上极慢), 改用 groupby + shift。
+            # 价格缓存可能同时存在 raw/qfq/legacy 三种历史口径；这里先按
+            # code/date 折叠成一条“可计算价格”，并明确记录实际口径，避免
+            # legacy_mixed 被误报成 raw/qfq 权威数据。
             df = pd.read_csv(PRICE_CACHE_FILE, dtype={'code': str, 'date': str})
-            df['date_clean'] = df['date'].str.replace('-', '')
-            df = df.sort_values(['code', 'date_clean'])
-            
-            # 在每只股票内计算涨跌幅
-            df['prev_close'] = df.groupby('code')['close'].shift(1)
-            df['chg_pct'] = (df['close'] / df['prev_close'] - 1) * 100
-            df = df.dropna(subset=['chg_pct'])
+            df = filter_completed_rows(df, 'date')
+            if df.empty or 'code' not in df.columns or 'date' not in df.columns:
+                self._ad_cache = {}
+                return {}
+
+            df['code'] = df['code'].map(normalize_stock_code)
+            df['date_clean'] = (
+                df['date'].astype(str).str.strip().str.replace('-', '', regex=False).str[:8]
+            )
+            df = df[
+                df['code'].ne('')
+                & df['date_clean'].str.fullmatch(r'\d{8}', na=False)
+            ].copy()
+            if df.empty:
+                self._ad_cache = {}
+                return {}
+
+            universe_codes = set()
+            market_scope_source = 'price_cache'
+            scope_inferred = True
+            same_cache_dir = (
+                os.path.dirname(os.path.abspath(SECURITY_MASTER_CACHE))
+                == os.path.dirname(os.path.abspath(PRICE_CACHE_FILE))
+            )
+            if same_cache_dir and os.path.exists(SECURITY_MASTER_CACHE):
+                try:
+                    master = pd.read_csv(SECURITY_MASTER_CACHE, dtype=str)
+                    if 'code' in master.columns:
+                        universe_codes = {
+                            normalize_stock_code(code)
+                            for code in master['code'].tolist()
+                            if normalize_stock_code(code)
+                        }
+                        if universe_codes:
+                            market_scope_source = 'security_master'
+                            scope_inferred = False
+                except Exception as exc:
+                    print(f"  ⚠️ 证券主数据加载失败(A/D继续使用缓存范围): {exc}")
+            if universe_codes:
+                df = df[df['code'].isin(universe_codes)].copy()
+            else:
+                universe_codes = set(df['code'].unique())
+
+            if df.empty or not universe_codes:
+                self._ad_cache = {}
+                return {}
+
+            for column in ('close_raw', 'close_qfq', 'close_legacy', 'close'):
+                if column not in df.columns:
+                    df[column] = pd.NA
+                df[column] = pd.to_numeric(df[column], errors='coerce')
+
+            def choose_price(row):
+                for column, basis in (
+                    ('close_raw', 'raw'),
+                    ('close_qfq', 'qfq_fallback'),
+                    ('close_legacy', 'legacy_mixed'),
+                    ('close', 'legacy_mixed'),
+                ):
+                    value = row[column]
+                    if pd.notna(value) and float(value) > 0:
+                        return float(value), basis
+                return None, 'unavailable'
+
+            selected = df.apply(choose_price, axis=1, result_type='expand')
+            selected.columns = ['ad_close', 'ad_basis']
+            df[['ad_close', 'ad_basis']] = selected
+            df = df.dropna(subset=['ad_close']).copy()
+            if df.empty:
+                self._ad_cache = {}
+                return {}
+
+            # 同一股票同一日期可能同时有 raw/qfq/legacy 记录。优先 raw，
+            # 其次 qfq，最后 legacy；这样补齐不会被旧行覆盖。
+            basis_rank = {'raw': 0, 'qfq_fallback': 1, 'legacy_mixed': 2}
+            df['_basis_rank'] = df['ad_basis'].map(basis_rank).fillna(9)
+            df = (
+                df.sort_values(['code', 'date_clean', '_basis_rank'])
+                .drop_duplicates(['code', 'date_clean'], keep='first')
+                .sort_values(['code', 'date_clean'])
+            )
+
+            # 在每只股票内计算涨跌幅。只保留当前和前一交易日都有可信价格的样本。
+            df['prev_close'] = df.groupby('code')['ad_close'].shift(1)
+            df['prev_basis'] = df.groupby('code')['ad_basis'].shift(1)
+            df['chg_pct'] = (df['ad_close'] / df['prev_close'] - 1) * 100
+            df = df.dropna(subset=['ad_close', 'prev_close', 'chg_pct'])
             
             # 按日统计涨跌家数
             daily_up = df[df['chg_pct'] > 0.1].groupby('date_clean').size()
@@ -137,12 +244,36 @@ class MarketSentimentFactor:
             for d in all_dates:
                 up = int(daily_up.get(d, 0))
                 dn = int(daily_dn.get(d, 0))
-                total = up + dn
+                day_rows = df[df['date_clean'] == d]
+                market_covered = int(day_rows['code'].nunique())
+                flat = max(0, market_covered - up - dn)
+                market_total = len(universe_codes) if not scope_inferred else None
+                bases = set(day_rows['ad_basis'].dropna().astype(str)) | set(
+                    day_rows['prev_basis'].dropna().astype(str)
+                )
+                if 'legacy_mixed' in bases:
+                    basis = 'legacy_mixed'
+                elif 'qfq_fallback' in bases:
+                    basis = 'qfq_fallback'
+                else:
+                    basis = 'raw'
                 result[d] = {
                     'date': d,
                     'up': up,
                     'down': dn,
-                    'ad_ratio': up / total if total > 0 else 0.5
+                    'flat': flat,
+                    'ad_ratio': up / (up + dn) if (up + dn) > 0 else 0.5
+                    , 'market_covered': market_covered
+                    , 'raw_market_covered': market_covered
+                    , 'market_total': market_total
+                    , 'coverage_pct': round(market_covered / market_total * 100, 2) if market_total else None
+                    , 'market_scope_source': market_scope_source
+                    , 'scope_inferred': scope_inferred
+                    , 'price_basis': basis
+                    , 'source': 'price_cache'
+                    , 'source_timestamp': str(d)
+                    , 'legacy_mixed': basis == 'legacy_mixed'
+                    , 'used_fallback': basis != 'raw'
                 }
             
             self._ad_cache = result
@@ -164,26 +295,40 @@ class MarketSentimentFactor:
         data = []
         for d in all_dates:
             z_data = zt.get(d, {'limit_up': 0, 'limit_down': 0})
-            a_data = ad.get(d, {'up': 0, 'down': 0, 'ad_ratio': 0.5})
+            a_data = ad.get(d, {
+                'up': None, 'down': None, 'flat': None, 'ad_ratio': None,
+                'ad_available': False, 'ad_status': 'missing',
+                'source': 'unavailable',
+            })
             
             # 使用 API 覆盖最新一天的数据 (如果可用)
             today_str = get_latest_date().strftime("%Y%m%d")
             if d == today_str:
                 api_data = self._fetch_longhu_sentiment(get_latest_date().strftime("%Y-%m-%d"))
                 if api_data:
-                    a_data = {'up': api_data['up'], 'down': api_data['down'], 'ad_ratio': api_data['ad_ratio']}
+                    a_data = {
+                        'up': api_data['up'], 'down': api_data['down'],
+                        'flat': api_data.get('flat'), 'ad_ratio': api_data['ad_ratio'],
+                        'ad_available': api_data.get('ad_available', False),
+                        'ad_status': api_data.get('ad_status', 'api'),
+                        'source': api_data.get('source', 'longhu_api'),
+                    }
                     z_data = {'limit_up': api_data['zt'], 'limit_down': api_data['dt']}
             
             # 纯粹基于 A/D 比例 (Breadth only)
-            raw_score = a_data['ad_ratio']
+            raw_score = a_data.get('ad_ratio')
             
             data.append({
                 'date': d,
                 'limit_up': z_data['limit_up'],
                 'limit_down': z_data['limit_down'],
-                'market_up': a_data['up'],
-                'market_down': a_data['down'],
-                'ad_ratio': a_data['ad_ratio'],
+                'market_up': a_data.get('up'),
+                'market_down': a_data.get('down'),
+                'market_flat': a_data.get('flat'),
+                'ad_ratio': a_data.get('ad_ratio'),
+                'ad_available': bool(a_data.get('ad_available', a_data.get('ad_ratio') is not None)),
+                'ad_status': a_data.get('ad_status', 'available' if a_data.get('ad_ratio') is not None else 'missing'),
+                'ad_source': a_data.get('source', 'unknown'),
                 'raw_score': raw_score
             })
             
@@ -228,6 +373,10 @@ class MarketSentimentFactor:
                     row = matches.iloc[-1]
         
         score = row['score_ema']
+        score_available = pd.notna(score)
+        ad_available = bool(row.get('ad_available', False))
+        if not score_available:
+            score = 0.5
         
         # 5级情绪层级分类 (基于AD比例优化的阈值)
         if score >= 0.8:
@@ -254,15 +403,19 @@ class MarketSentimentFactor:
         # 关键修复: 仅当精确匹配到日期时才返回真实的 market_up/market_down
         # 否则返回0, 让调用方知道需要从API补全
         return {
-            'score': float(score),
+            'score': float(score) if score_available else 0.5,
             'level': lvl,
             'sentiment': sentiment,
             'interpretation': interpretation,
-            'ad_ratio': float(row['ad_ratio']) if exact_match else 0.5,
-            'market_up': int(row['market_up']) if exact_match else 0,
-            'market_down': int(row['market_down']) if exact_match else 0,
+            'ad_ratio': float(row['ad_ratio']) if exact_match and pd.notna(row['ad_ratio']) else None,
+            'market_up': int(row['market_up']) if exact_match and pd.notna(row['market_up']) else None,
+            'market_down': int(row['market_down']) if exact_match and pd.notna(row['market_down']) else None,
+            'market_flat': int(row['market_flat']) if exact_match and pd.notna(row.get('market_flat')) else None,
             'date': row['date'],
-            'status': 'OK' if exact_match else 'fallback'
+            'status': 'OK' if exact_match and ad_available else ('fallback' if not exact_match else 'missing'),
+            'ad_available': exact_match and ad_available,
+            'ad_status': row.get('ad_status', 'missing'),
+            'ad_source': row.get('ad_source', 'unknown')
         }
 
     def _fallback_result(self, reason):
@@ -271,7 +424,13 @@ class MarketSentimentFactor:
             'level': 3,
             'sentiment': f'中性 ({reason})',
             'interpretation': '暂无有效数据，使用中性参考值',
-            'status': '降级'
+            'status': '降级',
+            'ad_available': False,
+            'ad_status': 'unavailable',
+            'market_up': None,
+            'market_down': None,
+            'market_flat': None,
+            'ad_ratio': None
         }
 
     def get_factor_name(self):
