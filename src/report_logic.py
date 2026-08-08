@@ -175,12 +175,28 @@ def apply_price_cache_breadth_calibration(
 def reconcile_limit_pool(
     fupan_ladder: dict[str, Any] | None,
     classified_rows: Iterable[dict[str, Any]] | Any | None,
+    expected_date: Any = None,
 ) -> dict[str, Any]:
     """以 FuPan 天梯为涨停事实池，并对账题材归因池的覆盖与集合差异。"""
-    ladder = dict(fupan_ladder or {})
+    root = dict(fupan_ladder or {})
+    ladder = root
     if isinstance(ladder.get("ladder"), dict):
         ladder = dict(ladder["ladder"])
     category = ladder.get("category") if isinstance(ladder.get("category"), dict) else {}
+
+    def trade_date(value: Any) -> str:
+        text = str(value or "").strip()
+        digits = "".join(ch for ch in text if ch.isdigit())
+        return digits if len(digits) == 8 else ""
+
+    expected = trade_date(expected_date)
+    authoritative_date = trade_date(
+        ladder.get("date") or ladder.get("trade_date") or ladder.get("report_date")
+        or root.get("date") or root.get("trade_date") or root.get("report_date")
+    )
+    if expected and not authoritative_date:
+        # 指定日期请求的事实池没有独立日期字段时，沿用请求口径记录 lineage。
+        authoritative_date = expected
 
     authoritative: dict[str, dict[str, Any]] = {}
     for bucket, rows in category.items():
@@ -214,7 +230,25 @@ def reconcile_limit_pool(
         rows = [row for row in rows_source if isinstance(row, dict)]
 
     classified: dict[str, dict[str, Any]] = {}
+    classification_dates: set[str] = set()
+    date_mismatch_count = 0
+    date_missing_count = 0
     for raw_row in rows:
+        row_date = trade_date(
+            raw_row.get("日期") or raw_row.get("date") or raw_row.get("trade_date")
+            or raw_row.get("report_date")
+        )
+        date_verified = raw_row.get("date_verified", True)
+        if expected:
+            if not row_date or date_verified is False:
+                date_missing_count += 1
+                continue
+            if row_date != expected:
+                date_mismatch_count += 1
+                continue
+            classification_dates.add(row_date)
+        elif row_date and date_verified is not False:
+            classification_dates.add(row_date)
         code = normalize_stock_code(
             raw_row.get("code") or raw_row.get("代码") or raw_row.get("symbol")
         )
@@ -224,8 +258,10 @@ def reconcile_limit_pool(
             classified.setdefault(code, row)
 
     authoritative_codes = set(authoritative)
+    authority_date_mismatch = bool(expected and authoritative_date and authoritative_date != expected)
+    matchable_authoritative_codes = set() if authority_date_mismatch else authoritative_codes
     classified_codes = set(classified)
-    matched_codes = authoritative_codes & classified_codes
+    matched_codes = matchable_authoritative_codes & classified_codes
     fupan_only_codes = authoritative_codes - classified_codes
     cls_only_codes = classified_codes - authoritative_codes
     authoritative_count = len(authoritative_codes)
@@ -244,6 +280,23 @@ def reconcile_limit_pool(
         warnings.append(
             f"题材归因池中有 {len(cls_only_codes)} 只不在 FuPan 当日涨停事实池"
         )
+    if date_mismatch_count:
+        warnings.append(f"题材归因池剔除 {date_mismatch_count} 条非目标交易日记录")
+    if date_missing_count:
+        warnings.append(f"题材归因池剔除 {date_missing_count} 条未验证日期记录")
+    if authority_date_mismatch:
+        warnings.append("FuPan 涨停事实池日期与目标交易日不一致，禁止交集匹配")
+
+    classification_date = ""
+    if len(classification_dates) == 1:
+        classification_date = next(iter(classification_dates))
+    date_aligned = None
+    if expected:
+        date_aligned = bool(
+            not authority_date_mismatch
+            and authoritative_date == expected
+            and classification_date == expected
+        )
 
     return {
         "source": "fupan_ladder",
@@ -260,6 +313,11 @@ def reconcile_limit_pool(
         "cls_only_codes": sorted(cls_only_codes),
         "authoritative_rows": [authoritative[code] for code in sorted(authoritative)],
         "warnings": warnings,
+        "date_aligned": date_aligned,
+        "authoritative_date": authoritative_date,
+        "classification_date": classification_date,
+        "date_mismatch_count": date_mismatch_count,
+        "date_missing_count": date_missing_count,
     }
 
 

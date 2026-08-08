@@ -1,0 +1,383 @@
+{
+  "report_date": "2026-08-07",
+  "max_height": 4,
+  "limit_up": 74,
+  "limit_down": 4,
+  "breadth_ratio": 0.5285,
+  "ladder_integrity": 1.0,
+  "concentration": 0.6383,
+  "promotion_rate": 0.1864406779661017,
+  "mainline_rank": "AI算力",
+  "limit_pool_rows": [
+    {
+      "code": "sh600110",
+      "name": "诺德股份",
+      "height": 1
+    },
+    {
+      "code": "sh600183",
+      "name": "生益科技",
+      "height": 1
+    },
+    {
+      "code": "sh600206",
+      "name": "有研新材",
+      "height": 3
+    },
+    {
+      "code": "sh600267",
+      "name": "海正药业",
+      "height": 1
+    },
+    {
+      "code": "sh600272",
+      "name": "开开实业",
+      "height": 2
+    },
+    {
+      "code": "sh600449",
+      "name": "宁夏建材",
+      "height": 1
+    },
+    {
+      "code": "sh600500",
+      "name": "中化国际",
+      "height": 1
+    },
+    {
+      "code": "sh600601",
+      "name": "方正科技",
+      "height": 2
+    },
+    {
+      "code": "sh600641",
+      "name": "先导基电",
+      "height": 1
+    },
+    {
+      "code": "sh600651",
+      "name": "飞乐音响",
+      "height": 1
+    },
+    {
+      "code": "sh600664",
+      "name": "哈药股份",
+      "height": 1
+    },
+    {
+      "code": "sh600721",
+      "name": "百花医药",
+      "height": 4
+    },
+    {
+      "code": "sh600744",
+      "name": "华银电力",
+      "height": 1
+    },
+    {
+      "code": "sh601208",
+      "name": "东材科技",
+      "height": 1
+    },
+    {
+      "code": "sh601865",
+      "name": "福莱特",
+      "height": 1
+    },
+    {
+      "code": "sh603011",
+      "name": "合锻智能",
+      "height": 1
+    },
+    {
+      "code": "sh603102",
+      "name": "百合股份",
+      "height": 1
+    },
+    {
+      "code": "sh603124",
+      "name": "江南新材",
+      "height": 1
+    },
+    {
+      "code": "sh603127",
+      "name": "昭衍新药",
+      "height": 1
+    },
+    {
+      "code": "sh603137",
+      "name": "恒尚节能",
+      "height": 1
+    },
+    {
+      "code": "sh603186",
+      "name": "华正新材",
+      "height": 1
+    },
+    {
+      "code": "sh603228",
+      "name": "景旺电子",
+      "height": 2
+    },
+    {
+      "code": "sh603328",
+      "name": "依顿电子",
+      "height": 1
+    },
+    {
+      "code": "sh603459",
+      "name": "红板科技",
+      "height": 1
+    },
+    {
+      "code": "sh603567",
+      "name": "珍宝岛",
+      "height": 1
+    },
+    {
+      "code": "sh603655",
+      "name": "朗博科技",
+      "height": 1
+    },
+    {
+      "code": "sh603660",
+      "name": "苏州科达",
+      "height": 1
+    },
+    {
+      "code": "sh603757",
+      "name": "大元泵业",
+      "height": 1
+    },
+    {
+      "code": "sh603758",
+      "name": "秦安股份",
+      "height": 1
+    },
+    {
+      "code": "sh603773",
+      "name": "沃格光电",
+      "height": 4
+    },
+    {
+      "code": "sh603936",
+      "name": "博敏电子",
+      "height": 1
+    },
+    {
+      "code": "sh605287",
+      "name": "德才股份",
+      "height": 1
+    },
+    {
+      "code": "sh605289",
+      "name": "罗曼股份",
+      "height": 1
+    },
+    {
+      "code": "sh688020",
+      "name": "方邦股份",
+      "height": 1
+    },
+    {
+      "code": "sh688046",
+      "name": "药康生物",
+      "height": 1
+    },
+    {
+      "code": "sh688073",
+      "name": "毕得医药",
+      "height": 1
+    },
+    {
+      "code": "sh688137",
+      "name": "近岸蛋白",
+      "height": 1
+    },
+    {
+      "code": "sh688265",
+      "name": "南模生物",
+      "height": 1
+    },
+    {
+      "code": "sh688419",
+      "name": "耐科装备",
+      "height": 1
+    },
+    {
+      "code": "sh688693",
+      "name": "锴威特",
+      "height": 2
+    },
+    {
+      "code": "sz000506",
+      "name": "招金黄金",
+      "height": 1
+    },
+    {
+      "code": "sz000603",
+      "name": "盛达资源",
+      "height": 1
+    },
+    {
+      "code": "sz000739",
+      "name": "普洛药业",
+      "height": 1
+    },
+    {
+      "code": "sz000831",
+      "name": "中国稀土",
+      "height": 1
+    },
+    {
+      "code": "sz001223",
+      "name": "欧克科技",
+      "height": 1
+    },
+    {
+      "code": "sz001267",
+      "name": "汇绿生态",
+      "height": 4
+    },
+    {
+      "code": "sz001296",
+      "name": "长江材料",
+      "height": 1
+    },
+    {
+      "code": "sz002037",
+      "name": "保利联合",
+      "height": 1
+    },
+    {
+      "code": "sz002194",
+      "name": "武汉凡谷",
+      "height": 2
+    },
+    {
+      "code": "sz002281",
+      "name": "光迅科技",
+      "height": 1
+    },
+    {
+      "code": "sz002428",
+      "name": "云南锗业",
+      "height": 4
+    },
+    {
+      "code": "sz002437",
+      "name": "誉衡药业",
+      "height": 1
+    },
+    {
+      "code": "sz002443",
+      "name": "金洲管道",
+      "height": 1
+    },
+    {
+      "code": "sz002552",
+      "name": "宝鼎科技",
+      "height": 4
+    },
+    {
+      "code": "sz002589",
+      "name": "瑞康医药",
+      "height": 1
+    },
+    {
+      "code": "sz002631",
+      "name": "德尔未来",
+      "height": 1
+    },
+    {
+      "code": "sz002741",
+      "name": "光华科技",
+      "height": 1
+    },
+    {
+      "code": "sz002742",
+      "name": "冀衡医药",
+      "height": 1
+    },
+    {
+      "code": "sz002762",
+      "name": "金发拉比",
+      "height": 1
+    },
+    {
+      "code": "sz002792",
+      "name": "通宇通讯",
+      "height": 2
+    },
+    {
+      "code": "sz002821",
+      "name": "凯莱英",
+      "height": 1
+    },
+    {
+      "code": "sz002900",
+      "name": "哈三联",
+      "height": 1
+    },
+    {
+      "code": "sz002913",
+      "name": "奥士康",
+      "height": 1
+    },
+    {
+      "code": "sz002943",
+      "name": "宇晶股份",
+      "height": 1
+    },
+    {
+      "code": "sz002971",
+      "name": "和远气体",
+      "height": 3
+    },
+    {
+      "code": "sz300363",
+      "name": "博腾股份",
+      "height": 1
+    },
+    {
+      "code": "sz300916",
+      "name": "朗特智能",
+      "height": 1
+    },
+    {
+      "code": "sz300986",
+      "name": "志特新材",
+      "height": 1
+    },
+    {
+      "code": "sz301008",
+      "name": "宏昌科技",
+      "height": 1
+    },
+    {
+      "code": "sz301047",
+      "name": "义翘神州",
+      "height": 1
+    },
+    {
+      "code": "sz301080",
+      "name": "百普赛斯",
+      "height": 1
+    },
+    {
+      "code": "sz301230",
+      "name": "泓博医药",
+      "height": 1
+    },
+    {
+      "code": "sz301234",
+      "name": "五洲医疗",
+      "height": 1
+    },
+    {
+      "code": "sz301366",
+      "name": "一博科技",
+      "height": 1
+    }
+  ]
+}
