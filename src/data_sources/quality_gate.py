@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import json
-from typing import Any
+from typing import Any, Iterable
 from pathlib import Path
 
 import numpy as np
@@ -11,78 +11,70 @@ import pandas as pd
 from .models import FetchResult, FetchStatus, ModuleQuality
 from .price_provider import PRICE_COLUMNS
 from .universe_provider import UNIVERSE_COLUMNS
-
+from .run_context import current_run_id
 CRITICAL_MODULES = {"universe", "price_raw", "breadth", "limit_pool"}
-DECISION_MODULES = CRITICAL_MODULES | {"echelon", "sector", "history"}
+DECISION_MODULES = CRITICAL_MODULES | {
+    "echelon", "sector", "history", "daily_delta", "bomb_metrics", "ai",
+}
 
 
-def build_module_quality(
-    name: str,
-    total: int = 0,
-    covered: int = 0,
-    source: str = "",
-    source_timestamp: str = "",
-    missing_fields: list[str] | None = None,
-    errors: list[str] | None = None,
-    lineage: dict[str, Any] | None = None,
-    critical: bool | None = None,
+def validate_run_id_consistency(
+    modules: dict[str, dict[str, Any]] | None,
+    *,
+    expected_run_id: str | None = None,
+    required_modules: set[str] | None = None,
 ) -> dict[str, Any]:
-    """Return the stable module-quality payload consumed by report rendering."""
-    total = max(0, int(total or 0))
-    covered = max(0, int(covered or 0))
-    if total and covered > total:
-        raise ValueError(f"covered cannot exceed total for {name}: {covered}>{total}")
-    missing = [str(item) for item in (missing_fields or []) if str(item).strip()]
-    error_list = [str(item) for item in (errors or []) if str(item).strip()]
-    coverage_pct = round(covered / total * 100, 2) if total else 0.0
-    explicit_critical = bool(critical) if critical is not None else name in CRITICAL_MODULES
-    if error_list and explicit_critical:
+    """Validate that one report is built from one execution batch.
+
+    The check is intentionally inactive outside a run context so that unit
+    tests and legacy callers can still build isolated module-quality objects.
+    The production report entrypoint always creates a run context, therefore a
+    missing or mixed batch ID becomes visible before the publication policy is
+    calculated.
+    """
+    modules = dict(modules or {})
+    expected = str(expected_run_id or current_run_id() or "").strip()
+    if not expected:
+        return {
+            "enforced": False,
+            "status": "not_enforced",
+            "expected_run_id": "",
+            "module_run_ids": {},
+            "missing_modules": [],
+            "mismatched_modules": [],
+        }
+
+    required = set(required_modules or modules.keys())
+    module_run_ids: dict[str, str] = {}
+    missing_modules: list[str] = []
+    mismatched_modules: list[str] = []
+    for name, item in modules.items():
+        lineage = dict(item.get("lineage") or {})
+        # A present top-level run_id is authoritative, including an explicit
+        # blank value. This prevents a malformed module from being silently
+        # repaired by a stale lineage value.
+        raw_run_id = item["run_id"] if "run_id" in item else lineage.get("run_id")
+        run_id = str(raw_run_id or "").strip()
+        module_run_ids[name] = run_id
+        if name in required and not run_id:
+            missing_modules.append(name)
+        elif run_id and run_id != expected:
+            mismatched_modules.append(name)
+
+    if missing_modules:
         status = "blocked"
-    elif error_list or missing or (total > 0 and covered < total):
+    elif mismatched_modules:
         status = "degraded"
-    elif total == 0 and not source:
-        status = "unknown"
-    elif total == 0 and not covered:
-        status = "unavailable"
     else:
         status = "ok"
     return {
-        "name": name, "status": status, "total": total, "covered": covered,
-        "coverage_pct": coverage_pct, "source": source,
-        "source_timestamp": source_timestamp, "missing_fields": missing,
-        "errors": error_list, "lineage": dict(lineage or {}),
-        "critical": explicit_critical,
+        "enforced": True,
+        "status": status,
+        "expected_run_id": expected,
+        "module_run_ids": module_run_ids,
+        "missing_modules": sorted(missing_modules),
+        "mismatched_modules": sorted(mismatched_modules),
     }
-
-
-def aggregate_report_quality(modules: dict[str, dict[str, Any]] | None) -> dict[str, Any]:
-    """Aggregate module states into a publication-safe report state."""
-    modules = dict(modules or {})
-    critical_blocked = [
-        name for name, item in modules.items()
-        if name in CRITICAL_MODULES and str(item.get("status", "unknown")) in {"blocked", "unavailable", "unknown"}
-    ]
-    decision_degraded = [
-        name for name, item in modules.items()
-        if name in DECISION_MODULES and str(item.get("status", "unknown")) != "ok"
-    ]
-    errors, missing_fields = [], []
-    for name, item in modules.items():
-        errors.extend(f"{name}: {value}" for value in item.get("errors", []) or [])
-        missing_fields.extend(f"{name}: {value}" for value in item.get("missing_fields", []) or [])
-    if critical_blocked:
-        status, publication_mode = "blocked", "facts_only"
-    elif decision_degraded:
-        status, publication_mode = "degraded", "observation"
-    else:
-        status, publication_mode = "ok", "decision"
-    return {
-        "status": status, "publication_mode": publication_mode, "modules": modules,
-        "critical_blocked": critical_blocked, "decision_degraded": decision_degraded,
-        "errors": list(dict.fromkeys(errors)), "missing_fields": list(dict.fromkeys(missing_fields)),
-        "allow_strong_conclusion": status == "ok",
-    }
-
 
 
 @dataclass(frozen=True)
@@ -376,9 +368,6 @@ class MarketDataQualityGate:
             raise DataQualityError(report)
         return report
 
-CRITICAL_MODULES = {"universe", "price_raw", "breadth", "limit_pool"}
-DECISION_MODULES = CRITICAL_MODULES | {"echelon", "sector", "history"}
-
 
 def _dedupe(values: Iterable[Any] | None) -> list[str]:
     result: list[str] = []
@@ -432,14 +421,20 @@ def build_module_quality(
         status = "ok"
     else:
         status = "unknown"
+    run_id = current_run_id()
+    lineage_payload = dict(lineage or {})
+    if run_id:
+        lineage_payload.setdefault("run_id", run_id)
     item = ModuleQuality(
         name=name, status=status, total=total_i, covered=effective_covered,
         coverage_pct=round(coverage * 100, 2), source=str(source or ""),
         source_timestamp=str(source_timestamp or ""), missing_fields=missing,
-        errors=error_list, lineage=dict(lineage or {}), critical=is_critical,
+        errors=error_list, lineage=lineage_payload, critical=is_critical,
         raw_covered=covered_i, raw_coverage_pct=round(raw_coverage * 100, 2),
     )
-    return item.to_dict()
+    payload = item.to_dict()
+    payload["run_id"] = run_id
+    return payload
 
 
 _UNAVAILABLE_STATUSES = {"blocked", "unavailable", "unknown"}
@@ -533,12 +528,146 @@ def build_publication_scopes(
     }
 
 
+
+def apply_review_readiness_gates(
+    quality: dict[str, Any] | None,
+    *,
+    daily_delta: dict[str, Any] | None,
+    ladder_metrics: dict[str, Any] | None,
+    ai_result: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Apply final review-data gates before a report can publish a decision."""
+    base = dict(quality or {})
+    modules = {
+        str(key): dict(value or {})
+        for key, value in (base.get("modules") or {}).items()
+    }
+    delta = dict(daily_delta or {})
+    metrics = dict(ladder_metrics or {})
+    ai = dict(ai_result or {})
+
+    delta_ready = bool(delta.get("available"))
+    delta_reason = str(delta.get("reason") or "缺少昨日逐股涨停池对比").strip()
+    modules["daily_delta"] = build_module_quality(
+        "daily_delta",
+        total=1,
+        covered=1 if delta_ready else 0,
+        source=str(delta.get("source") or "daily_snapshot"),
+        source_timestamp=str(delta.get("report_date") or ""),
+        missing_fields=[] if delta_ready else ["previous_limit_pool_snapshot"],
+        errors=[] if delta_ready else [delta_reason],
+        critical=False,
+        usable_threshold=0.0,
+        lineage={
+            "available": delta_ready,
+            "run_id": delta.get("run_id") or delta.get("current_run_id") or "",
+        },
+    )
+
+    bomb_specs = (
+        ("bomb_rate", metrics.get("bomb_rate")),
+        ("reclose_rate", metrics.get("reclose_rate")),
+        ("board_structure", metrics.get("board_structure")),
+    )
+    bomb_missing = []
+    bomb_covered = 0
+    for name, value in bomb_specs:
+        item = dict(value or {}) if isinstance(value, dict) else {}
+        trials = item.get("trials")
+        sample_size = item.get("sample_size")
+        try:
+            ready = int(float(sample_size if name == "board_structure" else (trials or 0))) > 0
+        except (TypeError, ValueError):
+            ready = False
+        if ready:
+            bomb_covered += 1
+        else:
+            bomb_missing.append(name)
+    modules["bomb_metrics"] = build_module_quality(
+        "bomb_metrics",
+        total=3,
+        covered=bomb_covered,
+        source=str(metrics.get("source") or "ladder_metrics"),
+        source_timestamp=str(metrics.get("report_date") or ""),
+        missing_fields=bomb_missing,
+        errors=[] if not bomb_missing else ["炸板率、炸板后回封率、板型结构存在样本不足"],
+        critical=False,
+        usable_threshold=0.0,
+        lineage={
+            "available": not bomb_missing,
+            "metrics": [name for name, _ in bomb_specs],
+        },
+    )
+
+    ai_status = str(ai.get("status") or "unknown").strip().lower()
+    ai_ready = ai_status in {"ok", "sanitized"}
+    ai_reason = str(ai.get("reason") or "AI 研判未生成").strip()
+    modules["ai"] = build_module_quality(
+        "ai",
+        total=1,
+        covered=1 if ai_ready else 0,
+        source=str(ai.get("source") or "guarded_ai"),
+        source_timestamp=str(ai.get("generated_at") or ""),
+        missing_fields=[] if ai_ready else ["ai_judgement"],
+        errors=[] if ai_ready else [ai_reason],
+        critical=False,
+        usable_threshold=0.0,
+        lineage=dict(ai.get("lineage") or {}),
+    )
+
+    final = aggregate_report_quality(modules)
+    for key, value in base.items():
+        if key not in {
+            "modules", "publication_scopes", "critical_blocked", "decision_degraded",
+            "errors", "missing_fields", "status", "publication_mode",
+            "allow_strong_conclusion", "run_id", "run_id_consistency",
+        }:
+            final.setdefault(key, value)
+    final["review_readiness"] = {
+        "previous_stock_delta": {
+            "ready": delta_ready,
+            "missing": [] if delta_ready else ["previous_limit_pool_snapshot"],
+            "reason": "" if delta_ready else delta_reason,
+        },
+        "bomb_metrics": {
+            "ready": not bomb_missing,
+            "missing": bomb_missing,
+            "reason": "" if not bomb_missing else "炸板指标样本不足",
+        },
+        "ai": {
+            "ready": ai_ready,
+            "status": ai_status,
+            "missing": [] if ai_ready else ["ai_judgement"],
+            "reason": "" if ai_ready else ai_reason,
+        },
+        "ready": bool(delta_ready and not bomb_missing and ai_ready),
+        "missing": _dedupe(([] if delta_ready else ["previous_limit_pool_snapshot"]) + bomb_missing + ([] if ai_ready else ["ai_judgement"])),
+    }
+    return final
+
+
 def aggregate_report_quality(modules: dict[str, dict[str, Any]] | None) -> dict[str, Any]:
     normalized = {str(k): dict(v or {}) for k, v in (modules or {}).items()}
+    run_id_consistency = validate_run_id_consistency(
+        normalized,
+        required_modules=set(CRITICAL_MODULES),
+    )
     critical_blocked = [name for name, item in normalized.items() if (item.get("critical") or name in CRITICAL_MODULES) and item.get("status") in {"blocked", "unavailable", "unknown"}]
     decision_degraded = [name for name, item in normalized.items() if name in DECISION_MODULES and item.get("status") != "ok"]
     errors = _dedupe(msg for item in normalized.values() for msg in item.get("errors", []))
     missing = _dedupe(msg for item in normalized.values() for msg in item.get("missing_fields", []))
+    if run_id_consistency.get("missing_modules"):
+        critical_blocked.append("run_id_consistency")
+        missing.append(
+            "run_id_consistency: missing run_id for "
+            + ", ".join(run_id_consistency["missing_modules"])
+        )
+    if run_id_consistency.get("mismatched_modules"):
+        decision_degraded.append("run_id_consistency")
+        errors.append(
+            "run_id_consistency: mixed run_id for "
+            + ", ".join(run_id_consistency["mismatched_modules"])
+        )
     if critical_blocked:
         status, mode = "blocked", "facts_only"
     elif decision_degraded:
@@ -555,4 +684,6 @@ def aggregate_report_quality(modules: dict[str, dict[str, Any]] | None) -> dict[
         "errors": errors,
         "missing_fields": missing,
         "allow_strong_conclusion": mode == "decision",
+        "run_id": run_id_consistency.get("expected_run_id", ""),
+        "run_id_consistency": run_id_consistency,
     }

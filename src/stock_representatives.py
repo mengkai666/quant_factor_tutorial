@@ -38,9 +38,17 @@ import os
 
 import pandas as pd
 
-from paths import INDUSTRY_CACHE, PRICE_CACHE, ZT_CACHE_FILE
+from paths import (
+    INDUSTRY_CACHE,
+    PRICE_CACHE,
+    SECURITY_MASTER_CACHE,
+    UNIVERSE_CACHE,
+    ZT_CACHE_FILE,
+)
 from time_utils import filter_completed_rows
-from data_sources.price_provider import price_value_column
+from data_sources.models import normalize_code
+from data_sources.name_resolver import NameResolution, resolve_names
+from data_sources.price_provider import build_price_matrix, price_value_column
 
 TOP_N = 6                # 每象限展示几只
 MID_CAP_MIN = 100.0      # 中军最小总市值 (亿元)
@@ -50,6 +58,88 @@ MID_CAP_MIN = 100.0      # 中军最小总市值 (亿元)
 REP_CAP_MIN = 50.0
 # ST/*ST 保留但打标 —— 它们是真实的资金行为, 不该隐藏; 但必须让读者一眼看出
 # 这是重组/炒作而非产业逻辑。
+
+
+def _load_name_resolution() -> NameResolution:
+    """Load report-date security names from the shared master caches."""
+    security_master = None
+    universe = None
+    industry = None
+    try:
+        security_master = pd.read_csv(SECURITY_MASTER_CACHE, dtype=str)
+    except Exception:
+        pass
+    try:
+        universe = pd.read_csv(UNIVERSE_CACHE, dtype=str)
+    except Exception:
+        pass
+    try:
+        industry = pd.read_csv(INDUSTRY_CACHE, dtype=str)
+    except Exception:
+        pass
+    current = security_master
+    if current is None or current.empty:
+        current = universe
+    return resolve_names(universe=current, industry=industry)
+
+
+def build_turning_stock_leaders(
+    phases: dict,
+    *,
+    name_resolution: NameResolution | None = None,
+    expected_universe_size: int | None = None,
+    top_n: int = 5,
+    min_coverage: float = 0.80,
+) -> dict:
+    """Rank full-A-share returns over the mechanically detected bottom interval."""
+    interval = (phases or {}).get("底部至今")
+    if not interval or len(interval) != 2 or not os.path.exists(PRICE_CACHE):
+        return {"usable": False, "coverage": 0.0, "rows": []}
+
+    names = name_resolution or _load_name_resolution()
+    if not names.names:
+        return {"usable": False, "coverage": 0.0, "rows": []}
+
+    prices = pd.read_csv(PRICE_CACHE)
+    prices = filter_completed_rows(prices, "date")
+    matrix = build_price_matrix(prices, "qfq", allow_legacy=True)
+    if matrix.empty:
+        return {"usable": False, "coverage": 0.0, "rows": []}
+
+    dates = [str(value) for value in matrix.index]
+
+    def near(boundary):
+        eligible = [value for value in dates if value <= str(boundary)]
+        return eligible[-1] if eligible else None
+
+    start_date, end_date = near(interval[0]), near(interval[1])
+    if not start_date or not end_date or start_date == end_date:
+        return {"usable": False, "coverage": 0.0, "rows": []}
+
+    candidates = sorted(set(matrix.columns) & set(names.names))
+    if not candidates:
+        return {"usable": False, "coverage": 0.0, "rows": []}
+    start = pd.to_numeric(matrix.loc[start_date, candidates], errors="coerce")
+    end = pd.to_numeric(matrix.loc[end_date, candidates], errors="coerce")
+    valid = start.notna() & end.notna() & start.gt(0)
+    denominator = int(expected_universe_size or len(names.names))
+    coverage = round(float(valid.sum()) / denominator, 4) if denominator > 0 else 0.0
+    if coverage < min_coverage:
+        return {"usable": False, "coverage": coverage, "rows": []}
+
+    returns = ((end[valid] / start[valid] - 1) * 100).dropna()
+    ranked = sorted(returns.items(), key=lambda item: (-float(item[1]), str(item[0])))
+    rows = []
+    for code, value in ranked[:max(0, int(top_n))]:
+        normalized = normalize_code(code)
+        name = names.names.get(normalized, normalized)
+        rows.append({
+            "code": normalized,
+            "name": name,
+            "return": round(float(value), 2),
+            "st": "ST" in str(name).upper(),
+        })
+    return {"usable": True, "coverage": coverage, "rows": rows}
 
 def _phase_returns(phases):
     """全市场个股各阶段收益 %。index=code, columns=阶段名。"""

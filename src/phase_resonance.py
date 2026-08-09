@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import os
 import time
+from html import escape
 
 import pandas as pd
 
@@ -299,6 +300,58 @@ def market_breadth(det):
     return out
 
 
+def build_turning_summary(det, table, stock_leaders, *, sector_top_n=3):
+    """Build the current-stage summary anchored to the detected major bottom."""
+    shape = str((det or {}).get("shape") or "").strip()
+    label, separator, remainder = shape.partition(" (")
+    detail = remainder[:-1] if separator and remainder.endswith(")") else remainder
+    bottom = (det or {}).get("bottom") or {}
+    latest = (det or {}).get("latest") or {}
+    turning_date = str(bottom.get("date") or "")
+    latest_date = str(latest.get("date") or "")
+    bottom_close = pd.to_numeric(bottom.get("close"), errors="coerce")
+    latest_close = pd.to_numeric(latest.get("close"), errors="coerce")
+    index_return = None
+    if pd.notna(bottom_close) and pd.notna(latest_close) and float(bottom_close) != 0:
+        index_return = round((float(latest_close) / float(bottom_close) - 1) * 100, 2)
+
+    trading_days = sum(
+        1
+        for row in (det or {}).get("index_series", [])
+        if turning_date <= str(row.get("date") or "") <= latest_date
+    )
+    sectors = []
+    if isinstance(table, pd.DataFrame) and not table.empty and {"板块", "底部至今"}.issubset(table.columns):
+        ranked = table[["板块", "底部至今"]].copy()
+        ranked["底部至今"] = pd.to_numeric(ranked["底部至今"], errors="coerce")
+        ranked = ranked.dropna(subset=["底部至今"]).sort_values(
+            ["底部至今", "板块"], ascending=[False, True]
+        )
+        sectors = [
+            {"name": str(row["板块"]), "return": round(float(row["底部至今"]), 2)}
+            for _, row in ranked.head(max(0, int(sector_top_n))).iterrows()
+        ]
+
+    stock_leaders = stock_leaders or {}
+    stocks = list(stock_leaders.get("rows") or []) if stock_leaders.get("usable") else []
+    stock_hint = "" if stock_leaders.get("usable") else "区间个股覆盖不足"
+    return {
+        "current_phase": {
+            "label": label or shape or "阶段待确认",
+            "detail": detail,
+            "turning_date": turning_date,
+            "latest_date": latest_date,
+            "index_return": index_return,
+            "trading_days": trading_days,
+        },
+        "turning_leaders": {
+            "sectors": sectors,
+            "stocks": stocks,
+            "stock_hint": stock_hint,
+        },
+    }
+
+
 _MEMO = {}
 
 
@@ -355,6 +408,7 @@ def _build(force_fetch=False):
 
     # 四象限个股代表 (全市场无偏, 独立模块; 失败静默留空)
     reps_html = ''
+    stock_leaders = {"usable": False, "coverage": 0.0, "rows": []}
     try:
         from stock_representatives import (build_representatives,
                                            render_representatives_html)
@@ -362,6 +416,14 @@ def _build(force_fetch=False):
             build_representatives(det['phases'], det['drawdown']))
     except Exception as e:
         print(f'  ⚠️ 个股代表计算失败 (不影响板块部分): {e}')
+
+    try:
+        from stock_representatives import build_turning_stock_leaders
+        stock_leaders = build_turning_stock_leaders(det['phases'])
+    except Exception as e:
+        print(f'  ⚠️ 转折以来个股榜计算失败 (不影响阶段与板块部分): {e}')
+
+    turning_summary = build_turning_summary(det, t, stock_leaders)
 
     return {
         'det': det, 'phase_names': ph, 'index_ret': idx_ret,
@@ -372,6 +434,7 @@ def _build(force_fetch=False):
         'bottom_overall': t.nsmallest(8, '底部至今').to_dict('records'),
         'new_high': t[t['距顶'] > 0].sort_values('距顶', ascending=False)
                      .to_dict('records') if '距顶' in t.columns else [],
+        **turning_summary,
     }
 
 
@@ -384,6 +447,102 @@ def _clr(v):
 
 def _pct(v, digits=2):
     return '—' if v is None else f'{v:+.{digits}f}%'
+
+
+def _turning_summary_html(res):
+    """Render the permanent stage-and-leaders product summary."""
+    phase = (res or {}).get("current_phase") or {}
+    if not phase:
+        return ""
+    leaders = (res or {}).get("turning_leaders") or {}
+    sectors = leaders.get("sectors") or []
+    stocks = leaders.get("stocks") or []
+
+    def safe(value):
+        return escape(str(value or ""), quote=True)
+
+    def return_text(value):
+        try:
+            number = float(value)
+            if pd.isna(number):
+                return "—"
+            return f"{number:+.1f}%"
+        except (TypeError, ValueError):
+            return "—"
+
+    index_return = phase.get("index_return")
+    index_text = return_text(index_return)
+    index_color = _clr(index_return)
+    detail = safe(phase.get("detail"))
+    detail_html = (
+        f'<div class="phase-turning-detail">{detail}</div>' if detail else ""
+    )
+    turning_date = safe(phase.get("turning_date"))
+    latest_date = safe(phase.get("latest_date"))
+    trading_days = phase.get("trading_days")
+    day_text = f" · {int(trading_days)} 个交易日" if trading_days else ""
+    current = f'''
+      <div class="phase-turning-col">
+        <div class="phase-turning-kicker">当前阶段</div>
+        <div class="phase-turning-stage">{safe(phase.get("label"))}</div>
+        {detail_html}
+        <div class="phase-turning-meta">主要转折 {turning_date} · 至 {latest_date}{day_text}</div>
+        <div class="phase-turning-index">上证区间 <span style="color:{index_color};">{index_text}</span></div>
+      </div>'''
+
+    sector_rows = "".join(
+        f'<div class="phase-turning-row"><span><b>{index}</b>{safe(row.get("name"))}</span>'
+        f'<span style="color:{_clr(row.get("return"))};">{return_text(row.get("return"))}</span></div>'
+        for index, row in enumerate(sectors, 1)
+    )
+    sector_column = (
+        f'<div class="phase-turning-col"><div class="phase-turning-kicker">转折以来领涨板块</div>'
+        f'{sector_rows}</div>' if sector_rows else ""
+    )
+
+    stock_rows = "".join(
+        f'<div class="phase-turning-row"><span><b>{index}</b>{safe(row.get("name"))}'
+        f'{"<i>ST</i>" if row.get("st") else ""}'
+        f'<small>{safe(row.get("code"))}</small></span>'
+        f'<span style="color:{_clr(row.get("return"))};">{return_text(row.get("return"))}</span></div>'
+        for index, row in enumerate(stocks, 1)
+    )
+    stock_column = (
+        f'<div class="phase-turning-col"><div class="phase-turning-kicker">转折以来领涨个股</div>'
+        f'{stock_rows}</div>' if stock_rows else ""
+    )
+
+    columns = "".join((current, sector_column, stock_column))
+    column_count = 1 + bool(sector_column) + bool(stock_column)
+    hint = safe(leaders.get("stock_hint"))
+    hint_html = f'<div class="phase-turning-hint">{hint}</div>' if hint else ""
+    return f'''
+    <style>
+      .phase-turning-summary {{margin:4px 0 16px;border-top:1px solid rgba(48,54,61,.8);border-bottom:1px solid rgba(48,54,61,.8);}}
+      .phase-turning-grid {{display:grid;grid-template-columns:repeat(var(--phase-cols),minmax(0,1fr));}}
+      .phase-turning-col {{min-width:0;padding:14px 16px;overflow-wrap:anywhere;}}
+      .phase-turning-col + .phase-turning-col {{border-left:1px solid rgba(48,54,61,.8);}}
+      .phase-turning-kicker {{color:#8b949e;font-size:11px;font-weight:700;margin-bottom:8px;}}
+      .phase-turning-stage {{color:#e6edf3;font-size:20px;font-weight:800;line-height:1.2;}}
+      .phase-turning-detail {{color:#8b949e;font-size:12px;line-height:1.6;margin-top:5px;}}
+      .phase-turning-meta,.phase-turning-index {{color:#8b949e;font-size:11px;line-height:1.6;margin-top:7px;}}
+      .phase-turning-index span {{font-weight:800;}}
+      .phase-turning-row {{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:5px 0;color:#e6edf3;font-size:12px;}}
+      .phase-turning-row > span:first-child {{min-width:0;}}
+      .phase-turning-row b {{display:inline-block;width:18px;color:#6e7681;font-size:10px;}}
+      .phase-turning-row small {{display:block;margin-left:18px;color:#6e7681;font-size:10px;}}
+      .phase-turning-row i {{margin-left:5px;color:#d29922;font-size:9px;font-style:normal;font-weight:800;}}
+      .phase-turning-row > span:last-child {{flex:none;font-weight:800;white-space:nowrap;}}
+      .phase-turning-hint {{padding:0 16px 10px;color:#6e7681;font-size:11px;}}
+      @media (max-width:760px) {{
+        .phase-turning-grid {{grid-template-columns:minmax(0,1fr);}}
+        .phase-turning-col + .phase-turning-col {{border-left:0;border-top:1px solid rgba(48,54,61,.8);}}
+      }}
+    </style>
+    <div class="phase-turning-summary">
+      <div class="phase-turning-grid" style="--phase-cols:{column_count};">{columns}</div>
+      {hint_html}
+    </div>'''
 
 
 def _phase_timeline(res):
@@ -410,6 +569,7 @@ def _phase_timeline(res):
             f'</tr>'
         )
     return f'''
+    <div class="phase-timeline-wrap" style="max-width:100%;overflow-x:auto;">
     <table style="width:100%;border-collapse:collapse;background:rgba(255,255,255,0.02);border-radius:8px;overflow:hidden;font-size:13px;">
       <tr style="background:rgba(255,255,255,0.05);">
         <th style="padding:8px 10px;text-align:left;color:#8b949e;font-size:12px;">阶段</th>
@@ -419,7 +579,8 @@ def _phase_timeline(res):
         <th style="padding:8px 10px;text-align:right;color:#8b949e;font-size:12px;">上涨占比</th>
       </tr>
       {rows}
-    </table>'''
+    </table>
+    </div>'''
 
 
 def _rank_cards(res):
@@ -548,6 +709,7 @@ def render_phase_resonance_html(res):
         🔀 指数阶段 × 板块共振 (Phase Resonance) · 阶段自动识别
       </div>
       {head}
+      {_turning_summary_html(res)}
       {_phase_timeline(res)}
       <div style="color:#8b949e;font-size:12px;font-weight:bold;margin:14px 0 2px;">
         📊 各阶段领涨 —— 横向对比就能看出是不是同一批人接力

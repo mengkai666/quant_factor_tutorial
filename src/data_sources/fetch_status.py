@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import datetime, timezone
 from pathlib import Path
 import os
@@ -9,6 +9,7 @@ import tempfile
 import pandas as pd
 
 from .models import FetchResult, FetchStatus
+from .run_context import current_run_id
 
 
 STATUS_COLUMNS = [
@@ -18,8 +19,9 @@ STATUS_COLUMNS = [
 
 
 class FetchStatusStore:
-    def __init__(self, path):
+    def __init__(self, path, run_id: str | None = None):
         self.path = Path(path)
+        self.run_id = current_run_id() if run_id is None else str(run_id or "")
 
     def read(self) -> pd.DataFrame:
         if not self.path.exists():
@@ -31,6 +33,8 @@ class FetchStatusStore:
         return df[STATUS_COLUMNS]
 
     def record(self, result: FetchResult) -> None:
+        if not result.run_id and self.run_id:
+            result = replace(result, run_id=self.run_id)
         row = asdict(result)
         row.pop("data", None)
         row["status"] = result.status.value

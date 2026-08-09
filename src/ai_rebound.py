@@ -22,6 +22,8 @@ import os
 import json
 import time
 import hashlib
+import re
+from copy import deepcopy
 import requests
 
 
@@ -71,15 +73,31 @@ def _float_env(name, default):
         return default
 
 
+def _int_env(name, default, *, minimum=1):
+    try:
+        value = int(os.environ.get(name, default))
+        return value if value >= minimum else default
+    except (TypeError, ValueError):
+        return default
+
+
+AI_PRIMARY_MAX_ATTEMPTS = _int_env("AI_PRIMARY_MAX_ATTEMPTS", 2)
 AI_RETRY_BASE_DELAY = _float_env("AI_RETRY_BASE_DELAY", 0.5)
 AI_RETRY_MAX_DELAY = _float_env("AI_RETRY_MAX_DELAY", 2.0)
+AI_REQUEST_TIMEOUT = _float_env("AI_REQUEST_TIMEOUT", 120.0)
 # 中转地址 (留空 = 官方)。裸域名会自动补 /v1/messages。
 ANTHROPIC_BASE_URL = os.environ.get("ANTHROPIC_BASE_URL", "").strip()
 # 部分中转强制要求显式启用 1M 上下文 beta (如 anyrouter: 不带此头直接 400
 # "请启用 1m 上下文")。留空则不发 anthropic-beta 头 (官方/多数中转无需)。
 ANTHROPIC_BETA = os.environ.get("ANTHROPIC_BETA", "").strip()
 
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+AI_OUTPUT_CACHE_DIR = os.environ.get(
+    "AI_OUTPUT_CACHE_DIR", os.path.join(_PROJECT_ROOT, "data", "ai_output_cache")
+)
+
 _API_VERSION = "2023-06-01"
+_AI_OUTPUT_SANITIZER_VERSION = "2"
 
 
 def _resolve_api_url() -> str:
@@ -153,8 +171,122 @@ def normalize_ai_output(raw: dict) -> tuple[dict, str] | tuple[None, str]:
     return output, "legacy"
 
 
-def run_guarded_ai(facts: dict, policy, *, caller=None, timeout: int = 45) -> dict:
-    """按发布策略控制 AI 调用、输出范围和审计指纹。"""
+def _ai_cache_identity(*, input_fingerprint: str, quality_fingerprint: str,
+                       publication_mode: str, model: str) -> dict:
+    return {
+        "input_fingerprint": input_fingerprint,
+        "input_quality_fingerprint": quality_fingerprint,
+        "publication_mode": publication_mode,
+        "model": model,
+        "sanitizer_version": _AI_OUTPUT_SANITIZER_VERSION,
+    }
+
+
+def _ai_cache_path(identity: dict) -> str:
+    cache_key = hashlib.sha256(
+        json.dumps(identity, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    return os.path.join(os.fspath(AI_OUTPUT_CACHE_DIR), f"{cache_key}.json")
+
+
+def _read_ai_cache(identity: dict) -> dict | None:
+    try:
+        with open(_ai_cache_path(identity), "r", encoding="utf-8") as handle:
+            cached = json.load(handle)
+    except (OSError, ValueError, TypeError):
+        return None
+    if not isinstance(cached, dict) or cached.get("identity") != identity:
+        return None
+    if cached.get("status") not in {"ok", "sanitized"}:
+        return None
+    if not isinstance(cached.get("output"), dict):
+        return None
+    return cached
+
+
+def _write_ai_cache(identity: dict, *, status: str, output: dict, lineage: dict) -> None:
+    cache_dir = os.fspath(AI_OUTPUT_CACHE_DIR)
+    os.makedirs(cache_dir, exist_ok=True)
+    path = _ai_cache_path(identity)
+    temporary = f"{path}.{os.getpid()}.{time.time_ns()}.tmp"
+    payload = {
+        "schema_version": "ai-output-cache/v1",
+        "identity": identity,
+        "status": status,
+        "output": deepcopy(output),
+        "normalized_from": lineage.get("normalized_from"),
+        "output_fingerprint": lineage.get("output_fingerprint"),
+        "cached_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+    }
+    try:
+        with open(temporary, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, sort_keys=True, indent=2)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            try:
+                os.remove(temporary)
+            except OSError:
+                pass
+
+
+def _cached_ai_result(identity: dict, lineage: dict, failure_reason: str) -> dict | None:
+    cached = _read_ai_cache(identity)
+    if cached is None:
+        return None
+    cached_lineage = dict(lineage)
+    cached_lineage.update({
+        "cache_hit": True,
+        "cache_reason": "AI 调用失败，复用相同输入的最近成功结果",
+        "upstream_failure": failure_reason,
+        "cached_at": cached.get("cached_at"),
+        "normalized_from": cached.get("normalized_from"),
+        "output_fingerprint": cached.get("output_fingerprint"),
+    })
+    return {
+        "status": cached["status"],
+        "reason": "",
+        "output": deepcopy(cached["output"]),
+        "lineage": cached_lineage,
+    }
+
+
+def _sanitize_output_against_facts(output: dict, facts: dict) -> int:
+    """移除缺少昨日逐股快照时无法由输入事实支持的晋级数字。"""
+    daily_delta = facts.get("daily_delta") if isinstance(facts, dict) else None
+    if not isinstance(daily_delta, dict) or daily_delta.get("available") is not False:
+        return 0
+
+    def unsupported(value) -> bool:
+        text = str(value or "")
+        if "晋级率" in text:
+            return True
+        if re.search(r"晋级.{0,16}(?:全零|为\s*0|是\s*0|\d+(?:\.\d+)?\s*%)", text):
+            return True
+        return bool(
+            re.search(r"\d+\s*(?:进|→|至)\s*\d+", text)
+            and re.search(r"(?:\d+\s*只\s*(?:样本|基数)|\d+\s*/\s*\d+)", text)
+        )
+
+    removed = 0
+    for key in ("facts", "observations", "conditions", "risks"):
+        values = output.get(key, [])
+        if not isinstance(values, list):
+            values = [str(values)] if values else []
+        kept = []
+        for item in values:
+            if unsupported(item):
+                removed += 1
+            else:
+                kept.append(str(item))
+        output[key] = kept
+    return removed
+
+
+def run_guarded_ai(facts: dict, policy, *, caller=None, timeout: float | None = None) -> dict:
+    """按发布策略控制 AI 调用、输出范围、缓存和审计指纹。"""
     from report_logic import ReportPolicy, scan_forbidden_semantics
 
     active = policy if isinstance(policy, ReportPolicy) else ReportPolicy.from_mode(policy)
@@ -173,11 +305,20 @@ def run_guarded_ai(facts: dict, policy, *, caller=None, timeout: int = 45) -> di
         "input_quality_status": quality_payload.get("status"),
         "input_quality_fingerprint": quality_fingerprint,
         "publication_mode": active.mode,
+        "sanitizer_version": _AI_OUTPUT_SANITIZER_VERSION,
+        "cache_hit": False,
     }
+    identity = _ai_cache_identity(
+        input_fingerprint=fingerprint,
+        quality_fingerprint=quality_fingerprint,
+        publication_mode=active.mode,
+        model=ANTHROPIC_MODEL,
+    )
     if not active.allow_ai:
         return {"status": "skipped", "reason": "发布策略禁止 AI", "output": None, "lineage": lineage}
+
+    diagnostics = {}
     try:
-        diagnostics = {}
         if caller is None:
             raw, diagnostics = generate_ai_rebound(
                 payload["facts"], timeout=timeout, return_diagnostics=True,
@@ -185,7 +326,12 @@ def run_guarded_ai(facts: dict, policy, *, caller=None, timeout: int = 45) -> di
         else:
             raw = caller(payload)
     except Exception as exc:
-        return {"status": "failed", "reason": str(exc), "output": None, "lineage": lineage}
+        reason = str(exc)
+        cached = _cached_ai_result(identity, lineage, reason)
+        if cached is not None:
+            return cached
+        return {"status": "failed", "reason": reason, "output": None, "lineage": lineage}
+
     if diagnostics:
         for key in ("attempt_count", "http_status"):
             value = diagnostics.get(key)
@@ -193,15 +339,23 @@ def run_guarded_ai(facts: dict, policy, *, caller=None, timeout: int = 45) -> di
                 lineage[key] = value
     output, normalized_from = normalize_ai_output(raw)
     if output is None:
+        reason = diagnostics.get("reason") or "AI 无结构化输出"
+        cached = _cached_ai_result(identity, lineage, reason)
+        if cached is not None:
+            return cached
         return {
             "status": "fallback",
-            "reason": diagnostics.get("reason") or "AI 无结构化输出",
+            "reason": reason,
             "output": None,
             "lineage": lineage,
         }
     lineage["normalized_from"] = normalized_from
     output["schema_version"] = "ai-output/v1"
     status = "ok"
+    unsupported_removed = _sanitize_output_against_facts(output, facts)
+    if unsupported_removed:
+        lineage["unsupported_metric_items_removed"] = unsupported_removed
+        status = "sanitized"
     if not active.allow_actions or not active.allow_positions or not active.allow_probabilities:
         output["decision"] = ""
         for key in ("observations", "conditions", "risks"):
@@ -210,8 +364,102 @@ def run_guarded_ai(facts: dict, policy, *, caller=None, timeout: int = 45) -> di
                 values = [str(values)] if values else []
             output[key] = [str(item) for item in values if not scan_forbidden_semantics(str(item), active)]
         status = "sanitized"
-    lineage["output_fingerprint"] = hashlib.sha256(json.dumps(output, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+    lineage["output_fingerprint"] = hashlib.sha256(
+        json.dumps(output, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()
+    try:
+        _write_ai_cache(identity, status=status, output=output, lineage=lineage)
+    except OSError as exc:
+        lineage["cache_write_error"] = f"{type(exc).__name__}: {exc}"
     return {"status": status, "reason": "", "output": output, "lineage": lineage}
+
+
+def _prompt_height(row: dict, *keys: str) -> int:
+    for key in keys:
+        value = row.get(key)
+        if value is None:
+            continue
+        try:
+            return int(float(value))
+        except (TypeError, ValueError):
+            digits = "".join(char for char in str(value) if char.isdigit())
+            if digits:
+                return int(digits)
+    return 0
+
+
+def _compact_prompt_rows(rows, *, fields: tuple[str, ...], limit: int, priority) -> list[dict]:
+    candidates = [dict(row) for row in (rows or []) if isinstance(row, dict)]
+    candidates.sort(key=priority, reverse=True)
+    return [
+        {key: row[key] for key in fields if key in row and row[key] is not None}
+        for row in candidates[:limit]
+    ]
+
+
+def _compact_facts_for_prompt(facts: dict) -> dict:
+    """缩短模型提示词，同时保留原始事实对象供指纹和审计使用。"""
+    compacted = deepcopy(dict(facts or {}))
+
+    market = compacted.get("market_snapshot")
+    if isinstance(market, dict):
+        rows = market.get("limit_pool_rows")
+        if isinstance(rows, list):
+            market["limit_pool_row_count"] = len(rows)
+            market["limit_pool_rows"] = _compact_prompt_rows(
+                rows,
+                fields=("code", "name", "height", "mainline", "reason"),
+                limit=24,
+                priority=lambda row: (
+                    _prompt_height(row, "height", "level", "连板高度", "连板数") >= 2,
+                    _prompt_height(row, "height", "level", "连板高度", "连板数"),
+                ),
+            )
+
+    progression = compacted.get("progression_chain")
+    if isinstance(progression, dict):
+        rows = progression.get("rows")
+        if isinstance(rows, list):
+            status_priority = {
+                "limit_down": 5,
+                "broken_negative": 4,
+                "promoted": 3,
+                "broken_positive": 2,
+                "missing": 1,
+                "suspended": 0,
+            }
+            progression["row_count"] = len(rows)
+            progression["rows"] = _compact_prompt_rows(
+                rows,
+                fields=("code", "name", "previous_height", "current_height", "pct_change", "status"),
+                limit=20,
+                priority=lambda row: (
+                    _prompt_height(row, "previous_height", "current_height"),
+                    status_priority.get(str(row.get("status") or ""), 0),
+                ),
+            )
+
+    quality = compacted.get("quality_snapshot")
+    if isinstance(quality, dict):
+        compact_quality = {
+            key: deepcopy(quality[key])
+            for key in ("status", "publication_mode", "coverage_pct", "missing_fields", "errors", "reasons")
+            if key in quality
+        }
+        modules = quality.get("modules")
+        if isinstance(modules, dict):
+            compact_quality["modules"] = {
+                name: {
+                    key: deepcopy(module[key])
+                    for key in ("status", "coverage_pct", "missing_fields", "errors")
+                    if key in module
+                }
+                for name, module in modules.items()
+                if isinstance(module, dict)
+            }
+        compacted["quality_snapshot"] = compact_quality
+
+    return compacted
 
 
 def _build_prompt(facts: dict) -> str:
@@ -240,7 +488,7 @@ def _build_prompt(facts: dict) -> str:
 
 
 def generate_ai_rebound(
-    facts: dict, timeout: int = 45, *, return_diagnostics: bool = False,
+    facts: dict, timeout: float | None = None, *, return_diagnostics: bool = False,
 ) -> dict | None | tuple[dict | None, dict]:
     """调用 Claude API；主模型有限重试，失败后可切备用模型，且不阻断日报。"""
     def finish(result, *, reason="", attempt_count=0, http_status=None, extra=None):
@@ -255,6 +503,10 @@ def generate_ai_rebound(
 
     if not ai_enabled():
         return finish(None, reason="AI 未启用或缺少 API Key")
+
+    request_timeout = AI_REQUEST_TIMEOUT if timeout is None else timeout
+    prompt_facts = _compact_facts_for_prompt(facts)
+    prompt = _build_prompt(prompt_facts)
 
     headers = {
         "x-api-key": ANTHROPIC_API_KEY,
@@ -277,14 +529,14 @@ def generate_ai_rebound(
         payload = {
             "model": model,
             "max_tokens": 1500,
-            "messages": [{"role": "user", "content": _build_prompt(facts)}],
+            "messages": [{"role": "user", "content": prompt}],
         }
         for attempt in range(attempts):
             entry = {"model": model, "attempt": attempt + 1}
             model_attempts.append(entry)
             try:
                 response = requests.post(
-                    _resolve_api_url(), headers=headers, json=payload, timeout=timeout,
+                    _resolve_api_url(), headers=headers, json=payload, timeout=request_timeout,
                 )
                 last_response = response
                 status = getattr(response, "status_code", None)
@@ -320,7 +572,7 @@ def generate_ai_rebound(
         return None
 
     try:
-        successful_response = call_model(ANTHROPIC_MODEL, 2, True)
+        successful_response = call_model(ANTHROPIC_MODEL, AI_PRIMARY_MAX_ATTEMPTS, True)
         primary_attempt_count = sum(1 for item in model_attempts if item["model"] == ANTHROPIC_MODEL)
         if successful_response is None and ANTHROPIC_FALLBACK_MODEL and ANTHROPIC_FALLBACK_MODEL != ANTHROPIC_MODEL:
             successful_response = call_model(ANTHROPIC_FALLBACK_MODEL, 1, False)
@@ -335,7 +587,7 @@ def generate_ai_rebound(
                 and item.get("http_status") is not None
             ]
             repeated_primary_failure = (
-                primary_attempt_count >= 2
+                primary_attempt_count >= AI_PRIMARY_MAX_ATTEMPTS
                 and len(primary_statuses) == primary_attempt_count
                 and len(set(primary_statuses)) == 1
                 and primary_statuses[0] in retryable_statuses

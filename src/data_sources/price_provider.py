@@ -540,6 +540,55 @@ def price_value_column(frame: pd.DataFrame, basis: str = "qfq", *, allow_legacy:
     return None
 
 
+def build_price_matrix(
+    frame: pd.DataFrame,
+    basis: str = "qfq",
+    *,
+    allow_legacy: bool = True,
+) -> pd.DataFrame:
+    """Build a per-stock price matrix, stitching legacy history when possible."""
+    if frame is None or frame.empty or not {"date", "code"}.issubset(frame.columns):
+        return pd.DataFrame()
+    preferred = "close_raw" if str(basis).lower() == "raw" else "close_qfq"
+    fallback = "close_legacy" if "close_legacy" in frame.columns else (
+        "close" if "close" in frame.columns else None
+    )
+    columns = [column for column in (preferred, fallback) if column and column in frame.columns]
+    if not columns:
+        return pd.DataFrame()
+
+    work = frame[["date", "code", *dict.fromkeys(columns)]].copy()
+    work["date"] = work["date"].astype(str).str.strip()
+    work["code"] = work["code"].map(normalize_code)
+    for column in columns:
+        work[column] = pd.to_numeric(work[column], errors="coerce")
+    work["_value"] = work[preferred] if preferred in work else pd.NA
+
+    if allow_legacy and fallback in work:
+        stitched = []
+        for _, group in work.groupby("code", sort=False):
+            target = pd.to_numeric(group["_value"], errors="coerce")
+            legacy = pd.to_numeric(group[fallback], errors="coerce")
+            overlap = target.notna() & legacy.notna() & legacy.ne(0)
+            ratio = 1.0
+            if overlap.any():
+                ratios = (target[overlap] / legacy[overlap]).replace(
+                    [float("inf"), float("-inf")], pd.NA
+                ).dropna()
+                if not ratios.empty:
+                    ratio = float(ratios.median())
+            stitched.append(target.fillna(legacy * ratio))
+        work["_value"] = pd.concat(stitched).sort_index()
+
+    work["_value"] = pd.to_numeric(work["_value"], errors="coerce").round(8)
+    work = work.dropna(subset=["_value"])
+    if work.empty:
+        return pd.DataFrame()
+    return work.pivot_table(
+        index="date", columns="code", values="_value", aggfunc="last"
+    ).sort_index()
+
+
 def validate_price_contract(rows: Iterable[dict[str, Any]] | None) -> dict[str, Any]:
     errors: list[str] = []
     counts = {"raw": 0, "qfq": 0}

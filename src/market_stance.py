@@ -120,7 +120,7 @@ def classify_market_stance(advance_decline, sentiment_df, echelon, regime=None):
     }
 
 
-def render_stance_html(res):
+def render_stance_html(res, observation_only=False):
     """档位卡片 + 扳机清单。深色风格, 与报告一致。"""
     if not res:
         return ''
@@ -136,12 +136,16 @@ def render_stance_html(res):
             f'</tr>'
         )
     ad_seq = ' → '.join(str(x) for x in res['ad_series']) if res['ad_series'] else '—'
+    title = '📐 盘面判断 · 观察模式' if observation_only else '📐 择时档位 · 顺逆指数决策 (Market Stance)'
+    play_html = '' if observation_only else (
+        f'<div style="color:#e6edf3;font-size:14px;margin-bottom:14px;"><b>操作:</b> {res["play"]}</div>'
+    )
     return f'''
     <div style="background:rgba(0,0,0,0.5);border:2px solid {res['color']};border-radius:12px;padding:20px;margin-bottom:30px;box-shadow:0 0 15px {res['color']}40;">
-        <div style="color:#8b949e;font-size:13px;font-weight:bold;text-transform:uppercase;margin-bottom:6px;">📐 择时档位 · 顺逆指数决策 (Market Stance)</div>
+        <div style="color:#8b949e;font-size:13px;font-weight:bold;text-transform:uppercase;margin-bottom:6px;">{title}</div>
         <div style="font-size:26px;font-weight:800;color:{res['color']};margin-bottom:8px;">{res['stance']}</div>
         <div style="color:#e6edf3;font-size:14px;margin-bottom:6px;">{res['head']}</div>
-        <div style="color:#e6edf3;font-size:14px;margin-bottom:14px;"><b>操作:</b> {res['play']}</div>
+        {play_html}
         <div style="color:#8b949e;font-size:12px;margin-bottom:10px;">近3日 A/D 比值: {ad_seq}　|　今日 涨停{res['zt']}/跌停{res['dt']}　|　最高{res['max_h']}板</div>
         <div style="color:#8b949e;font-size:13px;font-weight:bold;margin-bottom:6px;">🎯 转向扳机 (提前判断: 哪个先亮看哪个, 缺一条都只算观望):</div>
         <table style="width:100%;border-collapse:collapse;background:rgba(255,255,255,0.02);border-radius:8px;overflow:hidden;">
