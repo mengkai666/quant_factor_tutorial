@@ -4,6 +4,7 @@ import pytest
 
 from data_sources.fetch_status import FetchStatusStore
 from data_sources.models import FetchResult, FetchStatus, normalize_code
+from data_sources.run_context import run_context
 
 
 @pytest.mark.parametrize(
@@ -131,3 +132,63 @@ def test_fetch_status_store_results_tolerates_malformed_log_fields(tmp_path):
     assert results[0].actual_count == 0
     assert results[0].started_at.tzinfo is not None
     assert results[0].finished_at.tzinfo is not None
+
+
+def test_fetch_status_store_inherits_run_id_from_store_context(tmp_path):
+    path = tmp_path / "fetch_status.csv"
+    with run_context("run-context"):
+        store = FetchStatusStore(path)
+        store.record(
+            FetchResult.success(
+                dataset="calendar",
+                date="2026-08-08",
+                source="fixture",
+                expected_count=1,
+                actual_count=1,
+            )
+        )
+
+    result = store.latest("2026-08-08", "calendar", "all")
+    assert result is not None
+    assert result.run_id == "run-context"
+
+
+def test_fetch_status_store_does_not_override_explicit_run_id(tmp_path):
+    path = tmp_path / "fetch_status.csv"
+    with run_context("run-context"):
+        store = FetchStatusStore(path)
+        store.record(
+            FetchResult.success(
+                dataset="calendar",
+                date="2026-08-08",
+                source="fixture",
+                expected_count=1,
+                actual_count=1,
+                run_id="run-explicit",
+            )
+        )
+
+    result = store.latest("2026-08-08", "calendar", "all")
+    assert result is not None
+    assert result.run_id == "run-explicit"
+
+
+def test_build_price_matrix_stitches_legacy_history_per_stock_without_backfill():
+    import pandas as pd
+    from data_sources.price_provider import build_price_matrix
+
+    prices = pd.DataFrame([
+        {"date": "2026-07-17", "code": "sh600001", "close_legacy": 10.0, "close_qfq": None},
+        {"date": "2026-08-06", "code": "sh600001", "close_legacy": 12.0, "close_qfq": 18.0},
+        {"date": "2026-08-07", "code": "sh600001", "close_legacy": 13.0, "close_qfq": 19.5},
+        {"date": "2026-07-17", "code": "sz000002", "close_legacy": 20.0, "close_qfq": None},
+        {"date": "2026-08-07", "code": "sz000002", "close_legacy": 22.0, "close_qfq": None},
+        {"date": "2026-08-07", "code": "bj920001", "close_legacy": None, "close_qfq": 8.0},
+    ])
+
+    matrix = build_price_matrix(prices, "qfq", allow_legacy=True)
+
+    assert matrix.loc["2026-07-17", "sh600001"] == 15.0
+    assert matrix.loc["2026-08-07", "sh600001"] == 19.5
+    assert matrix.loc["2026-07-17", "sz000002"] == 20.0
+    assert pd.isna(matrix.loc["2026-07-17", "bj920001"])

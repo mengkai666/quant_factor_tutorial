@@ -5,6 +5,7 @@ import pytest
 
 from data_sources.price_provider import PRICE_COLUMNS, PriceProvider
 from data_sources.quality_gate import DataQualityError, MarketDataQualityGate
+from data_sources.run_context import run_context
 from data_sources.universe_provider import UNIVERSE_COLUMNS
 from pipeline.data_pipeline import DataPipeline
 
@@ -142,6 +143,56 @@ def test_publication_scopes_keep_market_facts_available_when_optional_modules_fa
     assert scopes["ai_review"]["mode"] == "unavailable"
 
 
+def test_quality_gate_requires_one_run_id_for_critical_modules():
+    from data_sources.quality_gate import aggregate_report_quality, build_module_quality
+
+    with run_context("run-a"):
+        modules = {
+            name: build_module_quality(name, total=1, covered=1)
+            for name in ("universe", "price_raw", "breadth", "limit_pool")
+        }
+        modules["echelon"] = build_module_quality("echelon", total=1, covered=1, critical=False)
+        quality = aggregate_report_quality(modules)
+
+    assert quality["run_id"] == "run-a"
+    assert quality["run_id_consistency"]["status"] == "ok"
+    assert quality["publication_mode"] == "decision"
+
+
+def test_quality_gate_blocks_missing_run_id_in_critical_module():
+    from data_sources.quality_gate import aggregate_report_quality, build_module_quality
+
+    with run_context("run-a"):
+        modules = {
+            "universe": build_module_quality("universe", total=1, covered=1),
+            "price_raw": build_module_quality("price_raw", total=1, covered=1),
+            "breadth": build_module_quality("breadth", total=1, covered=1),
+            "limit_pool": {**build_module_quality("limit_pool", total=1, covered=1), "run_id": ""},
+        }
+        quality = aggregate_report_quality(modules)
+
+    assert quality["run_id_consistency"]["status"] == "blocked"
+    assert "run_id_consistency" in quality["critical_blocked"]
+    assert quality["publication_mode"] == "facts_only"
+
+
+def test_quality_gate_degrades_mixed_run_ids():
+    from data_sources.quality_gate import aggregate_report_quality, build_module_quality
+
+    with run_context("run-a"):
+        modules = {
+            "universe": build_module_quality("universe", total=1, covered=1),
+            "price_raw": build_module_quality("price_raw", total=1, covered=1),
+            "breadth": build_module_quality("breadth", total=1, covered=1),
+            "limit_pool": {**build_module_quality("limit_pool", total=1, covered=1), "run_id": "run-b"},
+        }
+        quality = aggregate_report_quality(modules)
+
+    assert quality["run_id_consistency"]["status"] == "degraded"
+    assert "run_id_consistency" in quality["decision_degraded"]
+    assert quality["publication_mode"] == "observation"
+
+
 def test_ai_publication_scope_is_limited_when_guarded_ai_is_facts_only():
     from data_sources.quality_gate import build_module_quality, build_publication_scopes
 
@@ -174,3 +225,93 @@ def test_ai_publication_scope_is_full_for_decision_ready_output():
     }
 
     scopes = build_publication_scopes(modules)
+
+
+def _review_readiness_base_modules():
+    from data_sources.quality_gate import build_module_quality
+
+    return {
+        name: build_module_quality(name, total=1, covered=1, critical=False)
+        for name in ("universe", "price_raw", "breadth", "limit_pool", "echelon", "sector", "history")
+    }
+
+
+def test_review_readiness_forces_observation_without_previous_stock_delta():
+    from data_sources.quality_gate import aggregate_report_quality, apply_review_readiness_gates
+
+    modules = _review_readiness_base_modules()
+    quality = aggregate_report_quality(modules)
+    final = apply_review_readiness_gates(
+        quality,
+        daily_delta={"available": False, "reason": "缺少上一交易日结构化快照"},
+        ladder_metrics={
+            "bomb_rate": {"trials": 3, "rate": 0.2},
+            "reclose_rate": {"trials": 2, "rate": 0.5},
+            "board_structure": {"sample_size": 3},
+        },
+        ai_result={"status": "ok", "lineage": {"publication_mode": "decision"}},
+    )
+
+    assert final["publication_mode"] == "observation"
+    assert "daily_delta" in final["decision_degraded"]
+    assert "previous_limit_pool_snapshot" in final["missing_fields"]
+
+
+def test_review_readiness_forces_observation_without_bomb_metrics():
+    from data_sources.quality_gate import aggregate_report_quality, apply_review_readiness_gates
+
+    quality = aggregate_report_quality(_review_readiness_base_modules())
+    final = apply_review_readiness_gates(
+        quality,
+        daily_delta={"available": True, "reason": ""},
+        ladder_metrics={
+            "bomb_rate": {"trials": 0, "rate": None},
+            "reclose_rate": {"trials": 0, "rate": None},
+            "board_structure": {"sample_size": 0},
+        },
+        ai_result={"status": "ok", "lineage": {"publication_mode": "decision"}},
+    )
+
+    assert final["publication_mode"] == "observation"
+    assert "bomb_metrics" in final["decision_degraded"]
+    assert {"bomb_rate", "reclose_rate", "board_structure"}.issubset(
+        set(final["review_readiness"]["missing"])
+    )
+
+
+def test_review_readiness_forces_observation_when_ai_is_unavailable():
+    from data_sources.quality_gate import aggregate_report_quality, apply_review_readiness_gates
+
+    quality = aggregate_report_quality(_review_readiness_base_modules())
+    final = apply_review_readiness_gates(
+        quality,
+        daily_delta={"available": True, "reason": ""},
+        ladder_metrics={
+            "bomb_rate": {"trials": 3, "rate": 0.2},
+            "reclose_rate": {"trials": 2, "rate": 0.5},
+            "board_structure": {"sample_size": 3},
+        },
+        ai_result={"status": "fallback", "reason": "上游接口连续 2 次返回 503"},
+    )
+
+    assert final["publication_mode"] == "observation"
+    assert "ai" in final["decision_degraded"]
+
+
+def test_review_readiness_allows_decision_only_when_all_three_inputs_are_ready():
+    from data_sources.quality_gate import aggregate_report_quality, apply_review_readiness_gates
+
+    quality = aggregate_report_quality(_review_readiness_base_modules())
+    final = apply_review_readiness_gates(
+        quality,
+        daily_delta={"available": True, "reason": ""},
+        ladder_metrics={
+            "bomb_rate": {"trials": 3, "rate": 0.2},
+            "reclose_rate": {"trials": 2, "rate": 0.5},
+            "board_structure": {"sample_size": 3},
+        },
+        ai_result={"status": "sanitized", "lineage": {"publication_mode": "observation"}},
+    )
+
+    assert final["publication_mode"] == "decision"
+    assert final["decision_degraded"] == []

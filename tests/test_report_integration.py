@@ -192,9 +192,10 @@ def test_dashboard_exposes_partial_status_and_limit_pool_delta():
 
     html = generate_dashboard_html(ctx)
 
-    assert "部分可用" in html
-    assert "涨停池变化" in html
-    assert "新增首板" in html
+    assert "连板复盘" not in html
+    assert "二进三" in html
+    assert "样本待补" in html
+    assert "涨停 50 / 跌停 5" in html
 
 
 def test_dashboard_places_quality_and_lianban_before_strategy_content():
@@ -223,12 +224,14 @@ def test_dashboard_places_quality_and_lianban_before_strategy_content():
     }
 
     for html in (generate_dashboard_html(ctx), generate_dashboard_section(ctx)):
-        quality_pos = html.index("数据可信度")
-        lianban_pos = html.index("连板复盘")
-        strategy_pos = html.index("明日核心股票池") if "明日核心股票池" in html else html.index("观察名单")
-        assert quality_pos < strategy_pos
-        assert lianban_pos < strategy_pos
-        assert "数据降级" in html
+        quality_pos = html.index("数据状态")
+        facts_pos = html.index("涨跌停")
+        assert facts_pos < quality_pos
+        assert "盘面判断" in html
+        assert "连板复盘" not in html
+        assert "观察名单" not in html
+        assert "数据降级" not in html
+        assert "数据可信度" not in html
 
 
 def test_previous_daily_snapshot_ignores_same_day_and_future_files(tmp_path, monkeypatch):
@@ -341,9 +344,47 @@ def test_ai_gate_skips_facts_only_and_sanitizes_observation():
     assert calls[0]["schema_version"] == "report-facts/v1"
 
 
-def test_ai_gate_preserves_retry_failure_reason(monkeypatch):
+def test_ai_gate_drops_unsupported_promotion_metrics_without_previous_snapshot(tmp_path, monkeypatch):
     import ai_rebound
     from report_logic import ReportPolicy
+
+    monkeypatch.setattr(ai_rebound, "AI_OUTPUT_CACHE_DIR", tmp_path / "ai-output-cache")
+    result = ai_rebound.run_guarded_ai(
+        {
+            "report_date": "2026-08-07",
+            "daily_delta": {
+                "available": False,
+                "reason": "缺少上一交易日结构化快照",
+            },
+        },
+        ReportPolicy.from_mode("observation"),
+        caller=lambda payload: {
+            "observations": [
+                "分层晋级率全零，确认进入退潮中段。",
+                "10板孤峰且6至9板真空，高位结构脆弱。",
+            ],
+            "conditions": [
+                "晋级率能否从0%回到10%以上，尤其看1进2的36只样本。",
+                "观察豪尔赛能否晋级6板并填补高度断层。",
+            ],
+            "decision": "",
+        },
+    )
+
+    rendered = str(result["output"])
+    assert "晋级率全零" not in rendered
+    assert "36只样本" not in rendered
+    assert "10板孤峰且6至9板真空" in rendered
+    assert "观察豪尔赛能否晋级6板" in rendered
+    assert result["lineage"]["unsupported_metric_items_removed"] == 2
+
+
+def test_ai_gate_preserves_retry_failure_reason(tmp_path, monkeypatch):
+    import ai_rebound
+    from report_logic import ReportPolicy
+
+    monkeypatch.setattr(ai_rebound, "AI_OUTPUT_CACHE_DIR", tmp_path / "ai-output-cache")
+    monkeypatch.setattr(ai_rebound, "AI_PRIMARY_MAX_ATTEMPTS", 2)
 
     calls = []
 
@@ -368,6 +409,76 @@ def test_ai_gate_preserves_retry_failure_reason(monkeypatch):
     assert result["reason"] == "上游接口连续 2 次返回 503"
     assert result["lineage"]["attempt_count"] == 2
     assert result["lineage"]["http_status"] == 503
+
+
+def test_ai_gate_caches_sanitized_success_and_reuses_it_for_same_input(tmp_path, monkeypatch):
+    import ai_rebound
+    from report_logic import ReportPolicy
+
+    monkeypatch.setattr(ai_rebound, "AI_OUTPUT_CACHE_DIR", tmp_path / "ai-output-cache")
+    policy = ReportPolicy.from_mode("observation")
+    facts = {
+        "report_date": "2026-08-07",
+        "breadth": 0.53,
+        "quality_snapshot": {"status": "degraded", "publication_mode": "observation"},
+    }
+
+    success = ai_rebound.run_guarded_ai(
+        facts,
+        policy,
+        caller=lambda payload: {
+            "observations": ["高位梯队断层，赚钱效应偏点状"],
+            "conditions": ["观察次高梯队能否晋级"],
+            "decision": "建议加仓到7成",
+        },
+    )
+
+    def fail(_payload):
+        raise RuntimeError("429 concurrency limit exceeded")
+
+    cached = ai_rebound.run_guarded_ai(facts, policy, caller=fail)
+
+    assert success["status"] == "sanitized"
+    assert success["output"]["decision"] == ""
+    assert cached["status"] == "sanitized"
+    assert cached["output"] == success["output"]
+    assert cached["lineage"]["cache_hit"] is True
+    assert cached["lineage"]["cache_reason"] == "AI 调用失败，复用相同输入的最近成功结果"
+    assert cached["lineage"]["upstream_failure"] == "429 concurrency limit exceeded"
+    cache_files = list((tmp_path / "ai-output-cache").glob("*.json"))
+    assert len(cache_files) == 1
+    assert "ANTHROPIC_API_KEY" not in cache_files[0].read_text(encoding="utf-8")
+
+
+def test_ai_gate_cache_never_crosses_input_fingerprint_or_facts_only_policy(tmp_path, monkeypatch):
+    import ai_rebound
+    from report_logic import ReportPolicy
+
+    monkeypatch.setattr(ai_rebound, "AI_OUTPUT_CACHE_DIR", tmp_path / "ai-output-cache")
+    observation = ReportPolicy.from_mode("observation")
+    ai_rebound.run_guarded_ai(
+        {"report_date": "2026-08-07", "breadth": 0.53},
+        observation,
+        caller=lambda payload: {"observations": ["高位退潮"], "decision": ""},
+    )
+
+    def fail(_payload):
+        raise RuntimeError("temporary failure")
+
+    different = ai_rebound.run_guarded_ai(
+        {"report_date": "2026-08-08", "breadth": 0.61}, observation, caller=fail,
+    )
+    facts_only = ai_rebound.run_guarded_ai(
+        {"report_date": "2026-08-07", "breadth": 0.53},
+        ReportPolicy.from_mode("facts_only"),
+        caller=fail,
+    )
+
+    assert different["status"] == "failed"
+    assert different["output"] is None
+    assert different["lineage"].get("cache_hit") is not True
+    assert facts_only["status"] == "skipped"
+    assert facts_only["lineage"].get("cache_hit") is not True
 
 def test_audit_json_is_atomic_and_contains_lineage(tmp_path):
     from report_audit import write_report_audit
@@ -485,6 +596,9 @@ def test_dashboard_renders_review_closure_sections_from_report_context():
         },
         daily_delta={
             "available": True,
+            "limit_pool": {
+                "available": True,
+            },
             "highlights": [
                 {"label": "空间高度", "current": 4, "previous": 3, "delta": 1},
                 {"label": "涨停家数", "current": 66, "previous": 52, "delta": 14},
@@ -500,12 +614,14 @@ def test_dashboard_renders_review_closure_sections_from_report_context():
     )
     html = decision_dashboard.generate_dashboard_html(ctx)
 
-    assert "今日相对昨日" in html
-    assert "昨日连板反馈" in html
-    assert "数据来源与质量" in html
-    assert "历史预测复盘" in html
-    assert "甲" in html and "晋级" in html
-    assert "eastmoney" in html
+    assert "今日相对昨日" not in html
+    assert "昨日连板反馈" not in html
+    assert "来源与异常" not in html
+    assert "历史预测复盘" not in html
+    assert "涨停 66 / 跌停 8" in html
+    assert "数据状态" in html
+    assert "eastmoney" not in html
+    assert "AI 研判不可用" not in html
 
 
 
@@ -599,24 +715,12 @@ def test_dashboard_explains_limit_pool_reconciliation_and_degraded_scope():
 
     html = decision_dashboard.generate_dashboard_html(ctx)
 
-    assert "当前可用范围：观察与条件触发" in html
-    assert "分层可用性" in html
-    assert "市场事实=完整可用" in html
-    assert "连板复盘=完整可用" in html
-    assert "主线归因=条件性" in html
-    assert "复权收益=不可用" in html
-    assert "AI 复盘=不可用" in html
-    assert "涨停事实池：79 只" in html
-    assert "题材归因命中：53 / 79（67.09%）" in html
-    assert "尚未归因：26 只" in html
-    assert "分类池独有：6 只" in html
-    assert "事实池完整不等于题材归因完整" in html
-    for label in ("证券主数据", "报告日价格", "市场宽度", "涨停事实池", "题材归因", "连板梯队", "前复权价格", "AI 研判"):
-        assert label in html
-    assert "AI 研判未生成" in html
-    assert "连续 2 次返回 503" in html
-    assert "不以规则文本冒充 AI 输出" in html
-    assert "缺少上一交易日结构化快照；历史 HTML 不作为计算源" in html
+    assert "数据状态" in html
+    assert "盘面判断" in html
+    assert "质量范围" not in html
+    assert "受限模块" not in html
+    assert "来源与异常" not in html
+    assert "AI 研判</b>：不可用 ·" not in html
     assert "<b>limit_pool</b>" not in html
     assert "<b>price_raw</b>" not in html
 def test_report_entrypoint_passes_one_context_to_all_report_surfaces():
@@ -675,11 +779,82 @@ def test_dashboard_non_decision_outputs_are_semantically_clean():
         embedded = decision_dashboard.generate_dashboard_section(ctx)
         assert scan_forbidden_semantics(standalone, mode) == []
         assert scan_forbidden_semantics(embedded, mode) == []
-        expected_copy = "当前仅展示已校验事实" if mode == "facts_only" else "当前展示条件性观察"
+        expected_copy = "基础事实有限" if mode == "facts_only" else "盘面综合研判"
         assert expected_copy in standalone
         assert expected_copy in embedded
-        assert "不发布" not in standalone
-        assert "不发布" not in embedded
+        if mode == "facts_only":
+            for forbidden in ("锁仓", "加仓", "立即清仓", "建议仓位", "确定性买入"):
+                assert forbidden not in standalone
+                assert forbidden not in embedded
+        else:
+            assert "建议仓位" in standalone
+            assert "今日无合格标的，不开新仓" in standalone
+            assert "建议仓位" in embedded
+
+
+def test_dashboard_normalizes_conditional_layers_and_renders_lineage_sources():
+    import decision_dashboard
+    from report_logic import ReportContext, ReportPolicy
+
+    context = ReportContext(
+        report_date="2026-08-07",
+        policy=ReportPolicy.from_mode("decision"),
+        quality={
+            "status": "ok",
+            "publication_mode": "decision",
+            "run_id": "run-1",
+            "modules": {
+                "price_raw": {
+                    "status": "ok",
+                    "source": "price_cache_raw",
+                    "lineage": {"source_chain": ["price_cache_raw"], "run_id": "run-1"},
+                },
+                "breadth": {
+                    "status": "ok",
+                    "source": "price_cache",
+                    "lineage": {
+                        "source_chain": ["fupan", "price_cache"],
+                        "used_fallback": True,
+                        "run_id": "run-1",
+                    },
+                },
+            },
+        },
+        facts={
+            "market_state": {
+                "status": "ok",
+                "publication_mode": "decision",
+                "statistics_layer": {"status": "unverified", "label": "统计待核验"},
+                "decision_layer": {"status": "conditional", "label": "仅条件性结论"},
+            }
+        },
+    ).to_dict()
+
+    ctx = decision_dashboard.build_dashboard_ctx(
+        timing={"scene": "测试"},
+        advance_decline={
+            "up": 3000,
+            "down": 2000,
+            "zt": 10,
+            "dt": 2,
+            "market_total": 5000,
+            "market_covered": 5000,
+        },
+        report_context=context,
+    )
+    html = decision_dashboard.generate_dashboard_html(ctx)
+
+    assert ctx["publication_mode"] == "observation"
+    assert ctx["market_state"]["publication_mode"] == "observation"
+    assert "盘面综合研判" in html
+    assert "观察与条件触发" not in html
+    assert "完整决策" not in html
+    assert "数据源：未声明" not in html
+    assert "备用源：未配置" not in html
+    assert "数据状态" in html
+    assert "price_cache_raw" not in html
+    assert "fupan → price_cache" not in html
+    assert "run-1" not in html
 
 
 def test_dashboard_reuses_canonical_ladder_metrics_from_report_context():
@@ -697,6 +872,7 @@ def test_dashboard_reuses_canonical_ladder_metrics_from_report_context():
     canonical = compute_ladder_metrics(current, previous_echelon=previous)
     report_context = {
         "report_date": "2026-08-06",
+        "daily_delta": {"available": True},
         "facts": {
             "ladder_metrics": canonical,
             "lianban_review": build_lianban_review(canonical),
@@ -716,8 +892,9 @@ def test_dashboard_reuses_canonical_ladder_metrics_from_report_context():
 
     assert ctx["ladder_metrics"]["streak_pool_promotion"]["text"] == "1/2（50%）"
     html = generate_dashboard_html(ctx)
-    assert "昨日连板池晋级率（高度≥2）：50%（1/2）" in html
-    assert "昨日连板池晋级率（高度≥2）：样本不足（0/0）" not in html
+    assert "二进三" in html
+    assert "1/1（100%）" in html
+    assert "0/0" not in html
 
 
 def test_ai_primary_503_uses_configured_fallback_model(monkeypatch):
@@ -751,6 +928,7 @@ def test_ai_primary_503_uses_configured_fallback_model(monkeypatch):
     monkeypatch.setattr(ai_rebound, 'ANTHROPIC_ENABLE', True)
     monkeypatch.setattr(ai_rebound, 'ANTHROPIC_MODEL', 'primary-model')
     monkeypatch.setattr(ai_rebound, 'ANTHROPIC_FALLBACK_MODEL', 'fallback-model')
+    monkeypatch.setattr(ai_rebound, 'AI_PRIMARY_MAX_ATTEMPTS', 2)
     monkeypatch.setattr(ai_rebound, 'AI_RETRY_BASE_DELAY', 0.5)
     monkeypatch.setattr(ai_rebound, 'AI_RETRY_MAX_DELAY', 2.0)
     monkeypatch.setattr(ai_rebound.requests, 'post', post)
@@ -798,6 +976,7 @@ def test_ai_retryable_request_exception_is_diagnosed_and_retried(monkeypatch):
     monkeypatch.setattr(ai_rebound, 'ANTHROPIC_API_KEY', 'test-key')
     monkeypatch.setattr(ai_rebound, 'ANTHROPIC_ENABLE', True)
     monkeypatch.setattr(ai_rebound, 'ANTHROPIC_FALLBACK_MODEL', '')
+    monkeypatch.setattr(ai_rebound, 'AI_PRIMARY_MAX_ATTEMPTS', 2)
     monkeypatch.setattr(ai_rebound, 'AI_RETRY_BASE_DELAY', 0.25)
     monkeypatch.setattr(ai_rebound, 'AI_RETRY_MAX_DELAY', 1.0)
     monkeypatch.setattr(ai_rebound.requests, 'post', post)
@@ -813,3 +992,201 @@ def test_ai_retryable_request_exception_is_diagnosed_and_retried(monkeypatch):
     assert diagnostics['model_attempts'][0]['error_type'] == 'RequestException'
     assert diagnostics['attempt_count'] == 2
     assert diagnostics['http_status'] == 200
+
+
+def test_ai_primary_attempt_count_is_configurable(monkeypatch):
+    import ai_rebound
+
+    calls = []
+
+    class Response:
+        headers = {}
+
+        def __init__(self, status_code):
+            self.status_code = status_code
+            self.text = 'retry' if status_code != 200 else 'ok'
+
+        def json(self):
+            return {
+                'content': [{
+                    'type': 'text',
+                    'text': '{"facts":["事实"],"observations":["观察"],"conditions":[],"risks":[],"decision":""}',
+                }],
+            }
+
+    def post(*args, **kwargs):
+        calls.append(1)
+        return Response(503 if len(calls) < 3 else 200)
+
+    monkeypatch.setattr(ai_rebound, 'ANTHROPIC_API_KEY', 'test-key')
+    monkeypatch.setattr(ai_rebound, 'ANTHROPIC_ENABLE', True)
+    monkeypatch.setattr(ai_rebound, 'ANTHROPIC_MODEL', 'primary-model')
+    monkeypatch.setattr(ai_rebound, 'ANTHROPIC_FALLBACK_MODEL', '')
+    monkeypatch.setattr(ai_rebound, 'AI_PRIMARY_MAX_ATTEMPTS', 3)
+    monkeypatch.setattr(ai_rebound, 'AI_RETRY_BASE_DELAY', 0.1)
+    monkeypatch.setattr(ai_rebound, 'AI_RETRY_MAX_DELAY', 1.0)
+    monkeypatch.setattr(ai_rebound.requests, 'post', post)
+    monkeypatch.setattr(ai_rebound.time, 'sleep', lambda delay: None)
+
+    result, diagnostics = ai_rebound.generate_ai_rebound(
+        {'breadth': 0.6}, timeout=1, return_diagnostics=True,
+    )
+
+    assert result['facts'] == ['事实']
+    assert len(calls) == 3
+    assert diagnostics['attempt_count'] == 3
+    assert diagnostics['http_status'] == 200
+
+
+def test_guarded_ai_uses_configurable_default_request_timeout(monkeypatch):
+    import ai_rebound
+    from report_logic import ReportPolicy
+
+    observed = {}
+
+    class Response:
+        status_code = 200
+        text = 'ok'
+        headers = {}
+
+        def json(self):
+            return {
+                'content': [{
+                    'type': 'text',
+                    'text': '{"facts":["事实"],"observations":["观察"],"conditions":[],"risks":[],"decision":""}',
+                }],
+            }
+
+    def post(*args, **kwargs):
+        observed['timeout'] = kwargs['timeout']
+        return Response()
+
+    monkeypatch.setattr(ai_rebound, 'ANTHROPIC_API_KEY', 'test-key')
+    monkeypatch.setattr(ai_rebound, 'ANTHROPIC_ENABLE', True)
+    monkeypatch.setattr(ai_rebound, 'AI_REQUEST_TIMEOUT', 95.0)
+    monkeypatch.setattr(ai_rebound.requests, 'post', post)
+
+    result = ai_rebound.run_guarded_ai(
+        {'breadth': 0.6}, ReportPolicy.from_mode('observation'),
+    )
+
+    assert result['status'] == 'sanitized'
+    assert observed['timeout'] == 95.0
+
+
+def test_ai_prompt_compacts_verbose_market_and_quality_facts():
+    from copy import deepcopy
+
+    import ai_rebound
+
+    facts = {
+        "market_snapshot": {
+            "limit_pool_rows": [
+                {
+                    "code": f"{index:06d}",
+                    "name": f"股票{index}",
+                    "height": 3 if index < 30 else 1,
+                    "mainline": "AI算力",
+                }
+                for index in range(40)
+            ],
+        },
+        "progression_chain": {
+            "rows": [
+                {
+                    "code": f"{index:06d}",
+                    "name": f"股票{index}",
+                    "previous_height": (index % 6) + 1,
+                    "current_height": (index % 6) + 2,
+                    "status": "promoted" if index % 3 else "limit_down",
+                }
+                for index in range(40)
+            ],
+        },
+        "quality_snapshot": {
+            "status": "degraded",
+            "publication_mode": "observation",
+            "modules": {
+                "price_raw": {
+                    "status": "ok",
+                    "coverage_pct": 1.0,
+                    "missing_fields": [],
+                    "errors": [],
+                    "lineage": {"source_chain": ["baostock", "cache"]},
+                    "source": "baostock",
+                },
+            },
+        },
+    }
+    original = deepcopy(facts)
+
+    compacted = ai_rebound._compact_facts_for_prompt(facts)
+
+    assert facts == original
+    assert compacted["market_snapshot"]["limit_pool_row_count"] == 40
+    assert len(compacted["market_snapshot"]["limit_pool_rows"]) <= 24
+    assert all(row["height"] >= 2 for row in compacted["market_snapshot"]["limit_pool_rows"])
+    assert compacted["progression_chain"]["row_count"] == 40
+    assert len(compacted["progression_chain"]["rows"]) <= 20
+    assert compacted["quality_snapshot"]["modules"]["price_raw"] == {
+        "status": "ok",
+        "coverage_pct": 1.0,
+        "missing_fields": [],
+        "errors": [],
+    }
+
+
+def test_generate_ai_rebound_sends_compacted_facts_to_gateway(monkeypatch):
+    import ai_rebound
+
+    captured = {}
+
+    class Response:
+        status_code = 200
+        text = "ok"
+        headers = {}
+
+        def json(self):
+            return {
+                "content": [{
+                    "type": "text",
+                    "text": '{"facts":["事实"],"observations":["观察"],"conditions":[],"risks":[],"decision":"判断"}',
+                }],
+            }
+
+    def post(*args, **kwargs):
+        captured["prompt"] = kwargs["json"]["messages"][0]["content"]
+        return Response()
+
+    facts = {
+        "market_snapshot": {
+            "limit_pool_rows": [
+                {"code": f"{index:06d}", "name": f"股票{index}", "height": 3 if index < 30 else 1}
+                for index in range(40)
+            ],
+        },
+        "quality_snapshot": {
+            "status": "ok",
+            "modules": {
+                "price_raw": {
+                    "status": "ok",
+                    "coverage_pct": 1.0,
+                    "missing_fields": [],
+                    "errors": [],
+                    "lineage": {"source_chain": ["baostock", "cache"]},
+                },
+            },
+        },
+    }
+
+    monkeypatch.setattr(ai_rebound, "ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setattr(ai_rebound, "ANTHROPIC_ENABLE", True)
+    monkeypatch.setattr(ai_rebound.requests, "post", post)
+
+    result = ai_rebound.generate_ai_rebound(facts, timeout=1)
+
+    assert result["decision"] == "判断"
+    assert '"limit_pool_row_count": 40' in captured["prompt"]
+    assert '"000039"' not in captured["prompt"]
+    assert '"lineage"' not in captured["prompt"]
+    assert len(facts["market_snapshot"]["limit_pool_rows"]) == 40

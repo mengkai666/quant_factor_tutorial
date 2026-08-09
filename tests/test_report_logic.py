@@ -8,6 +8,19 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(_ROOT, "src"))
 
 
+def test_observation_policy_allows_bounded_actions_without_probabilities_or_legacy_pool():
+    from report_logic import ReportPolicy, scan_forbidden_semantics
+
+    policy = ReportPolicy.from_mode("observation")
+
+    assert policy.allow_positions is True
+    assert policy.allow_actions is True
+    assert policy.allow_probabilities is False
+    assert policy.allow_focus_pool is False
+    assert scan_forbidden_semantics("建议仓位 2-4 成，回封买入", policy) == []
+    assert "概率" in scan_forbidden_semantics("上涨概率 70%", policy)
+
+
 def test_market_ratios_keep_breadth_and_advance_decline_distinct():
     from report_logic import compute_market_ratios
     got = compute_market_ratios(2000, 3000)
@@ -278,8 +291,9 @@ def test_dashboard_uses_distinct_ratios_quality_and_dynamic_scenarios():
     html = generate_dashboard_html(ctx)
     assert "上涨占比" in html
     assert "涨跌比" in html
-    assert "数据源" in html
-    assert "覆盖率" in html
+    assert "数据已更新" in html
+    assert "沪深北全A" in html
+    assert "数据源" not in html
     assert "used_fallback" not in html
     assert "概率 20%" not in html
     assert "None" not in html
@@ -319,8 +333,9 @@ def test_dashboard_catalyst_none_is_normalized_in_both_renderers():
     }
     html = generate_dashboard_html(ctx) + generate_dashboard_section(ctx)
     assert "None" not in html
-    assert "无近期催化" in html
-    assert "高度断层" in html
+    assert "无近期催化" not in html
+    assert "观察名单" not in html
+    assert "空间结构" in html
 
 def test_market_state_blocks_strong_conclusions_when_quality_is_incomplete():
     from report_logic import assess_data_quality, build_market_state
@@ -384,7 +399,8 @@ def test_blocked_scenarios_still_render_without_historical_rate():
     )
 
     html = generate_dashboard_html(ctx)
-    assert "数据未就位" in html
+    assert "基础事实有限" in html
+    assert "明日验证路径" not in html
     assert "historical_rate" not in html
 
 
@@ -608,9 +624,13 @@ def test_dashboard_surfaces_evidence_and_layered_quality_in_both_views():
     )
     html = generate_dashboard_html(ctx)
     section = generate_dashboard_section(ctx)
-    for token in ("样本", "置信区间", "新鲜度", "数据层", "统计层", "决策层"):
-        assert token in html
-        assert token in section
+    for rendered in (html, section):
+        assert "数据佐证" in rendered
+        assert "明日验证路径" not in rendered
+        assert "等待验证信号" not in rendered
+    for token in ("新鲜度", "数据层", "统计层", "决策层", "数据源", "run_id"):
+        assert token not in html
+        assert token not in section
 
 
 def _dashboard_fixture_with_quality(market_prefixes, *, used_fallback=False):
@@ -655,8 +675,8 @@ def test_blocked_dashboard_only_shows_facts_and_withholds_decisions():
     html = generate_dashboard_html(ctx)
     section = generate_dashboard_section(ctx)
     for rendered in (html, section):
-        assert "报告可用范围" in rendered
-        assert "股票池未发布" in rendered
+        assert "盘面事实" in rendered
+        assert "股票池未发布" not in rendered
         assert "锁仓" not in rendered
         assert "立即清仓" not in rendered
         assert "建议仓位" not in rendered
@@ -669,10 +689,14 @@ def test_degraded_dashboard_is_observation_only_and_has_no_unconditional_action(
 
     ctx = _dashboard_fixture_with_quality(["sh", "sz", "bj"], used_fallback=True)
     html = generate_dashboard_html(ctx)
-    assert "报告可用范围" in html
-    assert "观察名单" in html
-    assert "条件触发" in html
-    for forbidden in ("锁仓", "立即清仓", "加仓", "建议仓位", "确定性买入"):
+    assert "盘面判断" in html
+    assert "明日执行计划" in html
+    assert "测试龙头" in html
+    assert "不追；断板减仓" in html
+    assert "建议仓位" in html
+    assert "数据状态" in html
+    assert "观察模式" not in html
+    for forbidden in ("锁仓主升", "立即清仓", "确定性买入"):
         assert forbidden not in html
 
 
@@ -744,10 +768,13 @@ def test_dashboard_renders_ladder_quality_and_mainline_concentration():
             "market_prefixes": ["sh", "sz", "bj"], "missing_fields": [], "errors": []},
     }
     for html in (generate_dashboard_html(ctx), generate_dashboard_section(ctx)):
-        assert "连板质量" in html
-        assert "首板→二板晋级率" in html
-        assert "炸板率" in html
-        assert "主线集中度" in html
+        assert "连板质量" not in html
+        assert "首板→二板：" not in html
+        assert "炸板率" not in html
+        assert "主线集中度" not in html
+        assert "二进三" in html
+        assert "空间结构" in html
+        assert "领先主线" in html
         assert "AI算力" in html
         assert "0.0%" not in html
 
@@ -768,7 +795,7 @@ def test_dashboard_facts_only_does_not_render_probability_or_strategy_sections()
             "market_prefixes": ["sh", "sz"], "missing_fields": [], "errors": ["AD_RECONCILIATION_FAILED"]},
     }
     html = generate_dashboard_html(ctx)
-    assert "事实层" in html
+    assert "基础事实有限" in html
     assert "概率" not in html
     assert "情景决策树" not in html
     assert "锁仓主升" not in html
@@ -786,8 +813,8 @@ def test_main_report_timing_radar_facts_only_hides_position_and_actions():
         "color": "#ff4444",
     }
     html = _render_timing_radar_html(timing, {"publication_mode": "facts_only"})
-    assert "数据未就位 / 仅展示事实" in html
-    assert "报告可用范围" in html
+    assert "盘面判断" in html
+    assert "基础事实有限" in html
     for forbidden in ("建议仓位", "兑现减仓", "高位不接", "前排逢高兑现", "空仓等新主线"):
         assert forbidden not in html
 
@@ -803,8 +830,9 @@ def test_main_report_timing_radar_observation_hides_position_and_unconditional_a
         "color": "#ff4444",
     }
     html = _render_timing_radar_html(timing, {"publication_mode": "observation"})
-    assert "观察 / 等待条件触发" in html
-    assert "条件触发" in html
+    assert "盘面判断" in html
+    assert "观察模式" in html
+    assert "满足触发条件后再评估" in html
     for forbidden in ("建议仓位", "锁仓主升", "去弱留强", "7成仓位"):
         assert forbidden not in html
 
@@ -1087,6 +1115,39 @@ def test_reconcile_limit_pool_rejects_unverified_classification_date():
     assert got["matched_count"] == 0
     assert got["date_missing_count"] == 1
 
+def test_reconcile_limit_pool_rejects_unverified_fupan_as_authoritative():
+    from report_logic import reconcile_limit_pool
+
+    got = reconcile_limit_pool(
+        {
+            "source": "fupan_ladder",
+            "date": "20260807",
+            "date_verified": False,
+            "category": {
+                "首板": [
+                    {"code": "600001", "name": "样本", "level": 1},
+                    {"code": "600002", "name": "样本2", "level": 1},
+                ]
+            },
+        },
+        [
+            {
+                "日期": "20260807",
+                "代码": "sh600001",
+                "名称": "样本",
+                "连板数": 1,
+            }
+        ],
+        expected_date="20260807",
+    )
+
+    assert got["observed_count"] == 2
+    assert got["authoritative_count"] == 0
+    assert got["date_verified"] is False
+    assert got["date_aligned"] is False
+    assert "FuPan日期未验证" in " ".join(got["warnings"])
+
+
 def test_build_echelon_table_normalizes_cls_and_fupan_codes_before_attribution():
     import pandas as pd
     import 主线强度追踪 as report
@@ -1245,3 +1306,172 @@ def test_assess_data_quality_exposes_overflow_without_publishing_invalid_coverag
     assert got["raw_coverage_pct"] == round(5190 / 2467 * 100, 1)
     assert got["status"] == "blocked"
     assert any("COVERAGE_OVERFLOW" in error for error in got["errors"])
+
+
+def test_observation_mood_card_keeps_analysis_without_position_advice():
+    import 主线强度追踪 as report
+
+    html = report._render_observation_mood_card(
+        latest_text="52.8%",
+        latest_state="⚖️ 震荡分歧",
+        direction="偏多",
+        emoji="📈",
+        range_lo=45,
+        range_hi=65,
+        stars_html="★★★☆☆",
+        reasons_html="• 情绪连续上行<br>• 上涨家数回暖",
+        color="#d29922",
+    )
+
+    assert "最新情绪值" in html
+    assert "当前状态" in html
+    assert "倾向方向" in html
+    assert "规则观察区间" in html
+    assert "信号强度" in html
+    assert "情绪连续上行" in html
+    assert "仓位建议" not in html
+    assert "加仓" not in html
+
+
+def test_observation_market_stance_keeps_reasons_and_triggers_without_actions():
+    from market_stance import render_stance_html
+
+    result = {
+        "stance": "观望档 · 轻仓",
+        "color": "#d29922",
+        "head": "A/D 1.08 处分歧区，梯队结构仍需确认。",
+        "play": "不押方向，空仓等破位。",
+        "ad_series": [0.92, 1.01, 1.08],
+        "zt": 83,
+        "dt": 4,
+        "max_h": 4,
+        "triggers": [{
+            "name": "扳机③ 右侧转攻",
+            "cond": "A/D 连续2日≥1.05 + 梯队不断档",
+            "hit": True,
+        }],
+    }
+
+    html = render_stance_html(result, observation_only=True)
+
+    assert "A/D 1.08 处分歧区" in html
+    assert "近3日 A/D 比值" in html
+    assert "右侧转攻" in html
+    assert "已触发" in html
+    assert "操作:" not in html
+    assert "空仓等破位" not in html
+
+
+def test_price_matrix_stitches_legacy_history_to_partial_qfq_series():
+    import pandas as pd
+    import 主线强度追踪 as report
+
+    prices = pd.DataFrame([
+        {"date": "2026-08-04", "code": "sz301251", "close_legacy": 30.0, "close_qfq": None},
+        {"date": "2026-08-05", "code": "sz301251", "close_legacy": 33.0, "close_qfq": None},
+        {"date": "2026-08-06", "code": "sz301251", "close_legacy": 36.0, "close_qfq": 39.6},
+        {"date": "2026-08-07", "code": "sz301251", "close_legacy": 39.6, "close_qfq": 43.56},
+    ])
+
+    matrix = report._price_matrix(prices, "qfq", allow_legacy=True)
+
+    assert matrix.loc["2026-08-04", "sz301251"] == 33.0
+    assert matrix.loc["2026-08-05", "sz301251"] == 36.3
+    assert matrix.loc["2026-08-06", "sz301251"] == 39.6
+    assert matrix.loc["2026-08-07", "sz301251"] == 43.56
+    returns = matrix["sz301251"].pct_change().dropna()
+    assert (returns.abs() > 0.001).all()
+
+
+def test_turning_stock_leaders_rank_stitched_qfq_and_use_current_names(tmp_path, monkeypatch):
+    import pandas as pd
+    import stock_representatives
+    from data_sources.name_resolver import NameResolution
+
+    prices = pd.DataFrame([
+        {"date": "2026-07-17", "code": "sh600001", "close_legacy": 10.0, "close_qfq": None},
+        {"date": "2026-08-07", "code": "sh600001", "close_legacy": 15.0, "close_qfq": 30.0},
+        {"date": "2026-07-17", "code": "sz000002", "close_legacy": 20.0, "close_qfq": None},
+        {"date": "2026-08-07", "code": "sz000002", "close_legacy": 24.0, "close_qfq": 24.0},
+    ])
+    path = tmp_path / "prices.csv"
+    prices.to_csv(path, index=False)
+    monkeypatch.setattr(stock_representatives, "PRICE_CACHE", str(path))
+    names = NameResolution(
+        names={"sh600001": "领涨股份", "sz000002": "传智教育"},
+        sources={"sh600001": "universe", "sz000002": "universe"},
+        conflicts=[],
+    )
+
+    result = stock_representatives.build_turning_stock_leaders(
+        {"底部至今": ("2026-07-17", "2026-08-07")},
+        name_resolution=names,
+        expected_universe_size=2,
+    )
+
+    assert result["usable"] is True
+    assert result["coverage"] == 1.0
+    assert [row["name"] for row in result["rows"]] == ["领涨股份", "传智教育"]
+    assert result["rows"][0]["return"] == 50.0
+    assert result["rows"][1]["st"] is False
+
+
+def test_turning_name_resolution_prefers_security_master_over_stale_industry(tmp_path, monkeypatch):
+    import pandas as pd
+    import stock_representatives
+
+    master = tmp_path / "security_master.csv"
+    industry = tmp_path / "industry_cache.csv"
+    pd.DataFrame([
+        {"code": "sz003032", "name": "传智教育", "is_st": False},
+    ]).to_csv(master, index=False)
+    pd.DataFrame([
+        {"code": "sz003032", "name": "*ST传智", "industry": "教育"},
+    ]).to_csv(industry, index=False)
+    monkeypatch.setattr(stock_representatives, "SECURITY_MASTER_CACHE", str(master), raising=False)
+    monkeypatch.setattr(stock_representatives, "UNIVERSE_CACHE", str(tmp_path / "missing.csv"))
+    monkeypatch.setattr(stock_representatives, "INDUSTRY_CACHE", str(industry))
+
+    names = stock_representatives._load_name_resolution()
+
+    assert names.names["sz003032"] == "传智教育"
+    assert names.sources["sz003032"] == "universe"
+
+
+def test_turning_summary_uses_major_bottom_and_top_three_sector_returns():
+    import pandas as pd
+    from phase_resonance import build_turning_summary
+
+    det = {
+        "shape": "箱体突破 (箱体 3768~3941, 振幅 4.6%, 收在上沿)",
+        "bottom": {"date": "2026-07-17", "close": 3764.0},
+        "latest": {"date": "2026-08-07", "close": 3940.0},
+        "index_series": [
+            {"date": "2026-07-17", "close": 3764.0},
+            {"date": "2026-07-20", "close": 3800.0},
+            {"date": "2026-08-07", "close": 3940.0},
+        ],
+    }
+    table = pd.DataFrame([
+        {"板块": "教育", "底部至今": 25.56},
+        {"板块": "贵金属", "底部至今": 35.09},
+        {"板块": "能源金属", "底部至今": 17.38},
+        {"板块": "软件开发", "底部至今": 16.10},
+    ])
+    stocks = {
+        "usable": True,
+        "coverage": 0.93,
+        "rows": [
+            {"code": "sh600001", "name": "领涨股份", "return": 50.0, "st": False}
+        ],
+    }
+
+    summary = build_turning_summary(det, table, stocks)
+
+    assert summary["current_phase"]["label"] == "箱体突破"
+    assert summary["current_phase"]["turning_date"] == "2026-07-17"
+    assert summary["current_phase"]["trading_days"] == 3
+    assert summary["current_phase"]["index_return"] == 4.68
+    assert [row["name"] for row in summary["turning_leaders"]["sectors"]] == [
+        "贵金属", "教育", "能源金属"
+    ]

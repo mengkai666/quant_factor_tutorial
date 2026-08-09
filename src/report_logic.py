@@ -53,7 +53,7 @@ class ReportPolicy:
         if normalized == "decision":
             return cls(normalized, True, True, True, True, True, True, True, True)
         if normalized == "observation":
-            return cls(normalized, True, True, True, False, False, False, True, False)
+            return cls(normalized, True, True, True, False, True, True, True, False)
         return cls("facts_only", True, False, False, False, False, False, False)
 
     def to_dict(self) -> dict[str, Any]:
@@ -78,6 +78,10 @@ class ReportContext:
         return {
             "schema_version": "report-context/v1",
             "report_date": self.report_date,
+            # Keep the batch identifier at the context root as well as in the
+            # module lineage. Consumers should not have to traverse lineage
+            # just to correlate one report run across all surfaces.
+            "run_id": self.lineage.get("run_id") if isinstance(self.lineage, dict) else None,
             "publication_mode": self.policy.mode,
             "policy": self.policy.to_dict(),
             "quality": self.quality,
@@ -177,7 +181,12 @@ def reconcile_limit_pool(
     classified_rows: Iterable[dict[str, Any]] | Any | None,
     expected_date: Any = None,
 ) -> dict[str, Any]:
-    """以 FuPan 天梯为涨停事实池，并对账题材归因池的覆盖与集合差异。"""
+    """对齐事实池与题材归因池，并返回可追溯的集合差异。
+
+    该函数历史上把参数命名为 ``fupan_ladder``，但事实池现在可能
+    来自不可变日报快照或本地同日缓存。来源未明确验证日期时，仍可
+    统计其观测数量，但不得把它纳入 authoritative 集合。
+    """
     root = dict(fupan_ladder or {})
     ladder = root
     if isinstance(ladder.get("ladder"), dict):
@@ -194,7 +203,11 @@ def reconcile_limit_pool(
         ladder.get("date") or ladder.get("trade_date") or ladder.get("report_date")
         or root.get("date") or root.get("trade_date") or root.get("report_date")
     )
-    if expected and not authoritative_date:
+    fact_date_verified = (
+        ladder.get("date_verified", root.get("date_verified", True)) is not False
+    )
+    source = str(root.get("source") or ladder.get("source") or "fupan_ladder").strip()
+    if expected and not authoritative_date and fact_date_verified:
         # 指定日期请求的事实池没有独立日期字段时，沿用请求口径记录 lineage。
         authoritative_date = expected
 
@@ -238,16 +251,16 @@ def reconcile_limit_pool(
             raw_row.get("日期") or raw_row.get("date") or raw_row.get("trade_date")
             or raw_row.get("report_date")
         )
-        date_verified = raw_row.get("date_verified", True)
+        row_date_verified = raw_row.get("date_verified", True)
         if expected:
-            if not row_date or date_verified is False:
+            if not row_date or row_date_verified is False:
                 date_missing_count += 1
                 continue
             if row_date != expected:
                 date_mismatch_count += 1
                 continue
             classification_dates.add(row_date)
-        elif row_date and date_verified is not False:
+        elif row_date and row_date_verified is not False:
             classification_dates.add(row_date)
         code = normalize_stock_code(
             raw_row.get("code") or raw_row.get("代码") or raw_row.get("symbol")
@@ -256,6 +269,14 @@ def reconcile_limit_pool(
             row = dict(raw_row)
             row["code"] = code
             classified.setdefault(code, row)
+
+    observed_codes = set(authoritative)
+    observed_rows = list(authoritative.values())
+    if not fact_date_verified:
+        # 例如 FuPan 请求历史日期时只回显请求参数，没有返回日期证明。
+        # 保留 observed_count 供诊断，但禁止进入权威事实池和交集分母。
+        authoritative = {}
+        authoritative_date = ""
 
     authoritative_codes = set(authoritative)
     authority_date_mismatch = bool(expected and authoritative_date and authoritative_date != expected)
@@ -272,9 +293,15 @@ def reconcile_limit_pool(
     ) if authoritative_count else 0.0
 
     warnings: list[str] = []
+    source_label = {
+        "fupan_ladder": "FuPan",
+        "fupan": "FuPan",
+        "daily_snapshot": "日报不可变快照",
+        "daily_fact_cache": "本地同日事实缓存",
+    }.get(source.lower(), source or "事实池")
     if fupan_only_codes:
         warnings.append(
-            f"FuPan 涨停事实池中有 {len(fupan_only_codes)} 只尚未完成题材归因"
+            f"{source_label}中有 {len(fupan_only_codes)} 只尚未完成题材归因"
         )
     if cls_only_codes:
         warnings.append(
@@ -285,7 +312,9 @@ def reconcile_limit_pool(
     if date_missing_count:
         warnings.append(f"题材归因池剔除 {date_missing_count} 条未验证日期记录")
     if authority_date_mismatch:
-        warnings.append("FuPan 涨停事实池日期与目标交易日不一致，禁止交集匹配")
+        warnings.append(f"{source_label}日期与目标交易日不一致，禁止交集匹配")
+    if not fact_date_verified and observed_codes:
+        warnings.append(f"{source_label}日期未验证，禁止作为权威事实池")
 
     classification_date = ""
     if len(classification_dates) == 1:
@@ -300,6 +329,10 @@ def reconcile_limit_pool(
 
     return {
         "source": "fupan_ladder",
+        "authoritative_source": source or "fupan_ladder",
+        "date_verified": fact_date_verified,
+        "observed_count": len(observed_codes),
+        "observed_codes": sorted(observed_codes),
         "classification_source": "classified_limit_pool",
         "authoritative_count": authoritative_count,
         "classified_count": len(classified_codes),
@@ -328,6 +361,53 @@ def policy_from_quality(quality: dict[str, Any] | None) -> ReportPolicy:
         status = str(source.get("status", "unknown")).lower()
         mode = "decision" if status == "ok" else ("observation" if status == "degraded" else "facts_only")
     return ReportPolicy.from_mode(mode)
+
+
+_PUBLICATION_MODE_RANK = {"facts_only": 0, "observation": 1, "decision": 2}
+
+
+def resolve_publication_mode(
+    requested_mode: Any = None,
+    *,
+    quality: dict[str, Any] | None = None,
+    market_state: dict[str, Any] | None = None,
+) -> str:
+    """Resolve one conservative publication mode for all report surfaces.
+
+    Module quality may be good while the statistics or decision layer is not
+    ready (for example, a fresh run without enough historical samples). The
+    narrower layer must win instead of being overwritten by module-level
+    ``decision`` policy.
+    """
+    quality = quality or {}
+    state = market_state or {}
+    candidates: list[str] = []
+    requested = str(requested_mode or "").strip().lower()
+    if requested in _PUBLICATION_MODE_RANK:
+        candidates.append(requested)
+    quality_mode = str(quality.get("publication_mode") or "").strip().lower()
+    if quality_mode in _PUBLICATION_MODE_RANK:
+        candidates.append(quality_mode)
+    state_mode = str(state.get("publication_mode") or "").strip().lower()
+    if state_mode in _PUBLICATION_MODE_RANK:
+        candidates.append(state_mode)
+
+    status = str(quality.get("status") or "").strip().lower()
+    if status in {"blocked", "non_trading_day"}:
+        candidates.append("facts_only")
+    elif status == "degraded":
+        candidates.append("observation")
+
+    statistics = state.get("statistics_layer") if isinstance(state.get("statistics_layer"), dict) else {}
+    decision = state.get("decision_layer") if isinstance(state.get("decision_layer"), dict) else {}
+    statistics_status = str(statistics.get("status") or "").strip().lower()
+    decision_status = str(decision.get("status") or "").strip().lower()
+    if statistics_status not in {"", "ok"} or decision_status not in {"", "ready"}:
+        candidates.append("observation")
+
+    if not candidates:
+        return "facts_only"
+    return min(candidates, key=lambda mode: _PUBLICATION_MODE_RANK[mode])
 
 
 def scan_forbidden_semantics(value: Any, policy: ReportPolicy | str) -> list[str]:

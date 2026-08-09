@@ -55,7 +55,11 @@ def test_dashboard_uses_unified_regime_title_over_timing_scene():
     html = generate_dashboard_html(ctx)
 
     assert "普涨反弹 · 高位分化" in html
-    assert "只做前排确认，不追孤峰" in html
+    assert "明日验证路径" not in html
+    assert "按条件确认强弱变化" not in html
+    assert "建议仓位" in html
+    assert "核心动作" in html
+    assert "只做前排确认，不追孤峰" not in html
 
 
 def test_default_scenarios_do_not_claim_fixed_probabilities():
