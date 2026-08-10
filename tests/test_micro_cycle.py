@@ -290,18 +290,18 @@ def test_phase_payload_filters_price_cache_to_historical_report_cutoff(monkeypat
     import phase_resonance
 
     prices = pd.DataFrame([
-        {"date": "2026-08-04", "code": "sh600001", "close_legacy": 10.0, "close_qfq": None},
-        {"date": "2026-08-07", "code": "sh600001", "close_legacy": 12.0, "close_qfq": 18.0},
-        {"date": "2026-08-10", "code": "sh600001", "close_legacy": 20.0, "close_qfq": 40.0},
+        {"date": 20260804, "code": "sh600001", "close_legacy": 10.0, "close_qfq": None},
+        {"date": 20260807, "code": "sh600001", "close_legacy": 12.0, "close_qfq": 18.0},
+        {"date": 20260810, "code": "sh600001", "close_legacy": 20.0, "close_qfq": 40.0},
     ])
     captured = {}
 
     def read_cache(path, **_kwargs):
         return prices.copy() if path == phase_resonance.PRICE_CACHE else pd.DataFrame()
 
-    def capture_price_matrix(frame, *_args, **_kwargs):
-        captured["dates"] = frame["date"].tolist()
-        return pd.DataFrame()
+    def capture_resonance(_sectors, _chain, price_matrix, *_args, **_kwargs):
+        captured["matrix"] = price_matrix.copy()
+        return {}
 
     monkeypatch.setattr(
         phase_resonance,
@@ -328,8 +328,7 @@ def test_phase_payload_filters_price_cache_to_historical_report_cutoff(monkeypat
         "build_sector_return_table",
         lambda *_args, **_kwargs: pd.DataFrame(),
     )
-    monkeypatch.setattr(phase_resonance, "build_price_matrix", capture_price_matrix)
-    monkeypatch.setattr(phase_resonance, "build_cycle_resonance", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(phase_resonance, "build_cycle_resonance", capture_resonance)
 
     phase_resonance._build_micro_cycle_payload(
         {
@@ -344,7 +343,9 @@ def test_phase_payload_filters_price_cache_to_historical_report_cutoff(monkeypat
         {},
     )
 
-    assert captured["dates"] == ["2026-08-04", "2026-08-07"]
+    assert list(captured["matrix"].index) == ["20260804", "20260807"]
+    assert captured["matrix"].loc["20260804", "sh600001"] == 15.0
+    assert captured["matrix"].loc["20260807", "sh600001"] == 18.0
 
 
 def test_build_sector_return_table_uses_period_returns_and_returns_empty_frame_for_empty_cache():

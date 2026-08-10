@@ -462,10 +462,9 @@ def _build_micro_cycle_payload(det, cache):
             micro_cycle.get("signal_return"),
         )
         price_history = _read_csv(PRICE_CACHE)
-        if not price_history.empty and "date" in price_history.columns:
-            price_dates = pd.to_datetime(price_history["date"], errors="coerce")
-            report_cutoff = pd.Timestamp(det["latest"]["date"])
-            price_history = price_history.loc[price_dates.le(report_cutoff)].copy()
+        price_history = filter_completed_rows(
+            price_history, "date", report_date=det["latest"]["date"],
+        )
         prices = build_price_matrix(price_history, "qfq", allow_legacy=True)
         micro_resonance = build_cycle_resonance(
             sector_returns, micro_chain, prices,
