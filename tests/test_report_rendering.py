@@ -778,6 +778,65 @@ def test_phase_turning_summary_hides_empty_rankings_and_keeps_small_coverage_hin
     assert "nan" not in html.lower()
 
 
+def test_micro_cycle_template_renders_events_strong_industries_and_mainline_leaders():
+    from phase_resonance import _micro_cycle_html
+
+    html = _micro_cycle_html({
+        "micro_cycle": {
+            "status": "小周期主升", "signal_date": "2026-08-04",
+            "confirmation_date": "2026-08-05", "full_confirmation_date": "2026-08-06",
+            "signal_return": 3.08, "rising_days": 4, "signal_basis": "price+limit_pool",
+            "events": {
+                "final_stop": {"date": "2026-07-20", "low": 3741.11},
+                "rebound_high": {"high_date": "2026-07-22", "close_date": "2026-07-23"},
+                "secondary_bottom": {"date": "2026-07-30", "low": 3767.50, "higher_low": True},
+                "retest": {"date": "2026-08-03", "close": 3809.66},
+            },
+        },
+        "micro_chain": {"usable": True, "consecutive_days": 4, "rows": [{"code": "sz002552", "name": "宝鼎科技"}], "hint": "历史事实交集"},
+        "micro_resonance": {
+            "strong_industries": [{"name": "电子化学品", "return": 17.14}, {"name": "贵金属", "return": 15.13}],
+            "mainlines": [{
+                "name": "AI算力", "level": "核心共振", "chain_count": 4, "chain_total": 7,
+                "industry_evidence": ["电子化学品", "元件", "半导体"],
+                "leaders": [{"code": "sz002552", "name": "宝鼎科技", "return": 26.77}],
+            }],
+            "attribution_coverage": 1.0, "leader_coverage": 1.0, "unattributed_count": 0,
+        },
+    })
+
+    for token in (
+        "短周期结构", "小周期主升", "7/20", "7/22-23", "7/30", "8/4",
+        "转强信号", "8/5", "突破确认", "强行业", "电子化学品", "共振主线",
+        "核心共振", "AI算力", "板块领涨个股", "宝鼎科技", "+26.8%",
+    ):
+        assert token in html
+    assert "贵金属" in html
+    assert "贵金属</strong>" not in html
+    assert "micro-cycle-timeline" in html
+
+
+def test_micro_cycle_template_hides_empty_evidence_headings_and_keeps_small_hint():
+    from phase_resonance import _micro_cycle_html
+
+    html = _micro_cycle_html({
+        "micro_cycle": {
+            "status": "震荡筑底", "signal_date": "", "confirmation_date": "",
+            "full_confirmation_date": "", "signal_return": None, "rising_days": 0,
+            "events": {"final_stop": {"date": "2026-07-20", "low": 3741.11}},
+        },
+        "micro_chain": {"usable": False, "hint": "历史事实不足"},
+        "micro_resonance": {},
+    })
+
+    assert "短周期结构" in html
+    assert "历史事实不足" in html
+    assert "强行业" not in html
+    assert "共振主线" not in html
+    assert "None" not in html
+    assert "nan" not in html.lower()
+
+
 def test_dashboard_does_not_render_static_probability_claims():
     html = generate_dashboard_html(_context())
 

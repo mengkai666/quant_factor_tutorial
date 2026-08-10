@@ -27,9 +27,17 @@ from html import escape
 
 import pandas as pd
 
-from paths import DATA_DIR, PRICE_CACHE
+from paths import (
+    CLS_PLATE_CACHE, DAILY_SNAPSHOT_DIR, DATA_DIR, EM_PLATE_CACHE,
+    INDUSTRY_CACHE, PRICE_CACHE, SECURITY_MASTER_CACHE, ZT_CACHE_FILE,
+)
 from time_utils import filter_completed_rows
-from data_sources.price_provider import price_value_column
+from data_sources.name_resolver import resolve_names
+from data_sources.price_provider import build_price_matrix, price_value_column
+from micro_cycle import (
+    build_cycle_resonance, build_sector_return_table,
+    build_signal_limit_chain, detect_micro_cycle,
+)
 
 # 同花顺板块指数日线缓存 (每交易日刷一次; 接口单次即返全历史, 无需增量)
 THS_CACHE = os.path.join(DATA_DIR, 'ths_sector_hist.json')
@@ -368,6 +376,111 @@ def build_phase_resonance(force_fetch=False):
     return r
 
 
+def _read_csv(path, **kwargs):
+    if not path or not os.path.exists(path):
+        return pd.DataFrame()
+    try:
+        return pd.read_csv(path, **kwargs)
+    except (OSError, UnicodeError, ValueError, pd.errors.ParserError):
+        return pd.DataFrame()
+
+
+def _pick_column(frame, *candidates):
+    return next((name for name in candidates if name in frame.columns), None)
+
+
+def _daily_limit_counts(history):
+    if history is None or history.empty:
+        return {}
+    date_col = _pick_column(history, "date", "日期")
+    code_col = _pick_column(history, "code", "代码")
+    type_col = _pick_column(history, "type", "类型")
+    if not date_col or not code_col:
+        return {}
+    frame = history.copy()
+    if type_col:
+        frame = frame[frame[type_col].astype(str).str.upper().eq("ZT")]
+    frame["_date"] = frame[date_col].astype(str).str.replace("-", "", regex=False)
+    frame["_code"] = frame[code_col].astype(str).str.strip()
+    grouped = frame[frame["_code"].ne("")].groupby("_date")["_code"].nunique()
+    return {
+        f"{date[:4]}-{date[4:6]}-{date[6:8]}": int(count)
+        for date, count in grouped.items()
+        if len(str(date)) == 8
+    }
+
+
+def _immutable_snapshot_dates():
+    result = set()
+    if not os.path.isdir(DAILY_SNAPSHOT_DIR):
+        return result
+    try:
+        names = os.listdir(DAILY_SNAPSHOT_DIR)
+    except OSError:
+        return result
+    for name in names:
+        if not name.endswith(".json"):
+            continue
+        try:
+            with open(os.path.join(DAILY_SNAPSHOT_DIR, name), encoding="utf-8") as handle:
+                snapshot = json.load(handle)
+        except (OSError, UnicodeError, ValueError, TypeError):
+            continue
+        if not isinstance(snapshot, dict):
+            continue
+        date = name[:-5]
+        if (
+            snapshot.get("snapshot_schema") == "daily-fact-snapshot/v1"
+            and snapshot.get("date_verified") is True
+            and snapshot.get("immutable") is True
+            and str(snapshot.get("report_date") or date) == date
+        ):
+            result.add(date)
+    return result
+
+
+def _build_micro_cycle_payload(det, cache):
+    history = _read_csv(ZT_CACHE_FILE)
+    counts = _daily_limit_counts(history)
+    micro_cycle = detect_micro_cycle(det, daily_limit_counts=counts)
+    micro_chain = {}
+    micro_resonance = {}
+    if micro_cycle.get("signal_date"):
+        master = _read_csv(SECURITY_MASTER_CACHE, dtype=str)
+        industry = _read_csv(INDUSTRY_CACHE, dtype=str)
+        names = resolve_names(universe=master, industry=industry)
+        trading_dates = [row["date"] for row in det["index_series"]]
+        micro_chain = build_signal_limit_chain(
+            history, trading_dates, micro_cycle["signal_date"], det["latest"]["date"],
+            names=names, immutable_dates=_immutable_snapshot_dates(),
+        )
+        sector_returns = build_sector_return_table(
+            cache, micro_cycle["signal_date"], det["latest"]["date"],
+            micro_cycle.get("signal_return"),
+        )
+        prices = build_price_matrix(_read_csv(PRICE_CACHE), "qfq", allow_legacy=True)
+        micro_resonance = build_cycle_resonance(
+            sector_returns, micro_chain, prices,
+            micro_cycle["signal_date"], det["latest"]["date"],
+            cls_attribution=_read_csv(CLS_PLATE_CACHE, dtype=str),
+            em_attribution=_read_csv(EM_PLATE_CACHE, dtype=str),
+        )
+    return {
+        "micro_cycle": micro_cycle,
+        "micro_chain": micro_chain,
+        "micro_resonance": micro_resonance,
+    }
+
+
+def _attach_micro_cycle(result, det, cache):
+    try:
+        payload = _build_micro_cycle_payload(det, cache)
+    except Exception as exc:
+        print(f"  短周期共振计算跳过 (不影响主要阶段): {exc}")
+        payload = {"micro_cycle": {}, "micro_chain": {}, "micro_resonance": {}}
+    return {**result, **payload}
+
+
 def _build(force_fetch=False):
     try:
         idx = fetch_index()
@@ -425,7 +538,7 @@ def _build(force_fetch=False):
 
     turning_summary = build_turning_summary(det, t, stock_leaders)
 
-    return {
+    result = {
         'det': det, 'phase_names': ph, 'index_ret': idx_ret,
         'table': t, 'ranks': ranks, 'quadrants': quadrants(t, det),
         'reps_html': reps_html,
@@ -436,6 +549,7 @@ def _build(force_fetch=False):
                      .to_dict('records') if '距顶' in t.columns else [],
         **turning_summary,
     }
+    return _attach_micro_cycle(result, det, cache)
 
 
 def _clr(v):
@@ -543,6 +657,189 @@ def _turning_summary_html(res):
       <div class="phase-turning-grid" style="--phase-cols:{column_count};">{columns}</div>
       {hint_html}
     </div>'''
+
+
+def _micro_text(value):
+    if value is None:
+        return ""
+    try:
+        if pd.isna(value):
+            return ""
+    except (TypeError, ValueError):
+        pass
+    text = str(value).strip()
+    return "" if text.lower() in {"nan", "none", "<na>", "nat"} else text
+
+
+def _micro_number(value):
+    try:
+        number = pd.to_numeric(value, errors="coerce")
+        if not pd.api.types.is_scalar(number) or pd.isna(number):
+            return None
+        return float(number)
+    except (TypeError, ValueError):
+        return None
+
+
+def _micro_date(value):
+    text = _micro_text(value)
+    parts = text.split("-")
+    if len(parts) == 3 and parts[1].isdigit() and parts[2].isdigit():
+        return f"{int(parts[1])}/{int(parts[2])}"
+    return text
+
+
+def _micro_return(value):
+    number = _micro_number(value)
+    return "—" if number is None else f"{number:+.1f}%"
+
+
+def _micro_color(value):
+    return _clr(_micro_number(value))
+
+
+def _micro_integer(value):
+    number = _micro_number(value)
+    return 0 if number is None else int(number)
+
+
+def _micro_level(label, value):
+    number = _micro_number(value)
+    return "" if number is None else f"{label} {number:.0f}"
+
+
+def _micro_cycle_html(res):
+    micro = (res or {}).get("micro_cycle") or {}
+    if not micro:
+        return ""
+    events = micro.get("events") or {}
+    final_stop = events.get("final_stop") or {}
+    rebound = events.get("rebound_high") or {}
+    secondary = events.get("secondary_bottom") or {}
+    retest = events.get("retest") or {}
+    rebound_date = ""
+    if rebound.get("high_date"):
+        rebound_date = _micro_date(rebound.get("high_date"))
+        close_date = _micro_date(rebound.get("close_date"))
+        if close_date:
+            rebound_date += f"-{close_date.split('/')[-1]}"
+    timeline = [
+        (_micro_date(final_stop.get("date")), "止跌确认", _micro_level("盘中低点", final_stop.get("low"))),
+        (rebound_date, "第一反弹高点", "盘中与收盘高点分开确认"),
+        (
+            _micro_date(secondary.get("date")), "二次探底",
+            "低点抬升" if secondary.get("higher_low") else "再次破底",
+        ),
+        (_micro_date(retest.get("date")), "局部回测", _micro_level("收盘", retest.get("close"))),
+        (_micro_date(micro.get("signal_date")), "转强信号", "收涨且低点不再下移"),
+        (_micro_date(micro.get("confirmation_date")), "收盘突破确认", "突破第一反弹收盘高点"),
+    ]
+    event_html = "".join(
+        '<div class="micro-cycle-event">'
+        f'<b>{escape(date, quote=True)}</b><span>{escape(label, quote=True)}</span>'
+        f'{f"<small>{escape(evidence, quote=True)}</small>" if evidence else ""}</div>'
+        for date, label, evidence in timeline if date
+    )
+
+    resonance = (res or {}).get("micro_resonance") or {}
+    industry_html = "".join(
+        f'<span>{escape(name, quote=True)} '
+        f'<i style="color:{_micro_color(row.get("return"))};">{_micro_return(row.get("return"))}</i></span>'
+        for row in resonance.get("strong_industries") or []
+        if (name := _micro_text(row.get("name")))
+    )
+    industry_section = (
+        f'<div class="micro-subhead">强行业</div><div class="micro-strong-industries">{industry_html}</div>'
+        if industry_html else ""
+    )
+
+    mainline_html = ""
+    for row in resonance.get("mainlines") or []:
+        level = _micro_text(row.get("level"))
+        name = _micro_text(row.get("name"))
+        if not level and not name:
+            continue
+        evidence = " · ".join(
+            item for value in row.get("industry_evidence") or []
+            if (item := _micro_text(value))
+        )
+        leader_rows = []
+        for stock in row.get("leaders") or []:
+            code = _micro_text(stock.get("code"))
+            display = _micro_text(stock.get("name")) or code
+            if not display:
+                continue
+            code_html = f'<small>{escape(code, quote=True)}</small>' if code else ""
+            leader_rows.append(
+                '<span class="micro-leader">'
+                f'{escape(display, quote=True)}{code_html}'
+                f'<i style="color:{_micro_color(stock.get("return"))};">'
+                f'{_micro_return(stock.get("return"))}</i></span>'
+            )
+        leaders = "".join(leader_rows)
+        leader_block = (
+            f'<div class="micro-leaders"><em>板块领涨个股</em>{leaders}</div>'
+            if leaders else ""
+        )
+        level_html = f'<b>{escape(level, quote=True)}</b>' if level else ""
+        name_html = f'<strong>{escape(name, quote=True)}</strong>' if name else ""
+        evidence_html = f' · 行业证据 {escape(evidence, quote=True)}' if evidence else ""
+        mainline_html += (
+            '<div class="micro-mainline-row">'
+            f'<div>{level_html}{name_html}'
+            f'<small>启动 {_micro_integer(row.get("chain_count"))}/{_micro_integer(row.get("chain_total"))}'
+            f'{evidence_html}</small></div>{leader_block}</div>'
+        )
+    mainline_section = (
+        f'<div class="micro-subhead">共振主线</div>{mainline_html}' if mainline_html else ""
+    )
+
+    chain = (res or {}).get("micro_chain") or {}
+    hints = [_micro_text(chain.get("hint"))]
+    attribution_coverage = _micro_number(resonance.get("attribution_coverage", 1.0))
+    if attribution_coverage is not None and attribution_coverage < 1.0:
+        hints.append(f"主线归因覆盖 {attribution_coverage:.0%}")
+    leader_coverage = _micro_number(resonance.get("leader_coverage", 1.0))
+    if leader_coverage is not None and leader_coverage < 0.8:
+        hints.append("个股前复权端点覆盖不足，收益暂不展示")
+    hint_html = " · ".join(escape(item, quote=True) for item in hints if item)
+    hint_block = f'<div class="micro-cycle-hint">{hint_html}</div>' if hint_html else ""
+    full_date = _micro_date(micro.get("full_confirmation_date"))
+    full_text = f" · {escape(full_date, quote=True)} 全面突破" if full_date else ""
+    status = _micro_text(micro.get("status"))
+    status_html = f'<b>{escape(status, quote=True)}</b>' if status else ""
+    return f'''
+    <style>
+      .micro-cycle-section{{margin:0 0 16px;border-top:1px solid rgba(48,54,61,.8);border-bottom:1px solid rgba(48,54,61,.8);padding:16px 0;overflow-wrap:anywhere;}}
+      .micro-cycle-head{{display:flex;justify-content:space-between;gap:16px;align-items:flex-end;margin:0 16px 14px;}}
+      .micro-cycle-head h3{{margin:0;color:#e6edf3;font-size:16px;letter-spacing:0;}}
+      .micro-cycle-head b{{color:#58a6ff;font-size:20px;}}
+      .micro-cycle-head small,.micro-cycle-hint{{color:#8b949e;font-size:11px;}}
+      .micro-cycle-timeline{{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));border-top:1px solid rgba(48,54,61,.7);border-bottom:1px solid rgba(48,54,61,.7);}}
+      .micro-cycle-event{{min-width:0;padding:12px 10px;display:flex;flex-direction:column;gap:4px;}}
+      .micro-cycle-event+.micro-cycle-event{{border-left:1px solid rgba(48,54,61,.7);}}
+      .micro-cycle-event b{{color:#58a6ff;font-size:13px;}}.micro-cycle-event span{{color:#e6edf3;font-size:12px;font-weight:700;}}
+      .micro-cycle-event small{{color:#8b949e;font-size:11px;line-height:1.45;}}
+      .micro-subhead{{margin:14px 16px 8px;color:#8b949e;font-size:11px;font-weight:700;}}
+      .micro-strong-industries{{display:flex;flex-wrap:wrap;gap:8px 16px;margin:0 16px;}}
+      .micro-strong-industries span{{color:#e6edf3;font-size:12px;}}.micro-strong-industries i{{font-style:normal;font-weight:700;}}
+      .micro-mainline-row{{display:grid;grid-template-columns:minmax(220px,.8fr) minmax(0,1.5fr);gap:16px;padding:11px 16px;border-top:1px solid rgba(48,54,61,.55);}}
+      .micro-mainline-row>div:first-child{{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;}}
+      .micro-mainline-row b{{color:#d29922;font-size:11px;}}.micro-mainline-row strong{{color:#e6edf3;font-size:14px;}}
+      .micro-mainline-row small{{color:#8b949e;font-size:10px;}}
+      .micro-leaders{{display:flex;gap:8px 12px;align-items:center;flex-wrap:wrap;}}.micro-leaders em{{color:#8b949e;font-size:10px;font-style:normal;}}
+      .micro-leader{{display:inline-flex;gap:5px;align-items:baseline;color:#e6edf3;font-size:12px;flex-wrap:wrap;}}
+      .micro-leader small{{font-size:9px;}}.micro-leader i{{font-size:11px;font-style:normal;font-weight:700;}}
+      .micro-cycle-hint{{margin:10px 16px 0;}}
+      @media(max-width:760px){{.micro-cycle-head{{align-items:flex-start;flex-direction:column;}}.micro-cycle-timeline{{grid-template-columns:1fr;}}.micro-cycle-event+.micro-cycle-event{{border-left:0;border-top:1px solid rgba(48,54,61,.55);}}.micro-mainline-row{{grid-template-columns:1fr;gap:8px;}}}}
+    </style>
+    <section class="micro-cycle-section">
+      <div class="micro-cycle-head"><div><h3>短周期结构</h3>{status_html}</div>
+      <small>转强后 {_micro_return(micro.get("signal_return"))} · 连续 {_micro_integer(micro.get("rising_days"))} 日收涨{full_text}</small></div>
+      <div class="micro-cycle-timeline">{event_html}</div>
+      {industry_section}{mainline_section}
+      {hint_block}
+    </section>'''
 
 
 def _phase_timeline(res):
@@ -710,6 +1007,7 @@ def render_phase_resonance_html(res):
       </div>
       {head}
       {_turning_summary_html(res)}
+      {_micro_cycle_html(res)}
       {_phase_timeline(res)}
       <div style="color:#8b949e;font-size:12px;font-weight:bold;margin:14px 0 2px;">
         📊 各阶段领涨 —— 横向对比就能看出是不是同一批人接力

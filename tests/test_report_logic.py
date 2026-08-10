@@ -1475,3 +1475,32 @@ def test_turning_summary_uses_major_bottom_and_top_three_sector_returns():
     assert [row["name"] for row in summary["turning_leaders"]["sectors"]] == [
         "贵金属", "教育", "能源金属"
     ]
+
+
+def test_phase_micro_cycle_failure_does_not_remove_major_phase(monkeypatch):
+    import phase_resonance
+
+    monkeypatch.setattr(
+        phase_resonance,
+        "detect_micro_cycle",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("fixture")),
+        raising=False,
+    )
+    major = {
+        "current_phase": {"label": "箱体突破"},
+        "turning_leaders": {"sectors": [], "stocks": []},
+    }
+    result = phase_resonance._attach_micro_cycle(
+        major,
+        {
+            "bottom": {"date": "2026-07-17", "close": 3764.0},
+            "latest": {"date": "2026-08-07", "close": 3940.0},
+            "index_series": [],
+        },
+        {},
+    )
+
+    assert result["current_phase"]["label"] == "箱体突破"
+    assert result["micro_cycle"] == {}
+    assert result["micro_chain"] == {}
+    assert result["micro_resonance"] == {}
