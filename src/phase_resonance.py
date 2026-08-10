@@ -842,6 +842,11 @@ def _micro_cycle_html(res):
     </section>'''
 
 
+def render_micro_cycle_html(res):
+    """Render only confirmed short-cycle facts for restricted reports."""
+    return _micro_cycle_html(res)
+
+
 def _phase_timeline(res):
     """阶段时间轴表: 每段区间 + 指数涨跌 + 个股中位 + 上涨占比。"""
     det, br = res['det'], res['breadth']

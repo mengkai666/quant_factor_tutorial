@@ -4568,12 +4568,20 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     # 指数阶段 × 板块共振 (阶段自动识别: 顶→底→见底脉冲→震荡/趋势→最新日)
     # 独立模块, 失败静默返回空串, 不影响主流程
     phase_html = ''
+    trusted_phase_html = ''
+    phase_sanitize_marker = '<!-- trusted-micro-cycle-facts -->'
     try:
-        from phase_resonance import build_phase_resonance, render_phase_resonance_html
+        from phase_resonance import (
+            build_phase_resonance, render_micro_cycle_html,
+            render_phase_resonance_html,
+        )
         print(f"\n[{datetime.now().strftime('%H:%M:%S')}] 阶段共振分析 (指数阶段 × 板块)...")
-        phase_html = render_phase_resonance_html(build_phase_resonance())
+        phase_result = build_phase_resonance()
         if facts_only:
-            phase_html = ''
+            trusted_phase_html = render_micro_cycle_html(phase_result)
+            phase_html = phase_sanitize_marker
+        else:
+            phase_html = render_phase_resonance_html(phase_result)
     except Exception as e:
         print(f"  [警告] 阶段共振模块失败 (不影响主流程): {e}")
 
@@ -4968,6 +4976,8 @@ window.addEventListener('resize',function(){{c.resize();}});}})();
 </script></body></html>'''
 
     html = sanitize_html_for_policy(html, policy)
+    if trusted_phase_html:
+        html = html.replace(phase_sanitize_marker, trusted_phase_html)
     with open(OUTPUT_HTML, 'w', encoding='utf-8') as f:
         f.write(html)
 

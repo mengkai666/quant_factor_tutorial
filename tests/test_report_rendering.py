@@ -672,6 +672,83 @@ def test_full_report_uses_same_limit_up_count_as_report_fact_snapshot(monkeypatc
     assert "涨停 74 / 跌停 4" not in html
 
 
+def test_facts_only_report_keeps_confirmed_micro_cycle_without_full_phase_analysis(monkeypatch, tmp_path):
+    import 主线强度追踪 as report
+    import phase_resonance
+    import pandas as pd
+
+    output = tmp_path / "report.html"
+    monkeypatch.setattr(report, "OUTPUT_HTML", str(output))
+    monkeypatch.setattr(
+        phase_resonance,
+        "build_phase_resonance",
+        lambda: {
+            "micro_cycle": {
+                "status": "小周期主升",
+                "signal_date": "2026-08-04",
+                "confirmation_date": "2026-08-05",
+                "full_confirmation_date": "2026-08-06",
+                "signal_return": 3.08,
+                "rising_days": 4,
+                "events": {"final_stop": {"date": "2026-07-20", "low": 3741.11}},
+            },
+            "micro_chain": {"usable": False, "hint": "历史事实不足"},
+            "micro_resonance": {
+                "strong_industries": [],
+                "mainlines": [{
+                    "name": "AI应用",
+                    "level": "连板跟随",
+                    "chain_count": 2,
+                    "chain_total": 7,
+                    "industry_evidence": [],
+                    "leaders": [],
+                }],
+                "attribution_coverage": 1.0,
+                "leader_coverage": 1.0,
+                "unattributed_count": 0,
+            },
+        },
+    )
+    monkeypatch.setattr(
+        phase_resonance,
+        "render_phase_resonance_html",
+        lambda _data: "<div>完整阶段分析不应发布</div>",
+    )
+    empty = pd.DataFrame()
+    report_context = {
+        "publication_mode": "facts_only",
+        "quality": {"status": "insufficient", "publication_mode": "facts_only"},
+        "facts": {
+            "market_state": {
+                "publication_mode": "facts_only",
+                "title": "数据待核验",
+                "allow_strong_conclusion": False,
+            },
+            "market_snapshot": {
+                "report_date": "2026-08-07",
+                "limit_up": 83,
+                "limit_down": 4,
+            },
+        },
+    }
+
+    report.generate_html(
+        ml_strength=empty, sub_strength=empty, ml_ma={}, sub_ma={},
+        ml_thresh={}, sub_thresh={}, leaders={}, dates=["20260807"],
+        ratings={}, sub_ratings={}, echelon=[], top30_data={},
+        advance_decline={"up": 1576, "down": 1446, "zt": 83, "dt": 4},
+        sentiment_df=empty, classified_df=empty, price_df=empty,
+        market_state=report_context["facts"]["market_state"],
+        report_context=report_context,
+    )
+
+    html = output.read_text(encoding="utf-8")
+    assert "短周期结构" in html
+    assert "小周期主升" in html
+    assert "连板跟随" in html
+    assert "完整阶段分析不应发布" not in html
+
+
 def test_full_report_sentiment_chart_can_shrink_on_mobile(monkeypatch, tmp_path):
     import 主线强度追踪 as report
     import phase_resonance

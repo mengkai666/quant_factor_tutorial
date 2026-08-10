@@ -241,6 +241,38 @@ def test_cycle_resonance_separates_strong_industries_from_confirmed_mainlines():
     assert "贵金属" not in levels
 
 
+def test_cycle_resonance_requires_two_chain_stocks_for_core_level():
+    from micro_cycle import build_cycle_resonance
+
+    codes = ["sh600001", "sh600002"]
+    chain = {
+        "usable": True,
+        "rows": [
+            {"code": "sh600001", "name": "医药甲"},
+            {"code": "sh600002", "name": "医药乙"},
+        ],
+    }
+    sectors = pd.DataFrame([
+        {"name": "医疗服务", "return": 9.0, "excess_return": 6.0},
+        {"name": "生物制品", "return": 8.0, "excess_return": 5.0},
+    ])
+    prices = pd.DataFrame(
+        [[10.0, 10.0], [11.0, 12.0]],
+        index=["2026-08-04", "2026-08-07"], columns=codes,
+    )
+    cls = pd.DataFrame([
+        {"date": "20260807", "code": code, "sub": "医药", "mainline": "医药"}
+        for code in codes
+    ])
+
+    result = build_cycle_resonance(
+        sectors, chain, prices, "2026-08-04", "2026-08-07",
+        cls_attribution=cls,
+    )
+
+    assert result["mainlines"][0]["level"] == "核心共振"
+
+
 def test_cycle_resonance_prefers_latest_valid_cls_and_keeps_unattributed_codes():
     from micro_cycle import build_cycle_resonance
 
