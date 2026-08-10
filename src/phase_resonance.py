@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from html import escape
 
@@ -38,6 +39,7 @@ from micro_cycle import (
     build_cycle_resonance, build_sector_return_table,
     build_signal_limit_chain, detect_micro_cycle,
 )
+from report_logic import neutralize_for_policy, scan_forbidden_semantics
 
 # 同花顺板块指数日线缓存 (每交易日刷一次; 接口单次即返全历史, 无需增量)
 THS_CACHE = os.path.join(DATA_DIR, 'ths_sector_hist.json')
@@ -671,6 +673,34 @@ def _micro_text(value):
     return "" if text.lower() in {"nan", "none", "<na>", "nat"} else text
 
 
+_MICRO_FACT_STATUSES = frozenset({"探底未完成", "震荡筑底", "震荡转升", "小周期主升"})
+_MICRO_FACT_LEVELS = frozenset({"核心共振", "次级共振", "连板跟随"})
+_MICRO_FACT_DATE = re.compile(r"^(\d{4})[-/]?(\d{1,2})[-/]?(\d{1,2})$")
+
+
+def _micro_restricted_text(value):
+    text = _micro_text(value)
+    if not text:
+        return ""
+    if not scan_forbidden_semantics(text, "facts_only"):
+        return text
+    cleaned = neutralize_for_policy(text, "facts_only")
+    return "" if cleaned == "当前仅展示已校验事实" else cleaned
+
+
+def _micro_restricted_date(value):
+    text = _micro_text(value)
+    match = _MICRO_FACT_DATE.fullmatch(text)
+    if not match:
+        return ""
+    year, month, day = (int(part) for part in match.groups())
+    try:
+        pd.Timestamp(year=year, month=month, day=day)
+    except ValueError:
+        return ""
+    return f"{month}/{day}"
+
+
 def _micro_number(value):
     try:
         number = pd.to_numeric(value, errors="coerce")
@@ -708,10 +738,12 @@ def _micro_level(label, value):
     return "" if number is None else f"{label} {number:.0f}"
 
 
-def _micro_cycle_html(res):
+def _micro_cycle_html(res, *, restricted=False):
     micro = (res or {}).get("micro_cycle") or {}
     if not micro:
         return ""
+    text_value = _micro_restricted_text if restricted else _micro_text
+    date_value = _micro_restricted_date if restricted else _micro_date
     events = micro.get("events") or {}
     final_stop = events.get("final_stop") or {}
     rebound = events.get("rebound_high") or {}
@@ -719,20 +751,20 @@ def _micro_cycle_html(res):
     retest = events.get("retest") or {}
     rebound_date = ""
     if rebound.get("high_date"):
-        rebound_date = _micro_date(rebound.get("high_date"))
-        close_date = _micro_date(rebound.get("close_date"))
+        rebound_date = date_value(rebound.get("high_date"))
+        close_date = date_value(rebound.get("close_date"))
         if close_date:
             rebound_date += f"-{close_date.split('/')[-1]}"
     timeline = [
-        (_micro_date(final_stop.get("date")), "止跌确认", _micro_level("盘中低点", final_stop.get("low"))),
+        (date_value(final_stop.get("date")), "止跌确认", _micro_level("盘中低点", final_stop.get("low"))),
         (rebound_date, "第一反弹高点", "盘中与收盘高点分开确认"),
         (
-            _micro_date(secondary.get("date")), "二次探底",
+            date_value(secondary.get("date")), "二次探底",
             "低点抬升" if secondary.get("higher_low") else "再次破底",
         ),
-        (_micro_date(retest.get("date")), "局部回测", _micro_level("收盘", retest.get("close"))),
-        (_micro_date(micro.get("signal_date")), "转强信号", "收涨且低点不再下移"),
-        (_micro_date(micro.get("confirmation_date")), "收盘突破确认", "突破第一反弹收盘高点"),
+        (date_value(retest.get("date")), "局部回测", _micro_level("收盘", retest.get("close"))),
+        (date_value(micro.get("signal_date")), "转强信号", "收涨且低点不再下移"),
+        (date_value(micro.get("confirmation_date")), "收盘突破确认", "突破第一反弹收盘高点"),
     ]
     event_html = "".join(
         '<div class="micro-cycle-event">'
@@ -746,7 +778,7 @@ def _micro_cycle_html(res):
         f'<span>{escape(name, quote=True)} '
         f'<i style="color:{_micro_color(row.get("return"))};">{_micro_return(row.get("return"))}</i></span>'
         for row in resonance.get("strong_industries") or []
-        if (name := _micro_text(row.get("name")))
+        if (name := text_value(row.get("name")))
     )
     industry_section = (
         f'<div class="micro-subhead">强行业</div><div class="micro-strong-industries">{industry_html}</div>'
@@ -755,18 +787,21 @@ def _micro_cycle_html(res):
 
     mainline_html = ""
     for row in resonance.get("mainlines") or []:
-        level = _micro_text(row.get("level"))
-        name = _micro_text(row.get("name"))
+        raw_level = _micro_text(row.get("level"))
+        level = raw_level if restricted and raw_level in _MICRO_FACT_LEVELS else text_value(raw_level)
+        name = text_value(row.get("name"))
+        if restricted and raw_level not in _MICRO_FACT_LEVELS:
+            level = ""
         if not level and not name:
             continue
         evidence = " · ".join(
             item for value in row.get("industry_evidence") or []
-            if (item := _micro_text(value))
+            if (item := text_value(value))
         )
         leader_rows = []
         for stock in row.get("leaders") or []:
-            code = _micro_text(stock.get("code"))
-            display = _micro_text(stock.get("name")) or code
+            code = text_value(stock.get("code"))
+            display = text_value(stock.get("name")) or code
             if not display:
                 continue
             code_html = f'<small>{escape(code, quote=True)}</small>' if code else ""
@@ -795,7 +830,7 @@ def _micro_cycle_html(res):
     )
 
     chain = (res or {}).get("micro_chain") or {}
-    hints = [_micro_text(chain.get("hint"))]
+    hints = [text_value(chain.get("hint"))]
     attribution_coverage = _micro_number(resonance.get("attribution_coverage", 1.0))
     if attribution_coverage is not None and attribution_coverage < 1.0:
         hints.append(f"主线归因覆盖 {attribution_coverage:.0%}")
@@ -804,9 +839,12 @@ def _micro_cycle_html(res):
         hints.append("个股前复权端点覆盖不足，收益暂不展示")
     hint_html = " · ".join(escape(item, quote=True) for item in hints if item)
     hint_block = f'<div class="micro-cycle-hint">{hint_html}</div>' if hint_html else ""
-    full_date = _micro_date(micro.get("full_confirmation_date"))
+    full_date = date_value(micro.get("full_confirmation_date"))
     full_text = f" · {escape(full_date, quote=True)} 全面突破" if full_date else ""
-    status = _micro_text(micro.get("status"))
+    raw_status = _micro_text(micro.get("status"))
+    status = raw_status if restricted and raw_status in _MICRO_FACT_STATUSES else text_value(raw_status)
+    if restricted and raw_status not in _MICRO_FACT_STATUSES:
+        status = ""
     status_html = f'<b>{escape(status, quote=True)}</b>' if status else ""
     return f'''
     <style>
@@ -844,7 +882,7 @@ def _micro_cycle_html(res):
 
 def render_micro_cycle_html(res):
     """Render only confirmed short-cycle facts for restricted reports."""
-    return _micro_cycle_html(res)
+    return _micro_cycle_html(res, restricted=True)
 
 
 def _phase_timeline(res):

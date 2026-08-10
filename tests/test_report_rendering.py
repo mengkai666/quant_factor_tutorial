@@ -749,6 +749,110 @@ def test_facts_only_report_keeps_confirmed_micro_cycle_without_full_phase_analys
     assert "完整阶段分析不应发布" not in html
 
 
+def test_facts_only_micro_cycle_sanitizes_untrusted_fields_and_preserves_fact_levels(monkeypatch, tmp_path):
+    from bs4 import BeautifulSoup
+    import pandas as pd
+    import phase_resonance
+    import 主线强度追踪 as report
+
+    output = tmp_path / "report.html"
+    monkeypatch.setattr(report, "OUTPUT_HTML", str(output))
+    monkeypatch.setattr(
+        phase_resonance,
+        "build_phase_resonance",
+        lambda: {
+            "micro_cycle": {
+                "status": "小周期主升买入<script>alert(1)</script>",
+                "signal_date": "2026-08-04卖出<img src=x onerror=alert(1)>",
+                "confirmation_date": "2026-08-05",
+                "full_confirmation_date": "2026-08-06加仓<svg onload=alert(1)>",
+                "signal_return": 3.08,
+                "rising_days": 4,
+                "events": {
+                    "final_stop": {
+                        "date": "2026-07-20减仓<img src=x onerror=alert(1)>",
+                        "low": 3741.11,
+                    },
+                },
+            },
+            "micro_chain": {
+                "usable": False,
+                "hint": "历史事实不足锁仓<img src=x onerror=alert(1)>",
+            },
+            "micro_resonance": {
+                "strong_industries": [{
+                    "name": "电子化学品加仓<img src=x onerror=alert(1)>",
+                    "return": 17.14,
+                }],
+                "mainlines": [{
+                    "name": "AI应用清仓<svg onload=alert(1)>",
+                    "level": "连板跟随",
+                    "chain_count": 2,
+                    "chain_total": 7,
+                    "industry_evidence": ["传媒减仓<span onclick=alert(1)>证据</span>"],
+                    "leaders": [{
+                        "name": "凯撒文化买入<script>alert(1)</script>",
+                        "code": "sh600892卖出\" onmouseover=alert(1)",
+                        "return": None,
+                    }],
+                }],
+                "attribution_coverage": 1.0,
+                "leader_coverage": 1.0,
+                "unattributed_count": 0,
+            },
+        },
+    )
+    empty = pd.DataFrame()
+    report_context = {
+        "publication_mode": "facts_only",
+        "quality": {"status": "insufficient", "publication_mode": "facts_only"},
+        "facts": {
+            "market_state": {
+                "publication_mode": "facts_only",
+                "title": "数据待核验",
+                "allow_strong_conclusion": False,
+            },
+            "market_snapshot": {
+                "report_date": "2026-08-07",
+                "limit_up": 83,
+                "limit_down": 4,
+            },
+        },
+    }
+
+    report.generate_html(
+        ml_strength=empty, sub_strength=empty, ml_ma={}, sub_ma={},
+        ml_thresh={}, sub_thresh={}, leaders={}, dates=["20260807"],
+        ratings={}, sub_ratings={}, echelon=[], top30_data={},
+        advance_decline={"up": 1576, "down": 1446, "zt": 83, "dt": 4},
+        sentiment_df=empty, classified_df=empty, price_df=empty,
+        market_state=report_context["facts"]["market_state"],
+        report_context=report_context,
+    )
+
+    html = output.read_text(encoding="utf-8")
+    soup = BeautifulSoup(html, "html.parser")
+    section = soup.select_one(".micro-cycle-section")
+
+    assert section is not None
+    assert "连板跟随" in section.get_text(" ", strip=True)
+    assert "小周期主升" not in section.get_text(" ", strip=True)
+    assert "8/4" not in section.get_text(" ", strip=True)
+    assert "8/6" not in section.get_text(" ", strip=True)
+    assert "7/20" not in section.get_text(" ", strip=True)
+    assert "2026-08-05" not in str(section)
+    assert "8/5" in section.get_text(" ", strip=True)
+    assert not section.select("script, img, svg")
+    assert not [
+        attr
+        for element in section.find_all(True)
+        for attr in element.attrs
+        if attr.lower().startswith("on")
+    ]
+    for token in ("买入", "卖出", "加仓", "减仓", "清仓", "锁仓"):
+        assert token not in str(section)
+
+
 def test_full_report_sentiment_chart_can_shrink_on_mobile(monkeypatch, tmp_path):
     import 主线强度追踪 as report
     import phase_resonance
