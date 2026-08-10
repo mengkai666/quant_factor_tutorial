@@ -260,11 +260,14 @@ def test_cycle_resonance_prefers_latest_valid_cls_and_keeps_unattributed_codes()
     ])
 
     result = build_cycle_resonance(
-        pd.DataFrame(), chain, prices, "2026-08-04", "2026-08-07",
+        pd.DataFrame([
+            {"name": "半导体", "return": 12.0, "excess_return": 9.0},
+        ]), chain, prices, "2026-08-04", "2026-08-07",
         cls_attribution=cls, em_attribution=em,
     )
 
     assert result["mainlines"][0]["name"] == "AI算力"
+    assert result["mainlines"][0]["level"] == "次级共振"
     assert result["unattributed_count"] == 1
     assert result["attribution_coverage"] == 0.5
 
@@ -290,3 +293,50 @@ def test_cycle_resonance_hides_numeric_returns_below_eighty_percent_qfq_coverage
 
     assert result["leader_coverage"] == 0.5
     assert [row["return"] for row in result["mainlines"][0]["leaders"]] == [None, None]
+
+
+def test_cycle_resonance_omits_unconfirmed_singleton_mainline():
+    from micro_cycle import build_cycle_resonance
+
+    chain = {"usable": True, "rows": [{"code": "sh600001", "name": "甲"}]}
+    prices = pd.DataFrame(
+        [[10.0], [12.0]],
+        index=["2026-08-04", "2026-08-07"], columns=["sh600001"],
+    )
+    cls = pd.DataFrame([
+        {"date": "20260807", "code": "sh600001", "sub": "传媒", "mainline": "AI应用"},
+    ])
+
+    result = build_cycle_resonance(
+        pd.DataFrame(), chain, prices, "2026-08-04", "2026-08-07", cls_attribution=cls,
+    )
+
+    assert result["attribution_coverage"] == 1.0
+    assert result["mainlines"] == []
+
+
+def test_unknown_index_return_keeps_excess_return_unknown_and_cannot_confirm_industry():
+    from micro_cycle import build_cycle_resonance, build_sector_return_table
+
+    sectors = build_sector_return_table({
+        "半导体": [
+            {"date": "2026-08-04", "close": 100.0},
+            {"date": "2026-08-07", "close": 115.0},
+        ],
+    }, "2026-08-04", "2026-08-07", None)
+    chain = {"usable": True, "rows": [{"code": "sh600001", "name": "甲"}]}
+    prices = pd.DataFrame(
+        [[10.0], [12.0]],
+        index=["2026-08-04", "2026-08-07"], columns=["sh600001"],
+    )
+    cls = pd.DataFrame([
+        {"date": "20260807", "code": "sh600001", "sub": "PCB", "mainline": "AI算力"},
+    ])
+
+    result = build_cycle_resonance(
+        sectors, chain, prices, "2026-08-04", "2026-08-07", cls_attribution=cls,
+    )
+
+    assert sectors.loc[0, "excess_return"] is None
+    assert result["strong_industries"] == []
+    assert result["mainlines"] == []

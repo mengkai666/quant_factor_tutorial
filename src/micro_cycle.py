@@ -212,7 +212,8 @@ def build_sector_return_table(
             rows.append({
                 "name": str(name),
                 "return": value,
-                "excess_return": round(value - float(index_return or 0), 2),
+                "excess_return": round(value - float(index_return), 2)
+                if index_return is not None else None,
             })
     result = pd.DataFrame(rows, columns=["name", "return", "excess_return"])
     if result.empty:
@@ -333,8 +334,10 @@ def build_cycle_resonance(
             level = "核心共振"
         elif count >= 1 and industry_evidence:
             level = "次级共振"
-        elif count >= 1:
+        elif count >= 2:
             level = "连板跟随"
+        else:
+            continue
         leaders = sorted(
             row_list,
             key=lambda row: (-returns.get(row["code"], float("-inf")), row["code"]),
