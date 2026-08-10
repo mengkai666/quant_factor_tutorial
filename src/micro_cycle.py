@@ -12,6 +12,11 @@ def _column(frame, *candidates):
     return next((column for column in candidates if column in frame.columns), None)
 
 
+def _iso_date(value):
+    text = str(value).strip()
+    return f"{text[:4]}-{text[4:6]}-{text[6:]}" if len(text) == 8 and text.isdigit() else text
+
+
 def _after(rows, date):
     return [row for row in rows if str(row.get("date", "")) > date]
 
@@ -136,7 +141,10 @@ def build_signal_limit_chain(
     type_col = _column(limit_history, "type", "类型")
     if not date_col or not code_col:
         return empty
-    dates = [date for date in trading_dates if signal_date <= date <= latest_date]
+    signal_date = _iso_date(signal_date)
+    latest_date = _iso_date(latest_date)
+    ordered_dates = sorted({_iso_date(date) for date in trading_dates})
+    dates = [date for date in ordered_dates if signal_date <= date <= latest_date]
     if len(dates) < 3:
         return empty
 
@@ -152,13 +160,13 @@ def build_signal_limit_chain(
     if any(not sets[date] for date in dates):
         return empty
     chain = set.intersection(*(sets[date] for date in dates))
-    before = [date for date in trading_dates if date < signal_date]
+    before = [date for date in ordered_dates if date < signal_date]
     previous = before[-1] if before else ""
     previous_set = set(
         frame.loc[frame["_date"].eq(previous.replace("-", "")), "_code"]
     ) if previous else set()
     starters = sorted(chain - previous_set)
-    immutable = immutable_dates or set()
+    immutable = {_iso_date(date) for date in (immutable_dates or set())}
     verified = all(date in immutable for date in dates)
     return {
         "usable": bool(starters),

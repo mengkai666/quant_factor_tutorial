@@ -55,6 +55,55 @@ def test_signal_limit_chain_is_verified_only_when_every_cycle_date_is_immutable(
     assert result["hint"] == ""
 
 
+def test_signal_limit_chain_normalizes_compact_trading_dates_to_iso_output():
+    from micro_cycle import build_signal_limit_chain
+
+    history = pd.DataFrame([
+        {"date": date, "type": "ZT", "code": "sh600001"}
+        for date in ("20260804", "20260805", "20260806", "20260807")
+    ])
+    names = NameResolution(names={"sh600001": "验证股份"}, sources={}, conflicts=[])
+    result = build_signal_limit_chain(
+        history,
+        ["20260803", "20260804", "20260805", "20260806", "20260807"],
+        "20260804", "20260807", names=names,
+        immutable_dates={"20260804", "20260805", "20260806", "20260807"},
+    )
+
+    assert result["usable"] is True
+    assert result["dates"] == ["2026-08-04", "2026-08-05", "2026-08-06", "2026-08-07"]
+    assert result["status"] == "verified"
+
+
+def test_signal_limit_chain_sorts_reverse_dates_before_excluding_immediately_previous_pool():
+    from micro_cycle import build_signal_limit_chain
+
+    history = pd.DataFrame([
+        {"date": date, "type": "ZT", "code": code}
+        for date, code in [
+            ("20260804", "sh600001"),
+            ("20260805", "sh600001"),
+            ("20260805", "sh600002"),
+            ("20260806", "sh600001"),
+            ("20260806", "sh600002"),
+            ("20260807", "sh600001"),
+            ("20260807", "sh600002"),
+        ]
+    ])
+    names = NameResolution(
+        names={"sh600001": "前序股份", "sh600002": "新入股份"},
+        sources={}, conflicts=[],
+    )
+    result = build_signal_limit_chain(
+        history,
+        ["2026-08-07", "2026-08-06", "2026-08-05", "2026-08-04", "2026-08-03"],
+        "2026-08-05", "2026-08-07", names=names,
+    )
+
+    assert result["dates"] == ["2026-08-05", "2026-08-06", "2026-08-07"]
+    assert [row["code"] for row in result["rows"]] == ["sh600002"]
+
+
 def _index_fixture():
     values = [
         ("2026-07-17", 3745.174, 3869.215, 3764.155),
