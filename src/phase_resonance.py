@@ -24,6 +24,7 @@ import json
 import os
 import re
 import time
+import unicodedata
 from html import escape
 
 import pandas as pd
@@ -676,10 +677,27 @@ def _micro_text(value):
 _MICRO_FACT_STATUSES = frozenset({"探底未完成", "震荡筑底", "震荡转升", "小周期主升"})
 _MICRO_FACT_LEVELS = frozenset({"核心共振", "次级共振", "连板跟随"})
 _MICRO_FACT_DATE = re.compile(r"^(\d{4})[-/]?(\d{1,2})[-/]?(\d{1,2})$")
+_MICRO_DEFAULT_IGNORABLE_RANGES = (
+    (0x00AD, 0x00AD), (0x034F, 0x034F), (0x061C, 0x061C),
+    (0x115F, 0x1160), (0x17B4, 0x17B5), (0x180B, 0x180F),
+    (0x200B, 0x200F), (0x202A, 0x202E), (0x2060, 0x206F),
+    (0x3164, 0x3164), (0xFE00, 0xFE0F), (0xFEFF, 0xFEFF),
+    (0xFFA0, 0xFFA0), (0x1BCA0, 0x1BCA3), (0x1D173, 0x1D17A),
+    (0xE0000, 0xE0FFF),
+)
+
+
+def _micro_policy_normalized_text(value):
+    text = unicodedata.normalize("NFKC", _micro_text(value))
+    return "".join(
+        char for char in text
+        if unicodedata.category(char) != "Cf"
+        and not any(start <= ord(char) <= end for start, end in _MICRO_DEFAULT_IGNORABLE_RANGES)
+    )
 
 
 def _micro_restricted_text(value):
-    text = _micro_text(value)
+    text = _micro_policy_normalized_text(value)
     if not text:
         return ""
     if not scan_forbidden_semantics(text, "facts_only"):
@@ -689,7 +707,7 @@ def _micro_restricted_text(value):
 
 
 def _micro_restricted_date(value):
-    text = _micro_text(value)
+    text = _micro_policy_normalized_text(value)
     match = _MICRO_FACT_DATE.fullmatch(text)
     if not match:
         return ""
@@ -787,7 +805,10 @@ def _micro_cycle_html(res, *, restricted=False):
 
     mainline_html = ""
     for row in resonance.get("mainlines") or []:
-        raw_level = _micro_text(row.get("level"))
+        raw_level = (
+            _micro_policy_normalized_text(row.get("level"))
+            if restricted else _micro_text(row.get("level"))
+        )
         level = raw_level if restricted and raw_level in _MICRO_FACT_LEVELS else text_value(raw_level)
         name = text_value(row.get("name"))
         if restricted and raw_level not in _MICRO_FACT_LEVELS:
@@ -841,7 +862,10 @@ def _micro_cycle_html(res, *, restricted=False):
     hint_block = f'<div class="micro-cycle-hint">{hint_html}</div>' if hint_html else ""
     full_date = date_value(micro.get("full_confirmation_date"))
     full_text = f" · {escape(full_date, quote=True)} 全面突破" if full_date else ""
-    raw_status = _micro_text(micro.get("status"))
+    raw_status = (
+        _micro_policy_normalized_text(micro.get("status"))
+        if restricted else _micro_text(micro.get("status"))
+    )
     status = raw_status if restricted and raw_status in _MICRO_FACT_STATUSES else text_value(raw_status)
     if restricted and raw_status not in _MICRO_FACT_STATUSES:
         status = ""

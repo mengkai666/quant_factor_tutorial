@@ -753,6 +753,7 @@ def test_facts_only_micro_cycle_sanitizes_untrusted_fields_and_preserves_fact_le
     from bs4 import BeautifulSoup
     import pandas as pd
     import phase_resonance
+    import unicodedata
     import 主线强度追踪 as report
 
     output = tmp_path / "report.html"
@@ -762,40 +763,50 @@ def test_facts_only_micro_cycle_sanitizes_untrusted_fields_and_preserves_fact_le
         "build_phase_resonance",
         lambda: {
             "micro_cycle": {
-                "status": "小周期主升买入<script>alert(1)</script>",
-                "signal_date": "2026-08-04卖出<img src=x onerror=alert(1)>",
+                "status": "小周期主升买\u200b入<script>alert(1)</script>",
+                "signal_date": "2026-08-04卖\u2060出<img src=x onerror=alert(1)>",
                 "confirmation_date": "2026-08-05",
-                "full_confirmation_date": "2026-08-06加仓<svg onload=alert(1)>",
+                "full_confirmation_date": "2026-08-06加\ufeff仓<svg onload=alert(1)>",
                 "signal_return": 3.08,
                 "rising_days": 4,
                 "events": {
                     "final_stop": {
-                        "date": "2026-07-20减仓<img src=x onerror=alert(1)>",
+                        "date": "2026-07-20减\u200b仓<img src=x onerror=alert(1)>",
                         "low": 3741.11,
                     },
                 },
             },
             "micro_chain": {
                 "usable": False,
-                "hint": "历史事实不足锁仓<img src=x onerror=alert(1)>",
+                "hint": "历史事实不足锁\ufeff仓<img src=x onerror=alert(1)>",
             },
             "micro_resonance": {
                 "strong_industries": [{
-                    "name": "电子化学品加仓<img src=x onerror=alert(1)>",
+                    "name": "电子化学品加\u200b仓<img src=x onerror=alert(1)>",
                     "return": 17.14,
                 }],
-                "mainlines": [{
-                    "name": "AI应用清仓<svg onload=alert(1)>",
-                    "level": "连板跟随",
-                    "chain_count": 2,
-                    "chain_total": 7,
-                    "industry_evidence": ["传媒减仓<span onclick=alert(1)>证据</span>"],
-                    "leaders": [{
-                        "name": "凯撒文化买入<script>alert(1)</script>",
-                        "code": "sh600892卖出\" onmouseover=alert(1)",
-                        "return": None,
-                    }],
-                }],
+                "mainlines": [
+                    {
+                        "name": "AI应用清\u2060仓<svg onload=alert(1)>",
+                        "level": "连板跟随",
+                        "chain_count": 2,
+                        "chain_total": 7,
+                        "industry_evidence": ["传媒减\ufeff仓<span onclick=alert(1)>证据</span>"],
+                        "leaders": [{
+                            "name": "凯撒文化买\u200b入<script>alert(1)</script>",
+                            "code": "sh600892卖\u2060出\" onmouseover=alert(1)",
+                            "return": None,
+                        }],
+                    },
+                    {
+                        "name": "测试主线",
+                        "level": "买\u200b入",
+                        "chain_count": 1,
+                        "chain_total": 7,
+                        "industry_evidence": [],
+                        "leaders": [],
+                    },
+                ],
                 "attribution_coverage": 1.0,
                 "leader_coverage": 1.0,
                 "unattributed_count": 0,
@@ -842,6 +853,9 @@ def test_facts_only_micro_cycle_sanitizes_untrusted_fields_and_preserves_fact_le
     assert "7/20" not in section.get_text(" ", strip=True)
     assert "2026-08-05" not in str(section)
     assert "8/5" in section.get_text(" ", strip=True)
+    for fact in ("电子化学品", "AI应用", "传媒", "凯撒文化", "sh600892", "历史事实不足"):
+        assert fact in section.get_text(" ", strip=True)
+    assert [node.get_text(strip=True) for node in section.select(".micro-mainline-row b")] == ["连板跟随"]
     assert not section.select("script, img, svg")
     assert not [
         attr
@@ -849,8 +863,14 @@ def test_facts_only_micro_cycle_sanitizes_untrusted_fields_and_preserves_fact_le
         for attr in element.attrs
         if attr.lower().startswith("on")
     ]
+    raw_section = str(section)
+    assert not any(marker in raw_section for marker in ("\u200b", "\u2060", "\ufeff"))
+    visible_section = unicodedata.normalize("NFKC", raw_section)
+    visible_section = "".join(
+        char for char in visible_section if unicodedata.category(char) != "Cf"
+    )
     for token in ("买入", "卖出", "加仓", "减仓", "清仓", "锁仓"):
-        assert token not in str(section)
+        assert token not in visible_section
 
 
 def test_full_report_sentiment_chart_can_shrink_on_mobile(monkeypatch, tmp_path):
