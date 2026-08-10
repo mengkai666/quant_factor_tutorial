@@ -1,4 +1,58 @@
+import pandas as pd
 import pytest
+
+from data_sources.name_resolver import NameResolution
+
+
+def test_signal_limit_chain_uses_fact_membership_and_excludes_prior_limit_ups():
+    from micro_cycle import build_signal_limit_chain
+
+    starters = ["sh600721", "sh600892", "sh603773", "sz002425", "sz002428", "sz002552", "sz002975"]
+    rows = []
+    for date in ("20260804", "20260805", "20260806", "20260807"):
+        for code in starters + ["sz002963"]:
+            rows.append({"日期": date, "类型": "ZT", "代码": code, "连板数": 3})
+    rows.extend([
+        {"日期": "20260803", "类型": "ZT", "代码": "sz002963", "连板数": 1},
+        {"日期": "20260804", "类型": "DT", "代码": "sh600001", "连板数": 0},
+    ])
+    names = NameResolution(
+        names={code: f"股票{index}" for index, code in enumerate(starters, 1)} | {"sz002963": "豪尔赛"},
+        sources={}, conflicts=[],
+    )
+
+    result = build_signal_limit_chain(
+        pd.DataFrame(rows),
+        ["2026-08-03", "2026-08-04", "2026-08-05", "2026-08-06", "2026-08-07"],
+        "2026-08-04", "2026-08-07",
+        names=names,
+        immutable_dates={"2026-08-07"},
+    )
+
+    assert result["usable"] is True
+    assert result["status"] == "provisional"
+    assert result["consecutive_days"] == 4
+    assert [row["code"] for row in result["rows"]] == starters
+    assert "上游连板数" not in str(result["rows"])
+    assert "历史事实交集" in result["hint"]
+
+
+def test_signal_limit_chain_is_verified_only_when_every_cycle_date_is_immutable():
+    from micro_cycle import build_signal_limit_chain
+
+    history = pd.DataFrame([
+        {"date": date, "type": "ZT", "code": "sh600001"}
+        for date in ("20260804", "20260805", "20260806", "20260807")
+    ])
+    names = NameResolution(names={"sh600001": "验证股份"}, sources={}, conflicts=[])
+    result = build_signal_limit_chain(
+        history,
+        ["2026-08-03", "2026-08-04", "2026-08-05", "2026-08-06", "2026-08-07"],
+        "2026-08-04", "2026-08-07", names=names,
+        immutable_dates={"2026-08-04", "2026-08-05", "2026-08-06", "2026-08-07"},
+    )
+    assert result["status"] == "verified"
+    assert result["hint"] == ""
 
 
 def _index_fixture():

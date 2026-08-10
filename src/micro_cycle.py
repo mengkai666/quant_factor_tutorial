@@ -2,6 +2,15 @@ from __future__ import annotations
 
 from typing import Any
 
+import pandas as pd
+
+from data_sources.models import normalize_code
+from data_sources.name_resolver import NameResolution
+
+
+def _column(frame, *candidates):
+    return next((column for column in candidates if column in frame.columns), None)
+
 
 def _after(rows, date):
     return [row for row in rows if str(row.get("date", "")) > date]
@@ -106,4 +115,59 @@ def detect_micro_cycle(det: dict, *, daily_limit_counts=None) -> dict:
         "signal_return": signal_return,
         "rising_days": rising_days if signal else 0,
         "signal_basis": basis,
+    }
+
+
+def build_signal_limit_chain(
+    limit_history: pd.DataFrame,
+    trading_dates: list[str],
+    signal_date: str,
+    latest_date: str,
+    *,
+    names: NameResolution,
+    immutable_dates: set[str] | None = None,
+) -> dict:
+    empty = {"usable": False, "status": "unavailable", "dates": [],
+             "consecutive_days": 0, "rows": [], "hint": ""}
+    if limit_history is None or limit_history.empty:
+        return empty
+    date_col = _column(limit_history, "date", "日期")
+    code_col = _column(limit_history, "code", "代码")
+    type_col = _column(limit_history, "type", "类型")
+    if not date_col or not code_col:
+        return empty
+    dates = [date for date in trading_dates if signal_date <= date <= latest_date]
+    if len(dates) < 3:
+        return empty
+
+    frame = limit_history.copy()
+    frame["_date"] = frame[date_col].astype(str).str.replace("-", "", regex=False)
+    if type_col:
+        frame = frame[frame[type_col].astype(str).str.upper().eq("ZT")]
+    frame["_code"] = frame[code_col].map(normalize_code)
+    sets = {
+        date: set(frame.loc[frame["_date"].eq(date.replace("-", "")), "_code"])
+        for date in dates
+    }
+    if any(not sets[date] for date in dates):
+        return empty
+    chain = set.intersection(*(sets[date] for date in dates))
+    before = [date for date in trading_dates if date < signal_date]
+    previous = before[-1] if before else ""
+    previous_set = set(
+        frame.loc[frame["_date"].eq(previous.replace("-", "")), "_code"]
+    ) if previous else set()
+    starters = sorted(chain - previous_set)
+    immutable = immutable_dates or set()
+    verified = all(date in immutable for date in dates)
+    return {
+        "usable": bool(starters),
+        "status": "verified" if verified else "provisional",
+        "dates": dates,
+        "consecutive_days": len(dates),
+        "rows": [
+            {"code": code, "name": names.names.get(code, code)}
+            for code in starters
+        ],
+        "hint": "" if verified else "按历史事实交集计算，逐日不可变快照待补强",
     }
