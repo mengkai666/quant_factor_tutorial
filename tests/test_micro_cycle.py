@@ -169,3 +169,124 @@ def test_detect_micro_cycle_does_not_claim_turn_up_before_rebound_high_breaks():
     assert result["confirmation_date"] == ""
     assert result["status"] == "震荡筑底"
     assert result["signal_basis"] == "price_only"
+
+
+def test_build_sector_return_table_uses_period_returns_and_returns_empty_frame_for_empty_cache():
+    from micro_cycle import build_sector_return_table
+
+    cache = {
+        "半导体": [
+            {"date": "2026-08-03", "close": 90.0},
+            {"date": "2026-08-04", "close": 100.0},
+            {"date": "2026-08-07", "close": 115.0},
+        ],
+        "医疗服务": [
+            {"date": "2026-08-04", "close": 100.0},
+            {"date": "2026-08-07", "close": 108.0},
+        ],
+    }
+
+    result = build_sector_return_table(cache, "2026-08-04", "2026-08-07", 3.0)
+
+    assert result.to_dict("records") == [
+        {"name": "半导体", "return": 15.0, "excess_return": 12.0},
+        {"name": "医疗服务", "return": 8.0, "excess_return": 5.0},
+    ]
+    empty = build_sector_return_table({}, "2026-08-04", "2026-08-07", 3.0)
+    assert empty.empty
+    assert list(empty.columns) == ["name", "return", "excess_return"]
+
+
+def test_cycle_resonance_separates_strong_industries_from_confirmed_mainlines():
+    from micro_cycle import build_cycle_resonance
+
+    codes = ["sz002552", "sz002428", "sh603773", "sz002975", "sh600721", "sz002425", "sh600892"]
+    chain = {
+        "usable": True,
+        "rows": [{"code": code, "name": name} for code, name in zip(codes, [
+            "宝鼎科技", "云南锗业", "沃格光电", "博杰股份", "百花医药", "凯撒文化", "大晟文化",
+        ])],
+    }
+    sector_returns = pd.DataFrame([
+        {"name": "电子化学品", "return": 17.14, "excess_return": 14.06},
+        {"name": "元件", "return": 15.22, "excess_return": 12.14},
+        {"name": "贵金属", "return": 15.13, "excess_return": 12.05},
+        {"name": "半导体", "return": 11.53, "excess_return": 8.45},
+        {"name": "医疗服务", "return": 9.08, "excess_return": 6.00},
+    ])
+    price_matrix = pd.DataFrame(
+        [[10, 10, 10, 10, 10, 10, 10], [12.6767, 12.6763, 12.6760, 12.4081, 12.6731, 11.5622, 11.4758]],
+        index=["2026-08-04", "2026-08-07"], columns=codes,
+    )
+    cls = pd.DataFrame([
+        {"date": "20260807", "code": code, "sub": sub, "mainline": mainline}
+        for code, sub, mainline in [
+            ("sz002552", "PCB", "AI算力"), ("sz002428", "光通信", "AI算力"),
+            ("sh603773", "PCB", "AI算力"), ("sz002975", "液冷", "AI算力"),
+            ("sh600721", "医药", "医药"), ("sz002425", "AI应用", "AI应用"),
+            ("sh600892", "传媒", "AI应用"),
+        ]
+    ])
+
+    result = build_cycle_resonance(
+        sector_returns, chain, price_matrix, "2026-08-04", "2026-08-07",
+        cls_attribution=cls, em_attribution=None,
+    )
+
+    assert [row["name"] for row in result["strong_industries"][:3]] == ["电子化学品", "元件", "贵金属"]
+    levels = {row["name"]: row["level"] for row in result["mainlines"]}
+    assert levels == {"AI算力": "核心共振", "医药": "次级共振", "AI应用": "连板跟随"}
+    leaders = {row["name"]: [stock["name"] for stock in row["leaders"]] for row in result["mainlines"]}
+    assert leaders["AI算力"] == ["宝鼎科技", "云南锗业", "沃格光电", "博杰股份"]
+    assert "贵金属" not in levels
+
+
+def test_cycle_resonance_prefers_latest_valid_cls_and_keeps_unattributed_codes():
+    from micro_cycle import build_cycle_resonance
+
+    chain = {"usable": True, "rows": [
+        {"code": "sh600001", "name": "甲"}, {"code": "sh600002", "name": "乙"},
+    ]}
+    prices = pd.DataFrame(
+        [[10.0, 10.0], [12.0, 11.0]],
+        index=["2026-08-04", "2026-08-07"], columns=["sh600001", "sh600002"],
+    )
+    cls = pd.DataFrame([
+        {"date": "20260806", "code": "sh600001", "sub": "PCB", "mainline": "AI算力"},
+        {"date": "20260807", "code": "sh600001", "sub": "其它", "mainline": "其它"},
+    ])
+    em = pd.DataFrame([
+        {"date": "20260807", "code": "sh600001", "sub": "传媒", "mainline": "AI应用"},
+    ])
+
+    result = build_cycle_resonance(
+        pd.DataFrame(), chain, prices, "2026-08-04", "2026-08-07",
+        cls_attribution=cls, em_attribution=em,
+    )
+
+    assert result["mainlines"][0]["name"] == "AI算力"
+    assert result["unattributed_count"] == 1
+    assert result["attribution_coverage"] == 0.5
+
+
+def test_cycle_resonance_hides_numeric_returns_below_eighty_percent_qfq_coverage():
+    from micro_cycle import build_cycle_resonance
+
+    chain = {"usable": True, "rows": [
+        {"code": "sh600001", "name": "甲"}, {"code": "sh600002", "name": "乙"},
+    ]}
+    prices = pd.DataFrame(
+        [[10.0], [12.0]],
+        index=["2026-08-04", "2026-08-07"], columns=["sh600001"],
+    )
+    cls = pd.DataFrame([
+        {"date": "20260807", "code": code, "sub": "传媒", "mainline": "AI应用"}
+        for code in ("sh600001", "sh600002")
+    ])
+    result = build_cycle_resonance(
+        pd.DataFrame(), chain, prices, "2026-08-04", "2026-08-07",
+        cls_attribution=cls,
+    )
+
+    assert result["leader_coverage"] == 0.5
+    assert [row["return"] for row in result["mainlines"][0]["leaders"]] == [None, None]

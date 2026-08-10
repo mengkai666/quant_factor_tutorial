@@ -8,6 +8,19 @@ from data_sources.models import normalize_code
 from data_sources.name_resolver import NameResolution
 
 
+MAINLINE_INDUSTRIES = {
+    "AI算力": {"电子化学品", "元件", "半导体", "其他电子", "通信设备", "消费电子", "光学光电子"},
+    "AI应用": {"软件开发", "IT服务", "互联网服务", "游戏", "出版", "广告营销", "影视院线"},
+    "医药": {"医疗服务", "生物制品", "化学制药", "中药", "医药商业", "医疗器械"},
+    "周期资源": {"贵金属", "小金属", "能源金属", "金属新材料", "工业金属", "化学原料", "化学制品", "煤炭开采"},
+    "机器人": {"自动化设备", "通用设备", "专用设备", "电机"},
+    "新能源电网": {"电网设备", "电池", "光伏设备", "风电设备", "电力"},
+    "军工航天": {"航空装备", "航天装备", "军工电子", "船舶制造"},
+}
+LEVEL_ORDER = {"核心共振": 0, "次级共振": 1, "连板跟随": 2}
+INVALID_MAINLINES = {"", "其它", "其他", "nan", "None"}
+
+
 def _column(frame, *candidates):
     return next((column for column in candidates if column in frame.columns), None)
 
@@ -178,4 +191,177 @@ def build_signal_limit_chain(
             for code in starters
         ],
         "hint": "" if verified else "按历史事实交集计算，逐日不可变快照待补强",
+    }
+
+
+def _segment_return(records: list[dict[str, Any]], start: str, end: str) -> float | None:
+    first = [row for row in records if str(row.get("date", "")) <= start]
+    last = [row for row in records if str(row.get("date", "")) <= end]
+    if not first or not last or not first[-1].get("close"):
+        return None
+    return round((float(last[-1]["close"]) / float(first[-1]["close"]) - 1) * 100, 2)
+
+
+def build_sector_return_table(
+    cache: dict, signal_date: str, latest_date: str, index_return: float | None,
+) -> pd.DataFrame:
+    rows = []
+    for name, records in (cache or {}).items():
+        value = _segment_return(records, signal_date, latest_date)
+        if value is not None:
+            rows.append({
+                "name": str(name),
+                "return": value,
+                "excess_return": round(value - float(index_return or 0), 2),
+            })
+    result = pd.DataFrame(rows, columns=["name", "return", "excess_return"])
+    if result.empty:
+        return result
+    return result.sort_values(["return", "name"], ascending=[False, True]).reset_index(drop=True)
+
+
+def _safe_code(value: Any) -> str:
+    try:
+        return normalize_code(value)
+    except ValueError:
+        return ""
+
+
+def _attribution_map(frame: pd.DataFrame | None, latest_date: str) -> dict[str, str]:
+    if frame is None or not isinstance(frame, pd.DataFrame) or frame.empty:
+        return {}
+    required = {"date", "code", "mainline"}
+    if not required.issubset(frame.columns):
+        return {}
+    work = frame.copy()
+    work["_date"] = work["date"].astype(str).str.replace("-", "", regex=False)
+    work["_code"] = work["code"].map(_safe_code)
+    work["_mainline"] = work["mainline"].astype(str).str.strip()
+    work = work[
+        work["_date"].le(latest_date.replace("-", ""))
+        & work["_code"].ne("")
+        & ~work["_mainline"].isin(INVALID_MAINLINES)
+    ]
+    if work.empty:
+        return {}
+    latest = work.sort_values("_date").drop_duplicates("_code", keep="last")
+    return dict(zip(latest["_code"], latest["_mainline"]))
+
+
+def _endpoint_returns(
+    price_matrix: pd.DataFrame | None,
+    codes: list[str],
+    signal_date: str,
+    latest_date: str,
+) -> dict[str, float]:
+    if (
+        price_matrix is None
+        or not isinstance(price_matrix, pd.DataFrame)
+        or signal_date not in price_matrix.index
+        or latest_date not in price_matrix.index
+    ):
+        return {}
+    result = {}
+    for code in codes:
+        if code not in price_matrix.columns:
+            continue
+        start = pd.to_numeric(price_matrix.at[signal_date, code], errors="coerce")
+        end = pd.to_numeric(price_matrix.at[latest_date, code], errors="coerce")
+        if pd.isna(start) or pd.isna(end) or float(start) == 0:
+            continue
+        result[code] = (float(end) / float(start) - 1) * 100
+    return result
+
+
+def build_cycle_resonance(
+    sector_returns: pd.DataFrame,
+    chain: dict,
+    price_matrix: pd.DataFrame,
+    signal_date: str,
+    latest_date: str,
+    *,
+    cls_attribution: pd.DataFrame | None = None,
+    em_attribution: pd.DataFrame | None = None,
+) -> dict:
+    chain_rows = list((chain or {}).get("rows") or []) if (chain or {}).get("usable") else []
+    chain_total = len(chain_rows)
+    empty = {
+        "strong_industries": [],
+        "mainlines": [],
+        "attribution_coverage": 0.0,
+        "leader_coverage": 0.0,
+        "unattributed_count": chain_total,
+    }
+
+    strong = pd.DataFrame()
+    if isinstance(sector_returns, pd.DataFrame) and not sector_returns.empty:
+        strong = sector_returns.copy()
+        strong["return"] = pd.to_numeric(strong["return"], errors="coerce")
+        strong["excess_return"] = pd.to_numeric(strong["excess_return"], errors="coerce")
+        strong = strong[strong["excess_return"].ge(2.0)].dropna(subset=["name", "return"])
+        strong = strong.sort_values(["return", "name"], ascending=[False, True])
+    empty["strong_industries"] = [
+        {"name": str(row["name"]), "return": round(float(row["return"]), 2)}
+        for _, row in strong.head(5).iterrows()
+    ]
+    if not chain_rows:
+        return empty
+
+    cls_map = _attribution_map(cls_attribution, latest_date)
+    em_map = _attribution_map(em_attribution, latest_date)
+    attributed = []
+    for row in chain_rows:
+        code = _safe_code(row.get("code"))
+        mainline = cls_map.get(code) or em_map.get(code)
+        if code and mainline:
+            attributed.append({**row, "code": code, "mainline": mainline})
+
+    returns = _endpoint_returns(
+        price_matrix, [row["code"] for row in chain_rows], signal_date, latest_date,
+    )
+    leader_coverage = len(returns) / chain_total
+    evidence_names = set(strong["name"].astype(str)) if not strong.empty else set()
+    evidence_order = list(strong["name"].astype(str)) if not strong.empty else []
+    mainlines = []
+    groups = pd.DataFrame(attributed).groupby("mainline", sort=False) if attributed else []
+    for mainline, rows in groups:
+        row_list = rows.to_dict("records")
+        industries = MAINLINE_INDUSTRIES.get(str(mainline), set()) & evidence_names
+        industry_evidence = [name for name in evidence_order if name in industries]
+        count = len(row_list)
+        if count >= 2 and len(industry_evidence) >= 2:
+            level = "核心共振"
+        elif count >= 1 and industry_evidence:
+            level = "次级共振"
+        elif count >= 1:
+            level = "连板跟随"
+        leaders = sorted(
+            row_list,
+            key=lambda row: (-returns.get(row["code"], float("-inf")), row["code"]),
+        )[:4]
+        mainlines.append({
+            "name": str(mainline),
+            "level": level,
+            "chain_count": count,
+            "chain_total": chain_total,
+            "industry_evidence": industry_evidence,
+            "leaders": [
+                {
+                    "code": row["code"],
+                    "name": str(row.get("name") or row["code"]),
+                    "return": round(returns[row["code"]], 2)
+                    if leader_coverage >= 0.80 and row["code"] in returns else None,
+                }
+                for row in leaders
+            ],
+        })
+    mainlines.sort(key=lambda row: (
+        LEVEL_ORDER[row["level"]], -row["chain_count"], row["name"],
+    ))
+    return {
+        "strong_industries": empty["strong_industries"],
+        "mainlines": mainlines,
+        "attribution_coverage": round(len(attributed) / chain_total, 4),
+        "leader_coverage": round(leader_coverage, 4),
+        "unattributed_count": chain_total - len(attributed),
     }
