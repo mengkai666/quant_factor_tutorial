@@ -171,6 +171,182 @@ def test_detect_micro_cycle_does_not_claim_turn_up_before_rebound_high_breaks():
     assert result["signal_basis"] == "price_only"
 
 
+def test_detect_micro_cycle_does_not_promote_a_cycle_after_secondary_low_breaks_support():
+    from micro_cycle import detect_micro_cycle
+
+    rows = _index_fixture()
+    rows = [
+        {**row, "low": 3735.0} if row["date"] == "2026-07-30" else row
+        for row in rows
+    ]
+
+    result = detect_micro_cycle({
+        "bottom": {"date": "2026-07-17", "close": 3764.155},
+        "index_series": rows,
+    })
+
+    assert result["events"]["secondary_bottom"]["higher_low"] is False
+    assert result["status"] == "探底未完成"
+    assert result["signal_date"] == ""
+    assert result["confirmation_date"] == ""
+    assert result["full_confirmation_date"] == ""
+    assert result["rising_days"] == 0
+    assert result["signal_return"] is None
+    assert result["signal_basis"] == "unavailable"
+
+
+@pytest.mark.parametrize(
+    "counts",
+    [
+        {"2026-08-03": 101},
+        {"2026-08-04": 140},
+    ],
+)
+def test_detect_micro_cycle_keeps_price_signal_when_limit_counts_are_incomplete(counts):
+    from micro_cycle import detect_micro_cycle
+
+    result = detect_micro_cycle(
+        {
+            "bottom": {"date": "2026-07-17", "close": 3764.155},
+            "index_series": _index_fixture(),
+        },
+        daily_limit_counts=counts,
+    )
+
+    assert result["signal_date"] == "2026-08-04"
+    assert result["signal_basis"] == "price_only"
+
+
+def test_detect_micro_cycle_counts_only_the_uninterrupted_rise_from_signal():
+    from micro_cycle import detect_micro_cycle
+
+    rows = _index_fixture()
+    rows = [
+        {**row, "close": 3877.0} if row["date"] == "2026-08-06" else row
+        for row in rows
+    ]
+    rows.extend([
+        {"date": "2026-08-10", "low": 3930.0, "high": 3960.0, "close": 3950.0},
+        {"date": "2026-08-11", "low": 3940.0, "high": 3970.0, "close": 3960.0},
+    ])
+
+    result = detect_micro_cycle({
+        "bottom": {"date": "2026-07-17", "close": 3764.155},
+        "index_series": rows,
+    })
+
+    assert result["signal_date"] == "2026-08-04"
+    assert result["rising_days"] == 2
+    assert result["status"] == "震荡转升"
+
+
+def test_phase_payload_does_not_publish_resonance_before_close_confirmation(monkeypatch):
+    import phase_resonance
+
+    monkeypatch.setattr(
+        phase_resonance,
+        "detect_micro_cycle",
+        lambda *_args, **_kwargs: {
+            "status": "震荡筑底",
+            "signal_date": "2026-08-04",
+            "confirmation_date": "",
+            "full_confirmation_date": "",
+            "events": {},
+        },
+    )
+    monkeypatch.setattr(phase_resonance, "_read_csv", lambda *_args, **_kwargs: pd.DataFrame())
+    monkeypatch.setattr(phase_resonance, "resolve_names", lambda **_kwargs: object())
+    monkeypatch.setattr(
+        phase_resonance,
+        "build_signal_limit_chain",
+        lambda *_args, **_kwargs: {"usable": True, "rows": [{"code": "sh600001"}]},
+    )
+    monkeypatch.setattr(
+        phase_resonance,
+        "build_sector_return_table",
+        lambda *_args, **_kwargs: pd.DataFrame([{"name": "半导体", "return": 8.0}]),
+    )
+    monkeypatch.setattr(phase_resonance, "build_price_matrix", lambda *_args, **_kwargs: pd.DataFrame())
+    monkeypatch.setattr(
+        phase_resonance,
+        "build_cycle_resonance",
+        lambda *_args, **_kwargs: {"mainlines": [{"name": "AI算力"}]},
+    )
+
+    payload = phase_resonance._build_micro_cycle_payload(
+        {
+            "latest": {"date": "2026-08-04"},
+            "index_series": [{"date": "2026-08-04"}],
+        },
+        {},
+    )
+
+    assert payload["micro_cycle"]["signal_date"] == "2026-08-04"
+    assert payload["micro_chain"] == {}
+    assert payload["micro_resonance"] == {}
+
+
+def test_phase_payload_filters_price_cache_to_historical_report_cutoff(monkeypatch):
+    import phase_resonance
+
+    prices = pd.DataFrame([
+        {"date": "2026-08-04", "code": "sh600001", "close_legacy": 10.0, "close_qfq": None},
+        {"date": "2026-08-07", "code": "sh600001", "close_legacy": 12.0, "close_qfq": 18.0},
+        {"date": "2026-08-10", "code": "sh600001", "close_legacy": 20.0, "close_qfq": 40.0},
+    ])
+    captured = {}
+
+    def read_cache(path, **_kwargs):
+        return prices.copy() if path == phase_resonance.PRICE_CACHE else pd.DataFrame()
+
+    def capture_price_matrix(frame, *_args, **_kwargs):
+        captured["dates"] = frame["date"].tolist()
+        return pd.DataFrame()
+
+    monkeypatch.setattr(
+        phase_resonance,
+        "detect_micro_cycle",
+        lambda *_args, **_kwargs: {
+            "status": "小周期主升",
+            "signal_date": "2026-08-04",
+            "confirmation_date": "2026-08-05",
+            "full_confirmation_date": "2026-08-06",
+            "signal_return": 3.0,
+            "events": {},
+        },
+    )
+    monkeypatch.setattr(phase_resonance, "_read_csv", read_cache)
+    monkeypatch.setattr(phase_resonance, "resolve_names", lambda **_kwargs: object())
+    monkeypatch.setattr(phase_resonance, "_immutable_snapshot_dates", lambda: set())
+    monkeypatch.setattr(
+        phase_resonance,
+        "build_signal_limit_chain",
+        lambda *_args, **_kwargs: {"usable": False, "rows": []},
+    )
+    monkeypatch.setattr(
+        phase_resonance,
+        "build_sector_return_table",
+        lambda *_args, **_kwargs: pd.DataFrame(),
+    )
+    monkeypatch.setattr(phase_resonance, "build_price_matrix", capture_price_matrix)
+    monkeypatch.setattr(phase_resonance, "build_cycle_resonance", lambda *_args, **_kwargs: {})
+
+    phase_resonance._build_micro_cycle_payload(
+        {
+            "latest": {"date": "2026-08-07"},
+            "index_series": [
+                {"date": "2026-08-04"},
+                {"date": "2026-08-05"},
+                {"date": "2026-08-06"},
+                {"date": "2026-08-07"},
+            ],
+        },
+        {},
+    )
+
+    assert captured["dates"] == ["2026-08-04", "2026-08-07"]
+
+
 def test_build_sector_return_table_uses_period_returns_and_returns_empty_frame_for_empty_cache():
     from micro_cycle import build_sector_return_table
 

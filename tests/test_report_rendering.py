@@ -1034,6 +1034,8 @@ def test_micro_cycle_template_hides_empty_evidence_headings_and_keeps_small_hint
     assert "历史事实不足" in html
     assert "强行业" not in html
     assert "共振主线" not in html
+    assert "转强后" not in html
+    assert "连续 0 日收涨" not in html
     assert "None" not in html
     assert "nan" not in html.lower()
 

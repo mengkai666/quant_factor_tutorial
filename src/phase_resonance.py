@@ -448,7 +448,7 @@ def _build_micro_cycle_payload(det, cache):
     micro_cycle = detect_micro_cycle(det, daily_limit_counts=counts)
     micro_chain = {}
     micro_resonance = {}
-    if micro_cycle.get("signal_date"):
+    if micro_cycle.get("signal_date") and micro_cycle.get("confirmation_date"):
         master = _read_csv(SECURITY_MASTER_CACHE, dtype=str)
         industry = _read_csv(INDUSTRY_CACHE, dtype=str)
         names = resolve_names(universe=master, industry=industry)
@@ -461,7 +461,12 @@ def _build_micro_cycle_payload(det, cache):
             cache, micro_cycle["signal_date"], det["latest"]["date"],
             micro_cycle.get("signal_return"),
         )
-        prices = build_price_matrix(_read_csv(PRICE_CACHE), "qfq", allow_legacy=True)
+        price_history = _read_csv(PRICE_CACHE)
+        if not price_history.empty and "date" in price_history.columns:
+            price_dates = pd.to_datetime(price_history["date"], errors="coerce")
+            report_cutoff = pd.Timestamp(det["latest"]["date"])
+            price_history = price_history.loc[price_dates.le(report_cutoff)].copy()
+        prices = build_price_matrix(price_history, "qfq", allow_legacy=True)
         micro_resonance = build_cycle_resonance(
             sector_returns, micro_chain, prices,
             micro_cycle["signal_date"], det["latest"]["date"],
@@ -862,6 +867,11 @@ def _micro_cycle_html(res, *, restricted=False):
     hint_block = f'<div class="micro-cycle-hint">{hint_html}</div>' if hint_html else ""
     full_date = date_value(micro.get("full_confirmation_date"))
     full_text = f" · {escape(full_date, quote=True)} 全面突破" if full_date else ""
+    signal_summary = (
+        f'<small>转强后 {_micro_return(micro.get("signal_return"))} · '
+        f'连续 {_micro_integer(micro.get("rising_days"))} 日收涨{full_text}</small>'
+        if date_value(micro.get("signal_date")) else ""
+    )
     raw_status = (
         _micro_policy_normalized_text(micro.get("status"))
         if restricted else _micro_text(micro.get("status"))
@@ -897,7 +907,7 @@ def _micro_cycle_html(res, *, restricted=False):
     </style>
     <section class="micro-cycle-section">
       <div class="micro-cycle-head"><div><h3>短周期结构</h3>{status_html}</div>
-      <small>转强后 {_micro_return(micro.get("signal_return"))} · 连续 {_micro_integer(micro.get("rising_days"))} 日收涨{full_text}</small></div>
+      {signal_summary}</div>
       <div class="micro-cycle-timeline">{event_html}</div>
       {industry_section}{mainline_section}
       {hint_block}

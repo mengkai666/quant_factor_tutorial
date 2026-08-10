@@ -88,25 +88,31 @@ def detect_micro_cycle(det: dict, *, daily_limit_counts=None) -> dict:
     counts = daily_limit_counts or {}
     if signal and counts:
         previous = rows[rows.index(signal) - 1]["date"]
-        if counts.get(signal["date"], 0) > counts.get(previous, 0):
-            basis = "price+limit_pool"
-        else:
-            signal = None
-            basis = "unavailable"
+        if signal["date"] in counts and previous in counts:
+            if counts[signal["date"]] > counts[previous]:
+                basis = "price+limit_pool"
+            else:
+                signal = None
+                basis = "unavailable"
 
     full = next((
         row for row in after_rebound
         if float(row["high"]) > float(high_peak["high"])
         and float(row["close"]) > float(close_peak["close"])
     ), None)
+    if not higher_low:
+        signal = None
+        confirmation = None
+        full = None
+        basis = "unavailable"
     signal_i = rows.index(signal) if signal else -1
     signal_rows = rows[signal_i:] if signal_i >= 0 else []
-    rising_days = 1
+    rising_days = 1 if signal else 0
     for previous, current in zip(signal_rows, signal_rows[1:]):
         if float(current["close"]) > float(previous["close"]):
             rising_days += 1
         else:
-            rising_days = 1
+            break
     status = "探底未完成" if not higher_low else "震荡筑底"
     if confirmation:
         status = "小周期主升" if signal and rising_days >= 4 else "震荡转升"
