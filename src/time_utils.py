@@ -60,19 +60,41 @@ def filter_completed_rows(frame, date_col, *, now=None, report_date=None):
     return frame.loc[valid].copy()
 
 
+def _cache_file_stamp(path):
+    """Return a cheap identity stamp for a cache file, or None when absent."""
+    try:
+        stat = os.stat(path)
+    except OSError:
+        return None
+    return (stat.st_mtime_ns, stat.st_size)
+
+
 def get_latest_date():
     """Return the latest completed date in the local cache.
 
     Future/premarket rows are ignored. REPORT_DATE can pin a historical run so
     every module uses the same as-of boundary.
+
+    ⚠️ 记忆化必须带上涨停缓存的文件指纹 (mtime_ns, size)。日报进程内的调用顺序是
+    "步骤1 抓当日涨停池并写缓存" 之前就有 get_trading_dates -> get_cached_trading_dates
+    -> 本函数; 旧实现的 memo key 只有 (REPORT_DATE, cutoff), 两者在同一次运行内恒定,
+    于是当日新写入的交易日永远看不见 —— 2026-08-11 事故: 19:58:57 启动时缓存最新为
+    08-10 并被 memo 钉死, 19:59:07 写入 08-11 后步骤2 仍读到 08-10, 当日数据被
+    trade_dates_set 过滤掉, update_price_cache 拿到的最大日期是 08-10 直接早退,
+    整份报告回退成前一天。
     """
     global _cached_latest_date, _cached_latest_date_key
-    cutoff = get_report_cutoff()
-    cache_key = (os.environ.get("REPORT_DATE", ""), cutoff.isoformat())
-    if _cached_latest_date is not None and _cached_latest_date_key == cache_key:
-        return _cached_latest_date
 
     from paths import ZT_CACHE_FILE
+
+    cutoff = get_report_cutoff()
+    cache_key = (
+        os.environ.get("REPORT_DATE", ""),
+        cutoff.isoformat(),
+        _cache_file_stamp(ZT_CACHE_FILE),
+    )
+    if _cached_latest_date is not None and _cached_latest_date_key == cache_key:
+        return _cached_latest_date
 
     try:
         if os.path.exists(ZT_CACHE_FILE):

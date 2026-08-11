@@ -67,7 +67,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
 from datetime import datetime, timedelta
 from fupan_report import FuPanZhangTingYuanYin
-from time_utils import filter_completed_rows, get_latest_date
+from time_utils import filter_completed_rows, get_latest_date, get_report_cutoff
 
 try:
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')  # type: ignore
@@ -2649,25 +2649,36 @@ def _fill_price_gaps_with_provider(
 
     raw_before = _complete_codes('raw')
     qfq_before = _complete_codes('qfq')
-    missing_before = [
-        code for code in all_codes if code not in raw_before or code not in qfq_before
+    raw_missing = [code for code in all_codes if code not in raw_before]
+    qfq_only_missing = [
+        code for code in all_codes if code in raw_before and code not in qfq_before
     ]
-    bj_missing = [code for code in missing_before if code.startswith('bj')]
-    non_bj_missing = [code for code in missing_before if not code.startswith('bj')]
-    requested = list(bj_missing)
-    deferred = list(non_bj_missing)
-    if len(missing_before) <= max(0, int(max_non_bj_gaps)):
-        requested.extend(non_bj_missing)
+    missing_before = list(dict.fromkeys(raw_missing + qfq_only_missing))
+
+    raw_bj_missing = [code for code in raw_missing if code.startswith('bj')]
+    raw_non_bj_missing = [code for code in raw_missing if not code.startswith('bj')]
+    raw_requested = list(raw_bj_missing)
+    deferred = list(raw_non_bj_missing)
+    if len(raw_missing) <= max(0, int(max_non_bj_gaps)):
+        raw_requested.extend(raw_non_bj_missing)
         deferred = []
 
+    # 原始价已完整时，不应因为 qfq 缺口规模大而延后。该路径只抓前复权，
+    # 腾讯优先、AkShare 兜底，并在合并时保留已有 close_raw。
+    qfq_requested = list(qfq_only_missing)
+    requested = list(dict.fromkeys(raw_requested + qfq_requested))
     meta = {
         'fallback_requested': len(requested),
         'fallback_requested_codes': requested[:50],
+        'fallback_raw_requested': len(raw_requested),
+        'fallback_qfq_requested': len(qfq_requested),
         'fallback_covered': 0,
         'fallback_deferred': len(deferred),
         'fallback_deferred_codes': deferred[:50],
         'fallback_target_dates': target_dates,
-        'fallback_status': 'not_needed' if not requested else 'pending',
+        'fallback_status': (
+            'pending' if requested else ('deferred' if deferred else 'not_needed')
+        ),
         'fallback_message': '',
         'missing_before': len(missing_before),
         'missing_after': len(missing_before),
@@ -2676,20 +2687,34 @@ def _fill_price_gaps_with_provider(
         return working, meta
 
     provider = provider or PriceProvider(
-        max_workers=min(8, max(1, len(requested))), retry=2, retry_delay=0.25,
+        max_workers=min(64, max(1, len(requested))), retry=2, retry_delay=0.25,
     )
+    results = []
     try:
-        result = provider.fetch_range(pd.DataFrame({'code': requested}), target_dates)
+        if raw_requested:
+            results.append(provider.fetch_range(
+                pd.DataFrame({'code': raw_requested}), target_dates,
+            ))
+        if qfq_requested:
+            results.append(provider.fetch_qfq_range(
+                pd.DataFrame({'code': qfq_requested}), target_dates,
+            ))
     except Exception as exc:
         meta['fallback_status'] = 'failed'
         meta['fallback_message'] = str(exc)
         return working, meta
 
-    status = getattr(result, 'status', '')
-    meta['fallback_status'] = str(getattr(status, 'value', status) or 'unknown')
-    meta['fallback_message'] = str(getattr(result, 'message', '') or '')
-    fallback_data = getattr(result, 'data', None)
-    if fallback_data is not None and not fallback_data.empty:
+    statuses = []
+    messages = []
+    for result in results:
+        status = getattr(result, 'status', '')
+        statuses.append(str(getattr(status, 'value', status) or 'unknown'))
+        message = str(getattr(result, 'message', '') or '')
+        if message:
+            messages.append(message)
+        fallback_data = getattr(result, 'data', None)
+        if fallback_data is None or fallback_data.empty:
+            continue
         fallback_df = fallback_data.copy()
         raw_source = fallback_df.get(
             'source_raw', pd.Series('', index=fallback_df.index, dtype=object)
@@ -2703,6 +2728,13 @@ def _fill_price_gaps_with_provider(
         ).fillna('').astype(str)
         working = merge_price_frames(working, fallback_df)
 
+    if any(status == 'failed' for status in statuses):
+        meta['fallback_status'] = 'failed'
+    elif any(status == 'partial' for status in statuses):
+        meta['fallback_status'] = 'partial'
+    else:
+        meta['fallback_status'] = statuses[-1] if statuses else 'unknown'
+    meta['fallback_message'] = '; '.join(messages)
     raw_after = _complete_codes('raw')
     qfq_after = _complete_codes('qfq')
     resolved = [code for code in requested if code in raw_after and code in qfq_after]
@@ -2921,68 +2953,85 @@ def update_price_cache(classified_df, return_meta=False, universe_codes=None):
             print(f"    ⚠️ 腾讯快照异常: {e}, 回退 baostock")
 
     # === 策略1: baostock (首选, 稳定可靠) ===
-    try:
-        import multiprocessing
-        print("    🔄 尝试 baostock 获取...")
-        bs_ok = False
-        fetch_end_str = latest_zt_str  # baostock 实际收口日期, 默认目标日, 探测后可回退
+    # 日常场景 (只差最新一天 且 腾讯快照已成功补齐 raw) 不需要 baostock:
+    # qfq 缺口交给 _fill_price_gaps_with_provider 用腾讯逐股接口填，速度更快；
+    # baostock 保留在"缺多天"或"腾讯快照失败"时兜底。
+    # 重新检查腾讯是否实际补全了 raw（腾讯走的是独立写缓存路径，需从 price_cache_all_df 读）
+    _price_df_refreshed = filter_completed_rows(
+        price_cache_all_df, 'date', report_date=latest_zt_date,
+    ) if not price_df.empty else price_df
+    _raw_now = len(
+        set(_price_df_refreshed.loc[
+            (_price_df_refreshed['date'] == latest_zt_str) &
+            _price_df_refreshed['close_raw'].notna(), 'code'
+        ]) & set(all_codes)
+    )
+    _skip_baostock = _only_latest_missing and _raw_now >= len(all_codes) * 0.95
+    if _skip_baostock:
+        print("    ⏭️ 腾讯快照已补全今日 raw，跳过 baostock，直接进入 qfq 补缺")
+    if not _skip_baostock:
         try:
-            with multiprocessing.Pool(1) as pool:
-                res = pool.apply_async(_check_bs_login)
-                bs_ok = res.get(timeout=5)
-        except multiprocessing.context.TimeoutError:
-            print("    ⚠️ baostock 登录超时, 服务器无响应")
-        except Exception as e:
-            print(f"    ⚠️ baostock 连通性检测异常: {e}")
-
-        if not bs_ok:
-            print("    ⚠️ baostock 不可用")
-        else:
-            # 探测 baostock 实际能覆盖到的最大日期。
-            # 关键修复: 不再因"最新日未更新"就跳过整段, 而是取回实际可用的
-            # 最大日期作为 end, 已能取到的中间缺口(如断更几天后的历史日)照常补全。
-            probe_max = ''
+            import multiprocessing
+            print("    🔄 尝试 baostock 获取...")
+            bs_ok = False
+            fetch_end_str = latest_zt_str  # baostock 实际收口日期, 默认目标日, 探测后可回退
             try:
                 with multiprocessing.Pool(1) as pool:
-                    res = pool.apply_async(_probe_bs_max_date, ((start_date_str, latest_zt_str),))
-                    probe_max = res.get(timeout=10)
+                    res = pool.apply_async(_check_bs_login)
+                    bs_ok = res.get(timeout=2)
             except multiprocessing.context.TimeoutError:
-                print("    ⚠️ baostock 数据预检超时 (服务器无响应)")
+                print("    ⚠️ baostock 登录超时, 服务器无响应")
             except Exception as e:
-                print(f"    ⚠️ baostock 数据预检异常: {e}")
+                print(f"    ⚠️ baostock 连通性检测异常: {e}")
 
-            if not probe_max:
-                print(f"    ⚠️ baostock 在 [{start_date_str}, {latest_zt_str}] 无任何可用数据, 绕过获取")
-                bs_ok = False
+            if not bs_ok:
+                print("    ⚠️ baostock 不可用")
             else:
-                if probe_max < latest_zt_str:
-                    print(f"    ℹ️ baostock 最新仅到 {probe_max} (目标 {latest_zt_str} 尚未更新), 先补全至 {probe_max}")
-                # 用实际可取到的最大日期收口, 避免因最新日缺失而整段卡死
-                fetch_end_str = probe_max
+                # 探测 baostock 实际能覆盖到的最大日期。
+                # 关键修复: 不再因"最新日未更新"就跳过整段, 而是取回实际可用的
+                # 最大日期作为 end, 已能取到的中间缺口(如断更几天后的历史日)照常补全。
+                probe_max = ''
+                try:
+                    with multiprocessing.Pool(1) as pool:
+                        res = pool.apply_async(_probe_bs_max_date, ((start_date_str, latest_zt_str),))
+                        probe_max = res.get(timeout=5)
+                except multiprocessing.context.TimeoutError:
+                    print("    ⚠️ baostock 数据预检超时 (服务器无响应)")
+                except Exception as e:
+                    print(f"    ⚠️ baostock 数据预检异常: {e}")
 
-            if bs_ok:
-                # 后续抓取统一用 fetch_end_str 作为 end
-                latest_zt_str = fetch_end_str
-                chunk_size = 200
-                chunks = [all_codes[i:i + chunk_size] for i in range(0, len(all_codes), chunk_size)]
-                cores = max(1, min(4, multiprocessing.cpu_count() - 1))
-                print(f"    🚀 baostock + {cores} 进程, 共 {len(chunks)} 个任务块...")
+                if not probe_max:
+                    print(f"    ⚠️ baostock 在 [{start_date_str}, {latest_zt_str}] 无任何可用数据, 绕过获取")
+                    bs_ok = False
+                else:
+                    if probe_max < latest_zt_str:
+                        print(f"    ℹ️ baostock 最新仅到 {probe_max} (目标 {latest_zt_str} 尚未更新), 先补全至 {probe_max}")
+                    # 用实际可取到的最大日期收口, 避免因最新日缺失而整段卡死
+                    fetch_end_str = probe_max
 
-                with multiprocessing.Pool(cores) as pool:
-                    for i, res in enumerate(pool.imap_unordered(_fetch_bs_chunk, [(c, start_date_str, latest_zt_str) for c in chunks])):
-                        new_rows.extend(res)
-                        if (i + 1) % 5 == 0 or (i + 1) == len(chunks):
-                            pc = min(len(all_codes), (i + 1) * chunk_size)
-                            elapsed = time.time() - t0
-                            print(f"    已获取 {pc}/{len(all_codes)} 只股票... ({elapsed:.1f}s)")
-                        if time.time() - t0 > GLOBAL_TIMEOUT:
-                            print("    ⚠️ baostock 获取超时, 使用已获取的部分数据")
-                            break
-                if new_rows:
-                    print(f"    ✅ baostock 成功获取 {len(new_rows)} 条记录")
-                    source_events.append('baostock')
-    except Exception as e:
-        print(f"    ⚠️ baostock 异常: {e}")
+                if bs_ok:
+                    # 后续抓取统一用 fetch_end_str 作为 end
+                    latest_zt_str = fetch_end_str
+                    chunk_size = 200
+                    chunks = [all_codes[i:i + chunk_size] for i in range(0, len(all_codes), chunk_size)]
+                    cores = max(1, min(4, multiprocessing.cpu_count() - 1))
+                    print(f"    🚀 baostock + {cores} 进程, 共 {len(chunks)} 个任务块...")
+
+                    with multiprocessing.Pool(cores) as pool:
+                        for i, res in enumerate(pool.imap_unordered(_fetch_bs_chunk, [(c, start_date_str, latest_zt_str) for c in chunks])):
+                            new_rows.extend(res)
+                            if (i + 1) % 5 == 0 or (i + 1) == len(chunks):
+                                pc = min(len(all_codes), (i + 1) * chunk_size)
+                                elapsed = time.time() - t0
+                                print(f"    已获取 {pc}/{len(all_codes)} 只股票... ({elapsed:.1f}s)")
+                            if time.time() - t0 > GLOBAL_TIMEOUT:
+                                print("    ⚠️ baostock 获取超时, 使用已获取的部分数据")
+                                break
+                    if new_rows:
+                        print(f"    ✅ baostock 成功获取 {len(new_rows)} 条记录")
+                        source_events.append('baostock')
+        except Exception as e:
+            print(f"    ⚠️ baostock 异常: {e}")
 
     # baostock 不支持北交所；统一 PriceProvider 补报告日和上一交易日仍缺 raw/qfq 的代码。
     # 冷启动出现大面积沪深双日缺口时先保证 BJ，避免对 5000+ 股票逐股请求拖垮日报。
@@ -4986,7 +5035,7 @@ window.addEventListener('resize',function(){{c.resize();}});}})();
 # ============================================================
 def _main_impl():
     requested_at = datetime.now().astimezone().isoformat(timespec="seconds")
-    report_cutoff = get_latest_date().strftime("%Y%m%d")
+    report_cutoff = get_report_cutoff().strftime("%Y%m%d")
     print("=" * 60)
     print("  主线强度追踪系统 V3 — 概念板块版")
     print("=" * 60)
