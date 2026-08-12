@@ -1,6 +1,9 @@
 name: 每日主线强度追踪跑批
 
 on:
+  push:
+    branches:
+      - master
   schedule:
     # 冗余多次触发, 避免 GitHub 调度器跳过或延迟; 幂等检查保证每天只实际跑一次
     - cron: '30 8 * * 1-5'    # 北京 16:30 (收盘后首次尝试)
