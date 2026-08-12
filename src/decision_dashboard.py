@@ -2259,9 +2259,10 @@ def _mainline_review_html(ctx: dict, prefix: str = '') -> str:
     authoritative = review.get('authoritative_count')
     attributed = review.get('attributed_count')
     coverage_note = '归因覆盖不足，主线只作条件性观察。' if level == '覆盖不足' else ''
+    top3_text = '、'.join(top3) if top3 else '数据未就位'
     rows = [
         f'<span>领先方向：{_esc(review.get('top1') or '数据未就位')}</span>',
-        f'<span>Top 3：{'、'.join(top3) if top3 else '数据未就位'}</span>',
+        f'<span>Top 3：{top3_text}</span>',
         f'<span>涨停池归因：{_esc(str(attributed if attributed is not None else '—'))} / {_esc(str(authoritative if authoritative is not None else '—'))}</span>',
         f'<span>覆盖率：{_esc(coverage_text)} · {_esc(level)}</span>',
     ]

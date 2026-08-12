@@ -51,6 +51,35 @@ def _scan_reports(reports_dir, max_date=None):
     return items
 
 
+def resolve_generated_report_date(output_html, reports_dir, run_date=None):
+    """返回本次运行实际生成的、最接近运行日的报告日期。
+
+    运行日不一定是交易日，数据源也可能暂时只能返回最近一个已完成交易日。
+    因此发布校验不能直接把自然日拼成 ``reports/YYYY-MM-DD.html``；必须在
+    ``reports_dir`` 中寻找与当前生成文件内容完全一致的真实归档，并且排除
+    运行日之后的未来归档。找不到匹配归档时返回 ``None``，绝不伪造日期。
+    """
+    output_path = os.fspath(output_html)
+    reports_path = os.fspath(reports_dir)
+    if not os.path.isfile(output_path) or not os.path.isdir(reports_path):
+        return None
+
+    run_date = _fmt_date(datetime.now() if run_date is None else run_date)
+    try:
+        with open(output_path, 'rb') as source:
+            output_bytes = source.read()
+    except OSError:
+        return None
+
+    for date_str, filename in _scan_reports(reports_path, max_date=run_date):
+        candidate = os.path.join(reports_path, filename)
+        try:
+            with open(candidate, 'rb') as archived:
+                if archived.read() == output_bytes:
+                    return date_str
+        except OSError:
+            continue
+    return None
 def _esc(s):
     """最小 HTML 转义 (结论文本可能含 < > &)。"""
     return (str(s).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'))

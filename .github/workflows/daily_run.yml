@@ -148,39 +148,77 @@ jobs:
       run: |
         python src/主线强度追踪.py
 
-    - name: 校验当日报告站点产物
-      if: steps.idempotency.outputs.skip != 'true'
-      run: |
-        set -euo pipefail
-        TODAY="${{ steps.idempotency.outputs.today }}"
-        test -s output/主线强度追踪.html
-        test -s "output/site/reports/${TODAY}.html"
-        test -s output/site/latest.html
-        test -s output/site/index.html
-        cmp --silent \
-          output/主线强度追踪.html \
-          "output/site/reports/${TODAY}.html"
-        cmp --silent \
-          output/主线强度追踪.html \
-          output/site/latest.html
-        grep -q "reports/${TODAY}.html" output/site/index.html
-
     - name: 提交并推送更新的缓存数据
       if: steps.idempotency.outputs.skip != 'true'
       # 只提交小体积的种子缓存 (涨停历史、板块、情绪)
       # 大文件 (price_history_cache, industry_cache) 由 actions/cache 管理
       run: |
+        set -euo pipefail
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
         # 只 add 小体积缓存文件 (data/ 下), 不 add 大体积 CSV 和 HTML
         git add data/涨停历史缓存.csv data/cls_plate_cache.csv data/sentiment_history_cache.csv data/ths_sector_hist.json 2>/dev/null || true
-        # 只看暂存区判断是否提交。旧写法多看了一眼工作区 (git diff --quiet &&),
-        # 兜底重跑时种子缓存幂等无变化 (暂存区空), 但 em 缓存等未 add 的文件必变
-        # (工作区脏) → 短路进 commit → 空暂存区报 "nothing to commit" 退出 1 →
-        # 本步 failure → 后续 gh-pages 部署被 skip。化石版场景下兜底本该覆盖
-        # 凌晨残缺报告, 却因此被锁死 (08-03/08-04 兜底连炸即此因)。
-        git diff --staged --quiet || (git commit -m "Auto-update market data caches [skip ci]" && git push)
+        # 空暂存区是正常情况，不能让后续 Pages 部署被跳过。
+        if git diff --staged --quiet; then
+          echo "缓存无变化，跳过提交"
+        else
+          git commit -m "Auto-update market data caches [skip ci]"
+          git push
+        fi
 
+    - name: 校验实际报告站点产物
+      id: report_validation
+      if: steps.idempotency.outputs.skip != 'true'
+      run: |
+        set -euo pipefail
+        RUN_DATE="${{ steps.idempotency.outputs.today }}"
+        OUTPUT_HTML="output/主线强度追踪.html"
+        REPORT_DIR="output/site/reports"
+        test -s "$OUTPUT_HTML"
+        test -d "$REPORT_DIR"
+
+        # 运行日可能不是交易日，或数据源只能返回最近已完成交易日。
+        # 以“归档文件与当前输出内容完全一致”为准识别本次实际报告日期，
+        # 禁止把自然日重命名成报告日期。
+        REPORT_DATE=""
+        mapfile -t REPORT_FILES < <(find "$REPORT_DIR" -maxdepth 1 -type f -name '????-??-??.html' -printf '%f\n' | sort -r)
+        for REPORT_FILE in "${REPORT_FILES[@]}"; do
+          CANDIDATE_DATE="${REPORT_FILE%.html}"
+          if ! [[ "$CANDIDATE_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+            continue
+          fi
+          if [[ "$CANDIDATE_DATE" > "$RUN_DATE" ]]; then
+            continue
+          fi
+          if cmp --silent "$OUTPUT_HTML" "$REPORT_DIR/$REPORT_FILE"; then
+            REPORT_DATE="$CANDIDATE_DATE"
+            break
+          fi
+        done
+
+        if [ -z "$REPORT_DATE" ]; then
+          echo "未找到与当前输出内容一致且不晚于运行日的报告归档" >&2
+          exit 1
+        fi
+
+        echo "report_date=$REPORT_DATE" >> "$GITHUB_OUTPUT"
+        if [[ "$REPORT_DATE" < "$RUN_DATE" ]]; then
+          STALE_DAYS=$(( ( $(date -d "$RUN_DATE" +%s) - $(date -d "$REPORT_DATE" +%s) ) / 86400 ))
+          echo "stale_days=$STALE_DAYS" >> "$GITHUB_OUTPUT"
+          echo "⚠️ 运行日期：$RUN_DATE"
+          echo "⚠️ 实际报告日期：$REPORT_DATE"
+          echo "⚠️ 数据滞后：$STALE_DAYS 个自然日；保留真实交易日口径，不伪造日期"
+        else
+          echo "stale_days=0" >> "$GITHUB_OUTPUT"
+          echo "✅ 实际报告日期：$REPORT_DATE"
+        fi
+
+        test -s "$REPORT_DIR/$REPORT_DATE.html"
+        test -s output/site/latest.html
+        test -s output/site/index.html
+        cmp --silent "$OUTPUT_HTML" "$REPORT_DIR/$REPORT_DATE.html"
+        cmp --silent "$OUTPUT_HTML" output/site/latest.html
+        grep -q "reports/$REPORT_DATE.html" output/site/index.html
     - name: 部署报告站点到 GitHub Pages
       if: steps.idempotency.outputs.skip != 'true'
       # 把 output/site/ (当日报告 + 历史归档 + 首页) 推到 gh-pages 分支
