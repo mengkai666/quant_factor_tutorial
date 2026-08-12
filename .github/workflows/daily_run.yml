@@ -112,7 +112,6 @@ jobs:
       # 这里只刷新证券主表（不依赖被封域名）以保证 universe 是最新的。
       continue-on-error: true   # universe 刷新失败不阻断报告（主脚本有缓存兜底）
       run: |
-        python tools/rebuild_market_data.py --candidate-only 2>&1 | tail -5 || true
         python -c "
         import sys; sys.path.insert(0,'src')
         from data_sources.universe_provider import UniverseProvider

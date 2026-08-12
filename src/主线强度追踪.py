@@ -2957,9 +2957,15 @@ def update_price_cache(classified_df, return_meta=False, universe_codes=None):
     # qfq 缺口交给 _fill_price_gaps_with_provider 用腾讯逐股接口填，速度更快；
     # baostock 保留在"缺多天"或"腾讯快照失败"时兜底。
     # 重新检查腾讯是否实际补全了 raw（腾讯走的是独立写缓存路径，需从 price_cache_all_df 读）
-    _price_df_refreshed = filter_completed_rows(
-        price_cache_all_df, 'date', report_date=latest_zt_date,
-    ) if not price_df.empty else price_df
+    # 注意：price_cache_all_df 在冷启动（缓存为空）时可能没有 'date' 列，需要防御
+    _price_df_refreshed = pd.DataFrame()
+    if not price_df.empty:
+        try:
+            _price_df_refreshed = filter_completed_rows(
+                price_cache_all_df, 'date', report_date=latest_zt_date,
+            )
+        except (KeyError, Exception):
+            _price_df_refreshed = price_df
     _raw_now = len(
         set(_price_df_refreshed.loc[
             (_price_df_refreshed['date'] == latest_zt_str) &
