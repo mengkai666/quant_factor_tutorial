@@ -6279,7 +6279,13 @@ def _main_impl():
         except Exception as e:
             print(f"  [警告] 决策看板生成失败 (不影响主流程): {e}")
 
-        publish(OUTPUT_HTML, SITE_DIR, summary=_summary, dashboard_html=_dashboard_html)
+        publish(
+            OUTPUT_HTML,
+            SITE_DIR,
+            report_date=latest_date,
+            summary=_summary,
+            dashboard_html=_dashboard_html,
+        )
     except Exception as e:
         print(f"  [警告] 站点发布失败 (不影响主流程): {e}")
 

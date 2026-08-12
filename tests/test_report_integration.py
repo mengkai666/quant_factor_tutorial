@@ -32,6 +32,27 @@ def test_publish_site_excludes_reports_after_report_date_from_index(tmp_path):
     assert "2026-08-07" not in index_html
     assert 'href="reports/2026-08-06.html"' in index_html
 
+
+def test_publish_site_uses_explicit_report_date_for_all_site_outputs(tmp_path):
+    from publish_site import publish
+
+    site_dir = tmp_path / "site"
+    current_report = tmp_path / "report.html"
+    current_report.write_text("report for 2026-08-12", encoding="utf-8")
+
+    publish(
+        str(current_report),
+        str(site_dir),
+        report_date="20260812",
+    )
+
+    archived = site_dir / "reports" / "2026-08-12.html"
+    latest = site_dir / "latest.html"
+    index = site_dir / "index.html"
+    assert archived.read_text(encoding="utf-8") == current_report.read_text(encoding="utf-8")
+    assert latest.read_text(encoding="utf-8") == current_report.read_text(encoding="utf-8")
+    assert 'href="reports/2026-08-12.html"' in index.read_text(encoding="utf-8")
+
 def test_stock_level_progression_chain_and_height_summary():
     from review_metrics import build_progression_chain
 

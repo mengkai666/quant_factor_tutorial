@@ -21,8 +21,16 @@ from datetime import datetime
 
 
 def _fmt_date(d):
-    """datetime -> 'YYYY-MM-DD' 字符串。"""
-    return d.strftime('%Y-%m-%d')
+    """将 datetime、YYYY-MM-DD 或 YYYYMMDD 统一为 YYYY-MM-DD。"""
+    if hasattr(d, 'strftime'):
+        return d.strftime('%Y-%m-%d')
+
+    text = str(d or '').strip()
+    if re.fullmatch(r'\d{8}', text):
+        return f'{text[:4]}-{text[4:6]}-{text[6:]}'
+    if re.fullmatch(r'\d{4}-\d{2}-\d{2}', text):
+        return text
+    raise ValueError(f'Invalid report date: {d!r}')
 
 
 def _scan_reports(reports_dir, max_date=None):

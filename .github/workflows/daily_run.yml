@@ -148,6 +148,23 @@ jobs:
       run: |
         python src/主线强度追踪.py
 
+    - name: 校验当日报告站点产物
+      if: steps.idempotency.outputs.skip != 'true'
+      run: |
+        set -euo pipefail
+        TODAY="${{ steps.idempotency.outputs.today }}"
+        test -s output/主线强度追踪.html
+        test -s "output/site/reports/${TODAY}.html"
+        test -s output/site/latest.html
+        test -s output/site/index.html
+        cmp --silent \
+          output/主线强度追踪.html \
+          "output/site/reports/${TODAY}.html"
+        cmp --silent \
+          output/主线强度追踪.html \
+          output/site/latest.html
+        grep -q "reports/${TODAY}.html" output/site/index.html
+
     - name: 提交并推送更新的缓存数据
       if: steps.idempotency.outputs.skip != 'true'
       # 只提交小体积的种子缓存 (涨停历史、板块、情绪)
