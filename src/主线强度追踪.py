@@ -2465,6 +2465,19 @@ def _validate_tencent_ad_meta(meta, universe_total=None):
     }
 
 
+def _count_raw_codes_on_date(frame, date_value, allowed_codes):
+    """Count valid raw closes without assuming an empty frame has columns."""
+    required = {'date', 'code', 'close_raw'}
+    if frame is None or frame.empty or not required.issubset(frame.columns):
+        return 0
+    rows = frame.loc[
+        (frame['date'].astype(str) == str(date_value))
+        & frame['close_raw'].notna(),
+        'code',
+    ]
+    return len(set(rows.astype(str)) & {str(code) for code in allowed_codes})
+
+
 def _fetch_bs_chunk(args):
     codes, start, end = args
     import socket
@@ -2964,13 +2977,10 @@ def update_price_cache(classified_df, return_meta=False, universe_codes=None):
             _price_df_refreshed = filter_completed_rows(
                 price_cache_all_df, 'date', report_date=latest_zt_date,
             )
-        except (KeyError, Exception):
+        except Exception:
             _price_df_refreshed = price_df
-    _raw_now = len(
-        set(_price_df_refreshed.loc[
-            (_price_df_refreshed['date'] == latest_zt_str) &
-            _price_df_refreshed['close_raw'].notna(), 'code'
-        ]) & set(all_codes)
+    _raw_now = _count_raw_codes_on_date(
+        _price_df_refreshed, latest_zt_str, all_codes
     )
     _skip_baostock = _only_latest_missing and _raw_now >= len(all_codes) * 0.95
     if _skip_baostock:

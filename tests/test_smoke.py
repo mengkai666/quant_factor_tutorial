@@ -62,6 +62,33 @@ def test_ad_breadth_guard_blocks_partial_snapshot():
     assert m.is_ad_incomplete(513, 4580) is False
 
 
+def test_raw_coverage_guard_handles_empty_filtered_price_cache():
+    """CI cold start must not index date on an empty, columnless frame."""
+    import importlib.util
+    import pandas as pd
+
+    spec = importlib.util.spec_from_file_location(
+        'mztrack_raw_guard', os.path.join(_ROOT, 'src', '主线强度追踪.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    assert module._count_raw_codes_on_date(
+        pd.DataFrame(), '2026-08-12', ['sh600000']
+    ) == 0
+    assert module._count_raw_codes_on_date(
+        pd.DataFrame({'date': [], 'code': [], 'close_qfq': []}),
+        '2026-08-12', ['sh600000']
+    ) == 0
+    assert module._count_raw_codes_on_date(
+        pd.DataFrame({
+            'date': ['2026-08-11'],
+            'code': ['sh600000'],
+            'close_raw': [10.0],
+        }),
+        '2026-08-12', ['sh600000']
+    ) == 0
+
+
 def test_classify_by_tags_no_substring_blackhole():
     """子串黑洞已修复: 短键不再误吸无关标签。"""
     import importlib.util
@@ -85,6 +112,47 @@ def test_time_utils_cache_path_in_data():
         time_utils.get_latest_date()
     except Exception:
         pass  # 无数据时返回 None 或异常均可, 这里只验证不因路径崩溃
+
+
+def test_main_uses_safe_report_cutoff_instead_of_stale_cache(monkeypatch):
+    import importlib.util
+    from datetime import datetime
+
+    import lianban_analysis
+    import pandas as pd
+    import pytest
+
+    spec = importlib.util.spec_from_file_location(
+        'mztrack_report_cutoff', os.path.join(_ROOT, 'src', '主线强度追踪.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    monkeypatch.setenv('REPORT_DATE', '2026-08-10')
+    monkeypatch.setattr(module, 'get_latest_date', lambda: datetime(2026, 8, 7))
+    monkeypatch.setattr(module, 'trim_cache_file', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(lianban_analysis, 'fetch_zt_pool_data', lambda **_kwargs: (None, None))
+    monkeypatch.setattr(lianban_analysis, 'get_cached_trading_dates', lambda: ['20260810'])
+    monkeypatch.setattr(module, 'load_and_classify_zt', lambda **_kwargs: pd.DataFrame({
+        '日期': ['20260810'],
+        '代码': ['000001'],
+        '名称': ['样本'],
+        '主线': ['AI算力'],
+        '细分': ['算力'],
+        '连板数': [1],
+    }))
+
+    reached = []
+
+    def stop_after_date_selection(report_date):
+        reached.append(report_date)
+        raise RuntimeError('date selection reached')
+
+    monkeypatch.setattr(module, '_load_market_universe', stop_after_date_selection)
+
+    with pytest.raises(RuntimeError, match='date selection reached'):
+        module._main_impl()
+
+    assert reached == ['2026-08-10']
 
 
 def test_ai_rebound_disabled_returns_none(monkeypatch):
@@ -284,3 +352,71 @@ def test_market_sentiment_missing_snapshot_keeps_counts_unknown(monkeypatch):
     assert result['market_down'] is None
     assert result['ad_available'] is False
     assert result['status'] == 'missing'
+
+
+def test_large_qfq_only_gap_is_repaired_without_deferring_sh_sz_codes():
+    from types import SimpleNamespace
+
+    import pandas as pd
+    import 主线强度追踪 as report
+
+    dates = ["2026-08-07", "2026-08-10"]
+    codes = ["sh600000", "sz000001", "sh600001"]
+    existing = pd.DataFrame([
+        {
+            "date": date,
+            "code": code,
+            "close_raw": 10.0 + index,
+            "close_qfq": pd.NA,
+            "price_basis": "raw",
+            "source": "existing_raw",
+            "source_timestamp": "now",
+        }
+        for index, code in enumerate(codes)
+        for date in dates
+    ])
+
+    class QfqOnlyProvider:
+        def __init__(self):
+            self.full_calls = []
+            self.qfq_calls = []
+
+        def fetch_range(self, universe, requested_dates):
+            self.full_calls.append((universe.copy(), list(requested_dates)))
+            raise AssertionError("raw-complete codes must use qfq-only repair")
+
+        def fetch_qfq_range(self, universe, requested_dates):
+            requested_codes = universe["code"].tolist()
+            self.qfq_calls.append((requested_codes, list(requested_dates)))
+            rows = []
+            for code in requested_codes:
+                for date in requested_dates:
+                    rows.append({
+                        "date": date,
+                        "code": code,
+                        "close_raw": pd.NA,
+                        "close_qfq": 8.0,
+                        "trade_status": "traded",
+                        "source_raw": "",
+                        "source_qfq": "fixture_qfq",
+                        "fetched_at": "now",
+                    })
+            return SimpleNamespace(status="success", message="", data=pd.DataFrame(rows))
+
+    provider = QfqOnlyProvider()
+    merged, meta = report._fill_price_gaps_with_provider(
+        existing,
+        codes,
+        "2026-08-10",
+        previous_date="2026-08-07",
+        provider=provider,
+        max_non_bj_gaps=1,
+    )
+
+    assert provider.full_calls == []
+    assert provider.qfq_calls == [(codes, dates)]
+    assert meta["fallback_deferred"] == 0
+    assert meta["fallback_covered"] == len(codes)
+    got = merged.set_index(["date", "code"])
+    assert got["close_raw"].notna().all()
+    assert got["close_qfq"].eq(8.0).all()
