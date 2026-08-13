@@ -33,7 +33,10 @@ if sys.platform == 'win32':
 
 import pandas as pd
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from data_sources.models import normalize_code
+
+_SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
 
 
 import hashlib
@@ -133,7 +136,11 @@ def get_trading_dates(n_days=120, now=None, calendar_provider=None):
     from time_utils import get_report_cutoff
 
     explicit_now = now is not None
-    now = now or datetime.now()
+    if now is None:
+        # GitHub Actions runner uses UTC; report cutoff follows A-share Beijing time.
+        now = datetime.now(_SHANGHAI_TZ).replace(tzinfo=None)
+    elif getattr(now, "tzinfo", None) is not None:
+        now = now.astimezone(_SHANGHAI_TZ).replace(tzinfo=None)
     cached_dates = []
     if calendar_provider is not None:
         calendar = calendar_provider
