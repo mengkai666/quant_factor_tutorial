@@ -180,27 +180,20 @@ jobs:
         test -s "$OUTPUT_HTML"
         test -d "$REPORT_DIR"
 
-        # 运行日可能不是交易日，或数据源只能返回最近已完成交易日。
-        # 以“归档文件与当前输出内容完全一致”为准识别本次实际报告日期，
-        # 禁止把自然日重命名成报告日期。
-        REPORT_DATE=""
-        mapfile -t REPORT_FILES < <(find "$REPORT_DIR" -maxdepth 1 -type f -name '????-??-??.html' -printf '%f\n' | sort -r)
-        for REPORT_FILE in "${REPORT_FILES[@]}"; do
-          CANDIDATE_DATE="${REPORT_FILE%.html}"
-          if ! [[ "$CANDIDATE_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
-            continue
-          fi
-          if [[ "$CANDIDATE_DATE" > "$RUN_DATE" ]]; then
-            continue
-          fi
-          if cmp --silent "$OUTPUT_HTML" "$REPORT_DIR/$REPORT_FILE"; then
-            REPORT_DATE="$CANDIDATE_DATE"
-            break
-          fi
-        done
+        # 报告内声明的业务日期是归档唯一真源；禁止按运行自然日或扫描结果猜日期。
+        REPORT_DATE="$(python - <<'PY'
+        import sys
+        sys.path.insert(0, "src")
+        from publish_site import extract_report_date
 
-        if [ -z "$REPORT_DATE" ]; then
-          echo "未找到与当前输出内容一致且不晚于运行日的报告归档" >&2
+        report_date = extract_report_date("output/主线强度追踪.html")
+        if not report_date:
+            raise SystemExit("报告缺少有效 report-date 元数据")
+        print(report_date)
+        PY
+        )"
+        if [[ "$REPORT_DATE" > "$RUN_DATE" ]]; then
+          echo "报告日期 $REPORT_DATE 晚于运行日期 $RUN_DATE" >&2
           exit 1
         fi
 
@@ -219,9 +212,25 @@ jobs:
         test -s "$REPORT_DIR/$REPORT_DATE.html"
         test -s output/site/latest.html
         test -s output/site/index.html
+        ARCHIVE_DATE="$(python - "$REPORT_DIR/$REPORT_DATE.html" <<'PY'
+        import sys
+        sys.path.insert(0, "src")
+        from publish_site import extract_report_date
+
+        report_date = extract_report_date(sys.argv[1])
+        if not report_date:
+            raise SystemExit("日期归档缺少有效 report-date 元数据")
+        print(report_date)
+        PY
+        )"
+        if [ "$ARCHIVE_DATE" != "$REPORT_DATE" ]; then
+          echo "归档文件名日期 $REPORT_DATE 与正文日期 $ARCHIVE_DATE 不一致" >&2
+          exit 1
+        fi
         cmp --silent "$OUTPUT_HTML" "$REPORT_DIR/$REPORT_DATE.html"
         cmp --silent "$OUTPUT_HTML" output/site/latest.html
         grep -q "reports/$REPORT_DATE.html" output/site/index.html
+
     - name: 部署报告站点到 GitHub Pages
       if: steps.idempotency.outputs.skip != 'true'
       # 把 output/site/ (当日报告 + 历史归档 + 首页) 推到 gh-pages 分支

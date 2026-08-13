@@ -38,3 +38,44 @@ def test_resolve_generated_report_date_does_not_select_future_report(tmp_path):
     assert resolve_generated_report_date(
         output_html, reports_dir, run_date="2026-08-12"
     ) is None
+
+def test_resolve_generated_report_date_uses_embedded_date_only_when_archive_matches(tmp_path):
+    output_html = tmp_path / "主线强度追踪.html"
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir()
+    content = (
+        '<!doctype html><head><meta name="report-date" content="2026-08-12">'
+        '</head><body>current</body>'
+    )
+    output_html.write_text(content, encoding="utf-8")
+    (reports_dir / "2026-08-07.html").write_text(content, encoding="utf-8")
+
+    assert resolve_generated_report_date(
+        output_html, reports_dir, run_date="2026-08-12"
+    ) is None
+
+    (reports_dir / "2026-08-12.html").write_text("different", encoding="utf-8")
+    assert resolve_generated_report_date(
+        output_html, reports_dir, run_date="2026-08-12"
+    ) is None
+
+    (reports_dir / "2026-08-12.html").write_text(content, encoding="utf-8")
+    assert resolve_generated_report_date(
+        output_html, reports_dir, run_date="2026-08-12"
+    ) == "2026-08-12"
+
+
+def test_resolve_generated_report_date_rejects_future_embedded_date(tmp_path):
+    output_html = tmp_path / "主线强度追踪.html"
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir()
+    content = (
+        '<!doctype html><head><meta name="report-date" content="2026-08-13">'
+        '</head><body>future</body>'
+    )
+    output_html.write_text(content, encoding="utf-8")
+    (reports_dir / "2026-08-13.html").write_text(content, encoding="utf-8")
+
+    assert resolve_generated_report_date(
+        output_html, reports_dir, run_date="2026-08-12"
+    ) is None

@@ -53,6 +53,34 @@ def test_publish_site_uses_explicit_report_date_for_all_site_outputs(tmp_path):
     assert latest.read_text(encoding="utf-8") == current_report.read_text(encoding="utf-8")
     assert 'href="reports/2026-08-12.html"' in index.read_text(encoding="utf-8")
 
+def test_publish_site_uses_embedded_report_date_when_argument_is_stale(tmp_path):
+    from publish_site import publish
+
+    site_dir = tmp_path / "site"
+    current_report = tmp_path / "report.html"
+    current_report.write_text(
+        '<!doctype html><html><head>'
+        '<meta name="report-date" content="2026-08-12">'
+        '</head><body>current report</body></html>',
+        encoding="utf-8",
+    )
+
+    publish(
+        str(current_report),
+        str(site_dir),
+        report_date="2026-08-07",
+    )
+
+    correct_archive = site_dir / "reports" / "2026-08-12.html"
+    stale_archive = site_dir / "reports" / "2026-08-07.html"
+    latest = site_dir / "latest.html"
+    index = site_dir / "index.html"
+    assert correct_archive.read_text(encoding="utf-8") == current_report.read_text(encoding="utf-8")
+    assert not stale_archive.exists()
+    assert latest.read_text(encoding="utf-8") == current_report.read_text(encoding="utf-8")
+    assert 'href="reports/2026-08-12.html"' in index.read_text(encoding="utf-8")
+
+
 def test_stock_level_progression_chain_and_height_summary():
     from review_metrics import build_progression_chain
 

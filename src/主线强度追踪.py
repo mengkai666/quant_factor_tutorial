@@ -3435,6 +3435,13 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
                   echelon, top30_data, advance_decline, nday_leaders=None, wc_data=None, sentiment_df=None, plates=None, classified_df=None, return_leaders=None, mainline_ladder=None, sub_leaderboard=None, sub_tracks=None, price_df=None, focus_df=None, focus_catalysts=None, timing_result=None, market_state=None, previous_echelon=None, report_context=None):
 
     unified_context = dict(report_context or {})
+    report_date_digits = _normalize_snapshot_date(
+        unified_context.get('report_date') or (dates[-1] if dates else None)
+    )
+    report_date_iso = (
+        f'{report_date_digits[:4]}-{report_date_digits[4:6]}-{report_date_digits[6:]}'
+        if report_date_digits else ''
+    )
     advance_decline = dict(advance_decline or {})
     if sentiment_df is not None:
         sentiment_df = sentiment_df.copy()
@@ -4741,6 +4748,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
 
     html = f'''<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8">
+<meta name="report-date" content="{report_date_iso}">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>主线强度追踪系统 V3 - 量化投研决策终端</title>
 <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
