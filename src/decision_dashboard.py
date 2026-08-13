@@ -2049,7 +2049,7 @@ def _ladder_quality_html(ctx: dict, prefix: str = '') -> str:
     return f'''
     <div class="{cls}">
       <div class="{title}">连板复盘 · 连板质量</div>
-      <div class="{grid}">{''.join(rows)}</div>
+      <div class="{grid}">{rows_html}</div>
       <div class="{note}">晋级率按真实前后交易日和代码匹配计算；无有效样本时不推断。</div>
     </div>'''
 
@@ -2260,12 +2260,16 @@ def _mainline_review_html(ctx: dict, prefix: str = '') -> str:
     attributed = review.get('attributed_count')
     coverage_note = '归因覆盖不足，主线只作条件性观察。' if level == '覆盖不足' else ''
     top3_text = '、'.join(top3) if top3 else '数据未就位'
+    top1_text = _esc(review.get('top1') or '数据未就位')
+    attributed_text = _esc(str(attributed if attributed is not None else '—'))
+    authoritative_text = _esc(str(authoritative if authoritative is not None else '—'))
     rows = [
-        f'<span>领先方向：{_esc(review.get('top1') or '数据未就位')}</span>',
+        f'<span>领先方向：{top1_text}</span>',
         f'<span>Top 3：{top3_text}</span>',
-        f'<span>涨停池归因：{_esc(str(attributed if attributed is not None else '—'))} / {_esc(str(authoritative if authoritative is not None else '—'))}</span>',
+        f'<span>涨停池归因：{attributed_text} / {authoritative_text}</span>',
         f'<span>覆盖率：{_esc(coverage_text)} · {_esc(level)}</span>',
     ]
+    rows_html = ''.join(rows)
     return f'''
     <div class="{cls}">
       <div class="{title}">主线复盘 · 主线集中度</div>
