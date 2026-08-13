@@ -130,6 +130,7 @@ def get_trading_dates(n_days=120, now=None, calendar_provider=None):
     from data_sources.calendar_provider import CalendarProvider
     from paths import CALENDAR_CACHE, FETCH_STATUS_CACHE
     from data_sources.fetch_status import FetchStatusStore
+    from time_utils import get_report_cutoff
 
     explicit_now = now is not None
     now = now or datetime.now()
@@ -143,7 +144,10 @@ def get_trading_dates(n_days=120, now=None, calendar_provider=None):
         )
     else:
         cached_dates = get_cached_trading_dates()
-        if len(cached_dates) >= n_days:
+        # 涨停缓存本身不是交易日历。缓存可能仍有 120 天但停在旧日期；
+        # 只有覆盖报告截止日时才允许直接复用，否则必须刷新交易日历。
+        cutoff_token = get_report_cutoff(now=now).strftime("%Y%m%d")
+        if len(cached_dates) >= n_days and cached_dates[-1] >= cutoff_token:
             return cached_dates[-n_days:][::-1]
 
         external_dates = _fetch_external_trade_dates()
@@ -163,6 +167,7 @@ def get_trading_dates(n_days=120, now=None, calendar_provider=None):
         dates = calendar.trading_days("1900-01-01", today)
         if cached_dates:
             dates = sorted(set(dates) | {f"{day[:4]}-{day[4:6]}-{day[6:8]}" for day in cached_dates})
+        # 显式 now/REPORT_DATE 仍需遵守收盘边界；不能把盘中当天当成收盘日。
         if now.hour < calendar.close_hour and today in dates:
             dates.remove(today)
         if len(dates) >= n_days:
