@@ -357,11 +357,15 @@ def render_representatives_html(reps):
             zt_s = (f'{zt}次' + (f'/{int(lb)}板' if lb and pd.notna(lb) and lb > 1 else '')
                     if zt else '—')
             rl = r.get('角色', '')
+            st_badge = (
+                '<span style="color:#d29922;font-size:10px;font-weight:bold;">ST炒作</span>'
+                if r.get('ST') else ''
+            )
             rows += (
                 f'<tr style="border-bottom:1px solid rgba(48,54,61,0.4);">'
                 f'<td style="padding:5px 7px;color:#e6edf3;white-space:nowrap;">'
                 f'{r["name"]}'
-                f'{chr(32) + "<span style=\'color:#d29922;font-size:10px;font-weight:bold;\'>ST炒作</span>" if r.get("ST") else ""}'
+                f'{st_badge}'
                 f'<span style="color:#6e7681;font-size:10px;"> {r["code"]}</span></td>'
                 f'<td style="padding:5px 7px;"><span style="color:{_ROLE_CLR.get(rl, "#8b949e")};'
                 f'font-size:11px;font-weight:bold;">{rl}</span></td>'
