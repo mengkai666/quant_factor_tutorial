@@ -904,6 +904,7 @@ def test_full_report_sentiment_chart_can_shrink_on_mobile(monkeypatch, tmp_path)
     )
 
     html = output.read_text(encoding="utf-8")
+    assert '<meta name="report-date" content="2026-08-07">' in html
     assert 'id="sentimentChart" style="height:350px;flex:1 1 600px;min-width:0;"' in html
     assert 'id="sentimentChart" style="height:350px;flex:1;min-width:600px;"' not in html
     assert "flex:1;min-width:380px" not in html

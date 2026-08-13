@@ -32,6 +32,34 @@ def _fmt_date(d):
         return text
     raise ValueError(f'Invalid report date: {d!r}')
 
+_REPORT_DATE_META_RE = re.compile(
+    r'''<meta\s+name=["']report-date["']\s+content=["'](\d{4}-\d{2}-\d{2})["']\s*/?>''',
+    re.IGNORECASE,
+)
+
+
+def extract_report_date(output_html):
+    """读取报告内嵌的权威业务日期；无有效元数据时返回 ``None``。"""
+    path = os.fspath(output_html)
+    if not os.path.isfile(path):
+        return None
+    try:
+        with open(path, 'r', encoding='utf-8') as source:
+            # 日期元数据固定写在 head，限制读取大小避免扫描整份大报告。
+            head = source.read(64 * 1024)
+    except (OSError, UnicodeError):
+        return None
+
+    match = _REPORT_DATE_META_RE.search(head)
+    if not match:
+        return None
+    try:
+        date_str = _fmt_date(match.group(1))
+        datetime.strptime(date_str, '%Y-%m-%d')
+    except ValueError:
+        return None
+    return date_str
+
 
 def _scan_reports(reports_dir, max_date=None):
     """扫描不晚于 max_date 的归档，返回 [(date_str, filename)] 按日期倒序。"""
@@ -71,6 +99,17 @@ def resolve_generated_report_date(output_html, reports_dir, run_date=None):
     except OSError:
         return None
 
+    embedded_date = extract_report_date(output_path)
+    if embedded_date:
+        if embedded_date > run_date:
+            return None
+        candidate = os.path.join(reports_path, f'{embedded_date}.html')
+        try:
+            with open(candidate, 'rb') as archived:
+                return embedded_date if archived.read() == output_bytes else None
+        except OSError:
+            return None
+
     for date_str, filename in _scan_reports(reports_path, max_date=run_date):
         candidate = os.path.join(reports_path, filename)
         try:
@@ -80,6 +119,8 @@ def resolve_generated_report_date(output_html, reports_dir, run_date=None):
         except OSError:
             continue
     return None
+
+
 def _esc(s):
     """最小 HTML 转义 (结论文本可能含 < > &)。"""
     return (str(s).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'))
@@ -305,7 +346,7 @@ def publish(output_html, site_dir, report_date=None, summary=None, dashboard_htm
     Args:
         output_html:    当日生成的报告 HTML 绝对路径。
         site_dir:       站点根目录 (本地为 output/site, CI 为检出的 gh-pages)。
-        report_date:    datetime, 报告日期口径 (默认取缓存最新日, 与系统其它模块一致)。
+        report_date:    兼容性日期参数；报告内嵌日期存在时仅作为一致性参考。
         summary:        可选结论 dict (择时档位 + 数据可信度), 渲染到首页首屏; 缺失则首页为纯归档索引。
         dashboard_html: 可选决策看板 HTML 字符串; 提供后归档到 dashboards/YYYY-MM-DD.html
                         并生成 dashboards/latest.html, 首页顶部加入口。
@@ -317,7 +358,16 @@ def publish(output_html, site_dir, report_date=None, summary=None, dashboard_htm
         print(f"  [publish] 源报告不存在, 跳过发布: {output_html}")
         return None
 
-    if report_date is None:
+    embedded_date = extract_report_date(output_html)
+    explicit_date = _fmt_date(report_date) if report_date is not None else None
+    if embedded_date:
+        if explicit_date and explicit_date != embedded_date:
+            print(
+                f"  [publish] 日期参数 {explicit_date} 与报告日期 {embedded_date} 不一致，"
+                "按报告内嵌日期归档"
+            )
+        report_date = embedded_date
+    elif report_date is None:
         try:
             from time_utils import get_latest_date
             report_date = get_latest_date()
