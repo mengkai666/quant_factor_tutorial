@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """报表层纯逻辑契约测试。"""
 import json
+import pytest
 import os
 import sys
 
@@ -894,7 +895,10 @@ def test_mainline_ladder_excludes_non_tradeable_security_names():
         {"代码": "sz000002", "名称": "*ST传智", "细分板块": "AI应用", "大主线": "AI应用"},
     ])
 
-    ladder = report.build_mainline_ladder(price_df, classified)
+    name_resolution = report.resolve_names(classified=classified)
+    ladder = report.build_mainline_ladder(
+        price_df, classified, name_resolution=name_resolution
+    )
     names = [row["name"] for rows in ladder.values() for row in rows]
 
     assert "正常股份" in names
@@ -1435,7 +1439,7 @@ def test_turning_name_resolution_prefers_security_master_over_stale_industry(tmp
     names = stock_representatives._load_name_resolution()
 
     assert names.names["sz003032"] == "传智教育"
-    assert names.sources["sz003032"] == "universe"
+    assert names.sources["sz003032"] == "security_master"
 
 
 def test_stock_representative_returns_stitch_legacy_qfq_history(tmp_path, monkeypatch):
@@ -1585,3 +1589,83 @@ def test_phase_micro_cycle_failure_does_not_remove_major_phase(monkeypatch):
     assert result["micro_cycle"] == {}
     assert result["micro_chain"] == {}
     assert result["micro_resonance"] == {}
+
+
+def test_main_name_resolution_prefers_security_master_over_universe(tmp_path, monkeypatch):
+    import pandas as pd
+    import 主线强度追踪 as report
+
+    master = tmp_path / "security_master.csv"
+    universe = tmp_path / "stock_universe.csv"
+    industry = tmp_path / "industry_cache.csv"
+    pd.DataFrame([{"code": "sz003032", "name": "传智教育"}]).to_csv(master, index=False)
+    pd.DataFrame([{"code": "sz003032", "name": "旧证券池名称"}]).to_csv(universe, index=False)
+    pd.DataFrame([{"code": "sz003032", "name": "*ST传智"}]).to_csv(industry, index=False)
+
+    monkeypatch.setattr(report, "SECURITY_MASTER_CACHE", str(master))
+    monkeypatch.setattr(report, "UNIVERSE_CACHE", str(universe))
+    monkeypatch.setattr(report, "INDUSTRY_CACHE", str(industry))
+
+    names = report._load_name_resolution()
+
+    assert names.names["sz003032"] == "传智教育"
+    assert names.sources["sz003032"] == "security_master"
+
+
+
+def test_phase_build_returns_structured_representatives(monkeypatch):
+    import pandas as pd
+    import phase_resonance
+    import stock_representatives
+
+    det = {
+        "latest": {"date": "2026-08-07", "close": 3600.0},
+        "phases": {"下跌段": ("2026-07-01", "2026-07-15"), "底部至今": ("2026-07-15", "2026-08-07")},
+        "drawdown": -12.0,
+        "index_series": [],
+    }
+    table = pd.DataFrame([
+        {"板块": "教育", "下跌段": -2.0, "底部至今": 12.0, "量比": 1.2, "距顶": -1.0}
+    ])
+    representatives = {
+        "groups": {"独立主线": [{"code": "sz003032", "name": "传智教育"}]}
+    }
+
+    monkeypatch.setattr(phase_resonance, "fetch_index", lambda: object())
+    monkeypatch.setattr(phase_resonance, "detect_phases", lambda _idx: det)
+    monkeypatch.setattr(phase_resonance, "fetch_sectors", lambda *_args, **_kwargs: {"教育": table})
+    monkeypatch.setattr(phase_resonance, "sector_table", lambda *_args: table)
+    monkeypatch.setattr(phase_resonance, "quadrants", lambda *_args: {"独立主线": table})
+    monkeypatch.setattr(phase_resonance, "market_breadth", lambda _det: {})
+    monkeypatch.setattr(phase_resonance, "build_turning_summary", lambda *_args: {})
+    monkeypatch.setattr(phase_resonance, "_attach_micro_cycle", lambda result, *_args: result)
+    monkeypatch.setattr(stock_representatives, "build_representatives", lambda *_args: representatives)
+    monkeypatch.setattr(stock_representatives, "render_representatives_html", lambda payload: "<div>传智教育</div>")
+    monkeypatch.setattr(
+        stock_representatives,
+        "build_turning_stock_leaders",
+        lambda *_args: {"usable": False, "coverage": 0.0, "rows": []},
+    )
+
+    result = phase_resonance._build()
+
+    assert result["representatives"] == representatives
+    assert result["reps_html"] == "<div>传智教育</div>"
+
+
+def test_publish_failure_is_fatal_in_github_actions(monkeypatch):
+    import 主线强度追踪 as report
+
+    monkeypatch.setattr(report, "IS_GITHUB_ACTIONS", True)
+
+    with pytest.raises(RuntimeError, match="integrity failed"):
+        report._handle_publish_failure(RuntimeError("integrity failed"))
+
+
+def test_email_is_blocked_when_site_publish_failed(monkeypatch):
+    import 主线强度追踪 as report
+
+    monkeypatch.setattr(report, "EMAIL_ENABLE", True)
+
+    assert report._should_send_report_email(publish_succeeded=False) is False
+    assert report._should_send_report_email(publish_succeeded=True) is True

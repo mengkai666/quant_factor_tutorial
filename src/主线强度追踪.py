@@ -57,6 +57,7 @@ from data_sources.price_provider import (
 from data_sources.run_context import current_run_id, generate_run_id, run_context
 from review_metrics import build_progression_chain, build_daily_delta_snapshot
 from report_audit import write_report_audit
+from report_integrity import build_report_integrity, render_report_integrity_metadata
 from prediction_review import append_prediction_once, build_prediction_review
 from ai_rebound import run_guarded_ai
 from market_stance import classify_market_stance, render_stance_html
@@ -102,7 +103,7 @@ else:
 def _load_name_resolution(classified=None, latest_limit=None) -> NameResolution:
     """统一加载所有名称来源, 一次性套用"当前名称优先"的优先级。
 
-    优先级 (低→高): industry < classified < universe < limit_pool。
+    优先级 (低→高): industry < classified < universe < security_master < limit_pool。
     行业缓存名最陈旧 (可能还是 *ST 旧简称), 当日涨停池名最新, 故涨停池优先。
     """
     def read_csv(path):
@@ -116,6 +117,7 @@ def _load_name_resolution(classified=None, latest_limit=None) -> NameResolution:
 
     return resolve_names(
         universe=read_csv(UNIVERSE_CACHE),
+        security_master=read_csv(SECURITY_MASTER_CACHE),
         classified=classified,
         latest_limit=latest_limit,
         industry=read_csv(INDUSTRY_CACHE),
@@ -202,6 +204,19 @@ EMAIL_SENDER = os.environ.get("EMAIL_SENDER", "")  # 发件人邮箱地址 (从�
 EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD", "")  # 发件人邮箱授权码 (从环境变量/GitHub Secrets读取)
 _receivers_env = os.environ.get("EMAIL_RECEIVERS", "")
 EMAIL_RECEIVERS = [r.strip() for r in _receivers_env.split(",") if r.strip()] if _receivers_env else []
+
+
+def _handle_publish_failure(error):
+    """Make report publication failures fatal in CI and explicit locally."""
+    print(f"  [错误] 站点发布失败: {error}")
+    if IS_GITHUB_ACTIONS:
+        raise error
+    return False
+
+
+def _should_send_report_email(*, publish_succeeded):
+    """Never distribute a report that failed the publication integrity gate."""
+    return bool(EMAIL_ENABLE and publish_succeeded)
 
 # ============================================================
 # 概念板块 → 大主线/细分板块 映射
@@ -4639,6 +4654,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
 
     # 指数阶段 × 板块共振 (阶段自动识别: 顶→底→见底脉冲→震荡/趋势→最新日)
     # 独立模块, 失败静默返回空串, 不影响主流程
+    phase_result = None
     phase_html = ''
     trusted_phase_html = ''
     phase_sanitize_marker = '<!-- trusted-micro-cycle-facts -->'
@@ -4742,6 +4758,14 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
             '</div>'
         )
 
+    integrity_payload = build_report_integrity(
+        report_date=report_date_iso,
+        market_date=dates[-1] if dates else report_date_iso,
+        phase_result=phase_result,
+        quality=unified_context.get('quality') or {},
+    )
+    integrity_metadata = render_report_integrity_metadata(integrity_payload)
+
     # 现代看板已承载“今日相对昨日”及其缺失原因；旧版提示不再重复占据首屏。
     if dashboard_section_html:
         _daily_delta_html = ''
@@ -4749,6 +4773,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     html = f'''<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8">
 <meta name="report-date" content="{report_date_iso}">
+{integrity_metadata}
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>主线强度追踪系统 V3 - 量化投研决策终端</title>
 <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
@@ -6239,6 +6264,7 @@ def _main_impl():
     )
 
     # 7.5 站点发布: 归档当日报告 + 决策看板 + 重建首页 (产品化: 首屏先给结论 + 可翻历史)
+    publish_succeeded = False
     try:
         from publish_site import publish
         # 首屏结论 = 择时档位 (纯规则, main 已有全部入参, 与报告内 3005 行同口径)
@@ -6287,24 +6313,28 @@ def _main_impl():
         except Exception as e:
             print(f"  [警告] 决策看板生成失败 (不影响主流程): {e}")
 
-        publish(
+        publish_result = publish(
             OUTPUT_HTML,
             SITE_DIR,
             report_date=latest_date,
             summary=_summary,
             dashboard_html=_dashboard_html,
         )
+        publish_succeeded = publish_result is not None
     except Exception as e:
-        print(f"  [警告] 站点发布失败 (不影响主流程): {e}")
+        publish_succeeded = _handle_publish_failure(e)
 
     print(f"\n{'='*60}")
-    print("  ✅ V3 同步版已完成!")
+    if publish_succeeded:
+        print("  ✅ V3 同步版已完成!")
+        print(f"  → GitHub Pages: {SITE_URL}")
+    else:
+        print("  ⚠️ 主报告已生成，但站点发布未完成；未标记为同步成功。")
     print(f"  → 本地报告: {OUTPUT_HTML}")
-    print(f"  → GitHub Pages: {SITE_URL}")
     print(f"{'='*60}")
 
-    # 8. 自动发送邮件
-    if EMAIL_ENABLE:
+    # 8. 自动发送邮件；发布完整性门禁失败时禁止分发。
+    if _should_send_report_email(publish_succeeded=publish_succeeded):
         try:
             if not EMAIL_SENDER or not EMAIL_PASSWORD or not EMAIL_RECEIVERS:
                 print("  ⚠️ 邮件尚未配置 (需设置环境变量 EMAIL_SENDER/EMAIL_PASSWORD/EMAIL_RECEIVERS)，跳过发送。")
@@ -6385,6 +6415,8 @@ def _main_impl():
                     print(f"  [错误] 附件文件不存在: {OUTPUT_HTML}，未发送邮件。")
         except Exception as e:
             print(f"  [错误] 邮件发送失败: {e}")
+    elif EMAIL_ENABLE:
+        print("  [跳过] 站点发布未通过完整性门禁，禁止发送报告邮件。")
 
     # 自动打开两个页面 (本地跑完后; CI 无桌面, 跳过):
     #   ① 本地报告 = 刚生成的最新内容, 立刻可看

@@ -1,11 +1,40 @@
 # -*- coding: utf-8 -*-
 import json
+import pytest
 import sys
 from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+
+
+
+def _valid_report_html(report_date="2026-08-07"):
+    from report_integrity import build_report_integrity, render_report_integrity_metadata
+    import pandas as pd
+
+    payload = build_report_integrity(
+        report_date=report_date,
+        market_date=report_date,
+        phase_result={
+            "quadrants": {"独立主线": pd.DataFrame([{"板块": "教育"}])},
+            "representatives": {
+                "groups": {"独立主线": [{"code": "sz003032", "name": "传智教育"}]}
+            },
+        },
+        quality={
+            "status": "ok",
+            "critical_blocked": [],
+            "modules": {"price_raw": {"status": "ok", "coverage_pct": 99.0, "source": "price_cache"}},
+        },
+    )
+    return (
+        '<!doctype html><html><head>'
+        f'<meta name="report-date" content="{report_date}">'
+        + render_report_integrity_metadata(payload)
+        + '</head><body>current report</body></html>'
+    )
 
 
 
@@ -18,7 +47,7 @@ def test_publish_site_excludes_reports_after_report_date_from_index(tmp_path):
     (reports_dir / "2026-08-05.html").write_text("old", encoding="utf-8")
     (reports_dir / "2026-08-07.html").write_text("future", encoding="utf-8")
     current_report = tmp_path / "report.html"
-    current_report.write_text("current", encoding="utf-8")
+    current_report.write_text(_valid_report_html("2026-08-06"), encoding="utf-8")
 
     publish(
         str(current_report),
@@ -38,7 +67,7 @@ def test_publish_site_uses_explicit_report_date_for_all_site_outputs(tmp_path):
 
     site_dir = tmp_path / "site"
     current_report = tmp_path / "report.html"
-    current_report.write_text("report for 2026-08-12", encoding="utf-8")
+    current_report.write_text(_valid_report_html("2026-08-12"), encoding="utf-8")
 
     publish(
         str(current_report),
@@ -58,12 +87,7 @@ def test_publish_site_uses_embedded_report_date_when_argument_is_stale(tmp_path)
 
     site_dir = tmp_path / "site"
     current_report = tmp_path / "report.html"
-    current_report.write_text(
-        '<!doctype html><html><head>'
-        '<meta name="report-date" content="2026-08-12">'
-        '</head><body>current report</body></html>',
-        encoding="utf-8",
-    )
+    current_report.write_text(_valid_report_html("2026-08-12"), encoding="utf-8")
 
     publish(
         str(current_report),
@@ -1239,3 +1263,52 @@ def test_generate_ai_rebound_sends_compacted_facts_to_gateway(monkeypatch):
     assert '"000039"' not in captured["prompt"]
     assert '"lineage"' not in captured["prompt"]
     assert len(facts["market_snapshot"]["limit_pool_rows"]) == 40
+
+
+
+def test_publish_site_rejects_report_without_integrity_metadata_before_writes(tmp_path):
+    from publish_site import publish
+    from report_integrity import ReportIntegrityError
+
+    site_dir = tmp_path / "site"
+    current_report = tmp_path / "report.html"
+    current_report.write_text("<html><body>no metadata</body></html>", encoding="utf-8")
+
+    with pytest.raises(ReportIntegrityError, match="缺少 report-integrity"):
+        publish(str(current_report), str(site_dir), report_date="2026-08-07")
+
+    assert not site_dir.exists()
+
+
+def test_publish_site_rejects_invalid_integrity_metadata_before_writes(tmp_path):
+    from publish_site import publish
+    from report_integrity import ReportIntegrityError, render_report_integrity_metadata
+
+    site_dir = tmp_path / "site"
+    current_report = tmp_path / "report.html"
+    invalid = {
+        "schema": "report-integrity/v1",
+        "report_date": "2026-08-07",
+        "market_date": "2026-08-06",
+        "metrics": {
+            "quadrant_rows": 0,
+            "representative_rows": 0,
+            "code_fallback_count": 1,
+            "chinese_name_coverage": 0.0,
+            "price_coverage_pct": 10.0,
+            "critical_blocked": ["price_raw"],
+            "degraded_modules": [],
+            "quality_disclosures": [],
+        },
+    }
+    current_report.write_text(
+        '<html><head><meta name="report-date" content="2026-08-07">'
+        + render_report_integrity_metadata(invalid)
+        + '</head><body>invalid</body></html>',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ReportIntegrityError):
+        publish(str(current_report), str(site_dir), report_date="2026-08-07")
+
+    assert not site_dir.exists()
