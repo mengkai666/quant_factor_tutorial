@@ -420,3 +420,73 @@ def test_large_qfq_only_gap_is_repaired_without_deferring_sh_sz_codes():
     got = merged.set_index(["date", "code"])
     assert got["close_raw"].notna().all()
     assert got["close_qfq"].eq(8.0).all()
+
+
+def test_chronic_gap_codes_are_skipped_on_a_brand_new_date(tmp_path, monkeypatch):
+    """长期缺价的票在**新交易日的首轮**也不再单只重抓 (线上 CI 每天省一轮备用源)。
+
+    按 (code,date) 精确匹配的负缓存对新日期无效, 于是每个新交易日都要为那几只
+    常年没有前复权价的票跑一轮备用源 (实测 7 只换 0 行、40s)。
+    """
+    from types import SimpleNamespace
+
+    import pandas as pd
+    import price_gap_memo
+    import 主线强度追踪 as report
+
+    monkeypatch.setattr(price_gap_memo, 'PRICE_GAP_MEMO', str(tmp_path / 'gap.csv'))
+    monkeypatch.delenv('PRICE_GAP_RETRY_ALL', raising=False)
+    # 让 sh600001 在 3 个历史日都判定抓不到 → 达到 chronic 凭据
+    for date in ('2026-08-10', '2026-08-11', '2026-08-12'):
+        price_gap_memo.record_outcome([('sh600001', date)])
+
+    dates = ['2026-08-20', '2026-08-21']          # 全新日期, 负缓存里没有记录
+    codes = ['sh600000', 'sz000001', 'sh600001']
+    existing = pd.DataFrame([
+        {
+            'date': date, 'code': code, 'close_raw': 10.0, 'close_qfq': pd.NA,
+            'price_basis': 'raw', 'source': 'existing_raw', 'source_timestamp': 'now',
+        }
+        for code in codes for date in dates
+    ])
+
+    class Recorder:
+        def __init__(self):
+            self.qfq_calls = []
+
+        def fetch_range(self, universe, requested_dates):
+            raise AssertionError('raw 已完整, 不应走全量补抓')
+
+        def fetch_qfq_range(self, universe, requested_dates):
+            self.qfq_calls.append(universe['code'].tolist())
+            return SimpleNamespace(status='success', message='', data=pd.DataFrame([
+                {
+                    'date': date, 'code': code, 'close_raw': pd.NA, 'close_qfq': 8.0,
+                    'trade_status': 'traded', 'source_raw': '', 'source_qfq': 'fixture',
+                    'fetched_at': 'now',
+                }
+                for code in universe['code'].tolist() for date in requested_dates
+            ]))
+
+    provider = Recorder()
+    _, meta = report._fill_price_gaps_with_provider(
+        existing, codes, dates[-1], previous_date=dates[0], provider=provider,
+    )
+    assert meta['fallback_chronic_skipped'] == 1
+    assert provider.qfq_calls == [['sh600000', 'sz000001']]
+
+    # 缺口规模大时 (更像代理/接口故障) 不启用该规则, 照旧全量重抓
+    provider_all = Recorder()
+    many = codes + [f'sz{300000 + i:06d}' for i in range(60)]
+    existing_many = pd.DataFrame([
+        {
+            'date': date, 'code': code, 'close_raw': 10.0, 'close_qfq': pd.NA,
+            'price_basis': 'raw', 'source': 'existing_raw', 'source_timestamp': 'now',
+        }
+        for code in many for date in dates
+    ])
+    _, meta_all = report._fill_price_gaps_with_provider(
+        existing_many, many, dates[-1], previous_date=dates[0], provider=provider_all,
+    )
+    assert meta_all['fallback_chronic_skipped'] == 0
+    assert 'sh600001' in provider_all.qfq_calls[0]

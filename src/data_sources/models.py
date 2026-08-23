@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
+from functools import lru_cache
 import re
 from typing import Any
 
@@ -13,26 +14,27 @@ _SUFFIXED_RE = re.compile(r"^(\d{6})[.](sh|sz|bj)$", re.IGNORECASE)
 _COMPACT_SUFFIXED_RE = re.compile(r"^(\d{6})(sh|sz|bj)$", re.IGNORECASE)
 
 
-def normalize_code(value: object) -> str:
-    """Convert supported Shanghai/Shenzhen/Beijing identifiers to one format."""
-    if value is None:
-        raise ValueError("stock code is required")
-    text = str(value).strip()
-    if not text:
-        raise ValueError("stock code is required")
+@lru_cache(maxsize=1 << 17)
+def _canonical_code(text: str) -> tuple[str | None, str | None]:
+    """纯文本 → (规范代码, 错误类型); 无法识别时代码为 None, 由调用方带原值抛错。
 
+    ⚠️ 热点函数 (一轮报告 170 万+ 次调用, 实测占 4.3s): 纯字符串函数,
+       按输入文本 lru_cache; 全市场只有几千个不同代码, 命中率极高。
+       错误分支不在这里抛, 是为了让报错消息里仍保留调用方传入的原始对象
+       (``{value!r}``), 与旧行为逐字一致。
+    """
     match = _CANONICAL_RE.fullmatch(text) or _PREFIXED_RE.fullmatch(text)
     if match:
         exchange, raw = match.groups()
-        return exchange.lower() + raw
+        return exchange.lower() + raw, None
 
     match = _SUFFIXED_RE.fullmatch(text) or _COMPACT_SUFFIXED_RE.fullmatch(text)
     if match:
         raw, exchange = match.groups()
-        return exchange.lower() + raw
+        return exchange.lower() + raw, None
 
     if not re.fullmatch(r"\d{6}", text):
-        raise ValueError(f"unsupported stock code: {value!r}")
+        return None, "unsupported"
     if text.startswith(("4", "8")) or text.startswith("92"):
         exchange = "bj"
     elif text.startswith(("5", "6", "9")):
@@ -40,8 +42,23 @@ def normalize_code(value: object) -> str:
     elif text.startswith(("0", "1", "2", "3")):
         exchange = "sz"
     else:
+        return None, "exchange"
+    return exchange + text, None
+
+
+def normalize_code(value: object) -> str:
+    """Convert supported Shanghai/Shenzhen/Beijing identifiers to one format."""
+    if value is None:
+        raise ValueError("stock code is required")
+    text = str(value).strip()
+    if not text:
+        raise ValueError("stock code is required")
+    code, error = _canonical_code(text)
+    if code is not None:
+        return code
+    if error == "exchange":
         raise ValueError(f"cannot infer exchange for stock code: {value!r}")
-    return exchange + text
+    raise ValueError(f"unsupported stock code: {value!r}")
 
 
 class FetchStatus(str, Enum):

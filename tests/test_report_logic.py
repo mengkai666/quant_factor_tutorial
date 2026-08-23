@@ -1438,6 +1438,77 @@ def test_turning_name_resolution_prefers_security_master_over_stale_industry(tmp
     assert names.sources["sz003032"] == "universe"
 
 
+
+def test_stock_representative_returns_stitch_legacy_qfq_history(tmp_path, monkeypatch):
+    import pandas as pd
+    import stock_representatives
+
+    price_cache = tmp_path / "price.csv"
+    pd.DataFrame([
+        {"date": "2026-07-17", "code": "sh600001", "close_legacy": 10.0, "close_qfq": None},
+        {"date": "2026-08-07", "code": "sh600001", "close_legacy": 20.0, "close_qfq": 40.0},
+    ]).to_csv(price_cache, index=False)
+    monkeypatch.setattr(stock_representatives, "PRICE_CACHE", str(price_cache))
+
+    returns = stock_representatives._phase_returns({"底部至今": ("2026-07-17", "2026-08-07")})
+
+    assert round(float(returns.loc["sh600001", "底部至今"]), 2) == 100.0
+
+
+def test_stock_representatives_render_current_chinese_names(tmp_path, monkeypatch):
+    import pandas as pd
+    import stock_representatives
+    from data_sources.name_resolver import NameResolution
+
+    returns = pd.DataFrame({
+        "下跌段": {
+            "sh600001": -5.0,
+            "sh600002": -20.0,
+            "sh600003": -4.0,
+            "sh600004": -3.0,
+            "sh600005": -25.0,
+        },
+        "底部至今": {
+            "sh600001": 50.0,
+            "sh600002": 45.0,
+            "sh600003": 0.0,
+            "sh600004": -20.0,
+            "sh600005": -30.0,
+        },
+    })
+    industry = tmp_path / "industry.csv"
+    pd.DataFrame([
+        {"code": "sh600001", "name": "sh600001", "industry": "C39计算机、通信和其他电子设备制造业"},
+        {"code": "sh600002", "name": "sh600002", "industry": "C36汽车制造业"},
+    ]).to_csv(industry, index=False)
+    monkeypatch.setattr(stock_representatives, "INDUSTRY_CACHE", str(industry))
+    monkeypatch.setattr(stock_representatives, "_phase_returns", lambda _phases: returns)
+    monkeypatch.setattr(
+        stock_representatives,
+        "_zt_stats",
+        lambda _since: pd.DataFrame(columns=["code6", "涨停次数", "最高连板"]),
+    )
+    monkeypatch.setattr(
+        stock_representatives,
+        "_load_name_resolution",
+        lambda: NameResolution(
+            names={"sh600001": "百花医药", "sh600002": "蓝盾光电"},
+            sources={"sh600001": "universe", "sh600002": "universe"},
+            conflicts=[],
+        ),
+    )
+
+    reps = stock_representatives.build_representatives(
+        {"下跌段": ("2026-06-22", "2026-07-17"), "底部至今": ("2026-07-17", "2026-08-07")},
+        -9.58,
+        fetch_cap=False,
+    )
+    html = stock_representatives.render_representatives_html(reps)
+
+    assert "百花医药" in html
+    assert "蓝盾光电" in html
+    assert "sh600001<span" not in html
+
 def test_turning_summary_uses_major_bottom_and_top_three_sector_returns():
     import pandas as pd
     from phase_resonance import build_turning_summary

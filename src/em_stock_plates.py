@@ -29,6 +29,7 @@ from datetime import datetime
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from data_sources.models import normalize_code
 from paths import EM_PLATE_CACHE
 
 # 东财个股所属板块接口
@@ -41,6 +42,11 @@ _EM_HEADERS = {
 
 # 缓存最大保留天数 (只保留最近 N 个交易日的归因, 天梯只看当天)
 _EM_CACHE_KEEP_DAYS = 10
+
+# "接口答复了但一个板块都没有"的负缓存护栏 (见 _answered_empty_codes):
+# 空答复数超过 max(绝对值, 本轮占比) 时判为接口异常, 整轮不记账。
+_EMPTY_NEG_MIN = 30
+_EMPTY_NEG_RATIO = 0.05
 
 
 def _em_secid(code):
@@ -86,6 +92,20 @@ def _fetch_plates(code, session, retry=3):
     return code, []
 
 
+# 归因缓存读取记忆 (按文件指纹): 一轮报告 load_all_attributions 被调 4 次、
+# _load_cache 2 次, 每次都重读同一份 CSV 再聚合 (实测合计 1.8s)。缓存一写指纹就变,
+# 记忆整体失效, 所以不会读到过期数据 (同 time_utils.get_latest_date 的教训)。
+# 返回浅拷贝, 免得调用方就地改动污染记忆。
+_ALL_ATTR_MEMO: dict = {}
+_DAY_CACHE_MEMO: dict = {}
+
+
+def _cache_stamp():
+    """归因缓存文件指纹; 取不到返回 None 表示不可记忆。"""
+    from time_utils import _cache_file_stamp
+    return _cache_file_stamp(EM_PLATE_CACHE)
+
+
 def _load_cache(trade_date):
     """读取当日归因缓存。
 
@@ -97,19 +117,30 @@ def _load_cache(trade_date):
     positive, attempted = {}, set()
     if not (trade_date and os.path.exists(EM_PLATE_CACHE)):
         return positive, attempted
+    key = (_cache_stamp(), str(trade_date))
+    if key[0] is not None and key in _DAY_CACHE_MEMO:
+        cached_positive, cached_attempted = _DAY_CACHE_MEMO[key]
+        return dict(cached_positive), set(cached_attempted)
     try:
         df = pd.read_csv(EM_PLATE_CACHE, dtype=str).fillna('')
         if df.empty or 'date' not in df.columns:
             return positive, attempted
         day = df[df['date'] == str(trade_date)]
-        for _, row in day.iterrows():
-            code = row['code']
+        # ⚠️ 用列 tolist() 而不是 iterrows(): 后者每行造一个 Series (实测 5232 行 0.42s)。
+        blank = [''] * len(day)
+        codes = day['code'].tolist()
+        subs = day['sub'].tolist() if 'sub' in day.columns else blank
+        mls = day['mainline'].tolist() if 'mainline' in day.columns else blank
+        for code, sub, ml in zip(codes, subs, mls):
             attempted.add(code)
-            sub, ml = row.get('sub', ''), row.get('mainline', '')
             if sub and ml:
                 positive[code] = (sub, ml)
     except Exception as e:
         print(f'  ⚠️ 东财板块归因缓存加载失败: {e}')
+        return positive, attempted
+    if key[0] is not None:
+        _DAY_CACHE_MEMO.clear()   # 只留最新指纹一份, 缓存一写就整体失效
+        _DAY_CACHE_MEMO[key] = (positive, attempted)
     return positive, attempted
 
 
@@ -134,6 +165,30 @@ def _save_cache(trade_date, new_rows):
         print(f'  ⚠️ 东财板块归因缓存写入失败: {e}')
 
 
+def _answered_empty_codes(to_fetch, fetched, provider_result):
+    """本轮"请求成功、但一个板块名都没返回"的代码集合。
+
+    PlateProvider 的 FetchResult 只在 message 里带失败清单 (格式 ``"code: error"``),
+    所以用 ``f'{code}: ' in message`` 反查失败者, 剩下的就是已被接口答复的。
+    再用 actual_count 交叉校验 (已答复 = 有板块的 + 空答复的), 对不上直接返回空集 ——
+    宁可多抓一轮, 也不能把网络失败误记成"这只票没有板块"。
+    """
+    message = str(getattr(provider_result, 'message', '') or '')
+    answered_empty = set()
+    for raw in to_fetch:
+        try:
+            code = normalize_code(raw)
+        except Exception:
+            continue
+        if code in fetched or f'{code}: ' in message:
+            continue
+        answered_empty.add(code)
+    actual = int(getattr(provider_result, 'actual_count', 0) or 0)
+    if len(fetched) + len(answered_empty) != actual:
+        return set()
+    return answered_empty
+
+
 def _vote(names, classify_by_tags, classify_by_plate_name, mainline_names):
     """所有板块名投票取众数 (sub, ml)。不受东财返回顺序影响, 比取首命中稳。"""
     votes = Counter()
@@ -149,7 +204,7 @@ def _vote(names, classify_by_tags, classify_by_plate_name, mainline_names):
 
 
 def attribute_codes(codes, classify_by_tags, classify_by_plate_name,
-                    mainline_names, trade_date=None, max_workers=8,
+                    mainline_names, trade_date=None, max_workers=16,
                     plate_provider=None):
     """为一批个股拉取东财概念板块并投票归因到 (细分板块, 大主线)。
 
@@ -158,7 +213,7 @@ def attribute_codes(codes, classify_by_tags, classify_by_plate_name,
         classify_by_tags / classify_by_plate_name: 主程序的分类函数 (复用同一套映射)。
         mainline_names: MAINLINE_NAMES, 用于过滤有效主线。
         trade_date: 'YYYYMMDD', 命中当日缓存则跳过抓取; 传 None 则不走缓存。
-        max_workers: 并发数 (8 实测稳定, 绕代理约 20只/秒)。
+        max_workers: 并发数 (16 实测稳定 0 失败, 约 35 只/秒; 会话复用后瓶颈在服务端)。
 
     Returns:
         {code: (sub, ml)} 仅含成功归入主线的股票。
@@ -202,7 +257,7 @@ def attribute_codes(codes, classify_by_tags, classify_by_plate_name,
         }
 
     # 3. 投票归因。取到板块的股全部写缓存: 成功归主线写 (sub, ml),
-    #    无主线写空串作负缓存 (避免明天/重跑再抓)。没取到板块的不写 (可能是临时失败, 留待重试)。
+    #    无主线写空串作负缓存 (避免明天/重跑再抓)。
     new_rows = []
     hit = 0
     for code, names in fetched.items():
@@ -217,8 +272,29 @@ def attribute_codes(codes, classify_by_tags, classify_by_plate_name,
             new_rows.append({'date': str(trade_date), 'code': code,
                              'sub': '', 'mainline': ''})  # 负缓存
 
+    # 3.5 "接口答复了但没有板块"的代码同样写负缓存 (同一交易日内不再重抓)。
+    #    实测 2026-08-20: 11 只每轮都被重抓, provider 回 status=zero
+    #    (11/11 请求成功、0 个板块名), 4.4s 换 0 行 —— 旧逻辑把"成功的空答复"
+    #    和"网络失败"混为一谈, 于是当天每跑一次就再问一遍。只记本轮确实被答复的;
+    #    新交易日照旧重问一次 (新股/新概念会长出板块), 所以不会永久钉死。
+    empty_negatives = set()
+    if trade_date and getattr(provider_result, 'status', '') != 'failed':
+        candidates = _answered_empty_codes(to_fetch, fetched, provider_result)
+        limit = max(_EMPTY_NEG_MIN, int(len(to_fetch) * _EMPTY_NEG_RATIO))
+        if candidates and len(candidates) <= limit:
+            # 超限时判为接口异常 (维护期整片返回空), 整轮不记账 —— 同 price_gap_memo。
+            empty_negatives = candidates
+            new_rows.extend({'date': str(trade_date), 'code': code,
+                             'sub': '', 'mainline': ''} for code in sorted(candidates))
+
+    tail = ''
+    if empty_negatives:
+        sample = ', '.join(sorted(empty_negatives)[:6])
+        more = '…' if len(empty_negatives) > 6 else ''
+        tail = (f", {len(empty_negatives)} 只接口答复无板块已记负缓存"
+                f" ({sample}{more})")
     print(f"  ✅ 东财归因完成: {len(fetched)}/{len(to_fetch)} 只取到板块, "
-          f"{hit} 只成功归入主线 (耗时 {time.time()-t0:.1f}s)")
+          f"{hit} 只成功归入主线{tail} (耗时 {time.time()-t0:.1f}s)")
 
     # 4. 写缓存
     _save_cache(trade_date, new_rows)
@@ -239,14 +315,22 @@ def load_all_attributions():
     out = {}
     if not os.path.exists(EM_PLATE_CACHE):
         return out
+    stamp = _cache_stamp()
+    if stamp is not None and stamp in _ALL_ATTR_MEMO:
+        return dict(_ALL_ATTR_MEMO[stamp])
     try:
         df = pd.read_csv(EM_PLATE_CACHE, dtype=str).fillna('')
         if df.empty or not {'date', 'code', 'sub', 'mainline'}.issubset(df.columns):
             return out
         df = df[(df['sub'] != '') & (df['mainline'] != '')]
         df = df.sort_values('date').drop_duplicates('code', keep='last')
-        for _, row in df.iterrows():
-            out[row['code']] = (row['sub'], row['mainline'])
+        # 同上: tolist()+zip 取代 iterrows() (实测 4 次调用 11392 行合计 0.96s)。
+        out = dict(zip(df['code'].tolist(),
+                       zip(df['sub'].tolist(), df['mainline'].tolist())))
     except Exception as e:
         print(f'  ⚠️ 东财板块归因缓存聚合读取失败: {e}')
-    return out
+        return out
+    if stamp is not None:
+        _ALL_ATTR_MEMO.clear()
+        _ALL_ATTR_MEMO[stamp] = out
+    return dict(out)

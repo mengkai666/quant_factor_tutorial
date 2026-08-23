@@ -40,10 +40,12 @@ UNIVERSE_CACHE = os.path.join(DATA_DIR, 'stock_universe.csv')
 SECURITY_MASTER_CACHE = os.path.join(DATA_DIR, 'security_master.csv')
 PREDICTION_HISTORY = os.path.join(DATA_DIR, 'prediction_history.jsonl')
 DAILY_SNAPSHOT_DIR = os.path.join(DATA_DIR, 'report_daily_snapshots')
+PHASE_SNAPSHOT_HISTORY = os.path.join(DATA_DIR, 'market_phase_snapshots.jsonl')
 AUDIT_DIR = os.path.join(DATA_DIR, 'report_audit')
 FETCH_STATUS_CACHE = os.path.join(DATA_DIR, 'fetch_status.csv')
 CALENDAR_CACHE = os.path.join(DATA_DIR, 'trading_calendar_cache.csv')
 QUALITY_REPORT = os.path.join(DATA_DIR, 'market_data_quality.json')
+PRICE_GAP_MEMO = os.path.join(DATA_DIR, 'price_gap_negative_cache.csv')  # 价格缺口负缓存: (code,date) 怎么抓都没有
 SENTIMENT_CACHE = os.path.join(DATA_DIR, 'sentiment_history_cache.csv')
 CLS_PLATE_CACHE = os.path.join(DATA_DIR, 'cls_plate_cache.csv')
 EM_PLATE_CACHE = os.path.join(DATA_DIR, 'em_stock_plate_cache.csv')  # 东财个股所属概念板块归因缓存
@@ -110,6 +112,35 @@ def _heal_conflict_markers(path):
         return False
 
 
+_MARKER_BYTES = b'<' * 7
+_SCAN_CHUNK = 1 << 23
+
+
+def _has_conflict_marker(path):
+    """二进制分块预检: 有无 `<<<<<<<`。读不了当作没有 (纯自愈件, 绝不阻断 import)。
+
+    ⚠️ 别为了预检把整个文件读成文本: data/ 里有 18 万行的价格缓存, 旧实现每次 import
+       都把每个 CSV 整份 decode 一遍 (实测 0.30s/轮), 而真正有冲突是极少数情况。
+       分块时保留 len(marker)-1 字节重叠, 避免标记正好跨在块边界上被漏掉。
+    """
+    try:
+        with open(path, 'rb') as handle:
+            edge = len(_MARKER_BYTES) - 1
+            tail = b''
+            while True:
+                chunk = handle.read(_SCAN_CHUNK)
+                if not chunk:
+                    return False
+                if _MARKER_BYTES in chunk:
+                    return True
+                # 只拼接块边界的几个字节, 不复制整块 (整块拼接反而成了新瓶颈)。
+                if tail and _MARKER_BYTES in tail + chunk[:edge]:
+                    return True
+                tail = chunk[-edge:]
+    except Exception:
+        return False
+
+
 def _auto_heal_data_csvs():
     """import 时自动扫描 DATA_DIR 下所有 CSV, 修复冲突标记。"""
     if not os.path.isdir(DATA_DIR):
@@ -119,6 +150,8 @@ def _auto_heal_data_csvs():
         if not fn.lower().endswith('.csv'):
             continue
         fp = os.path.join(DATA_DIR, fn)
+        if not _has_conflict_marker(fp):
+            continue
         if _heal_conflict_markers(fp):
             healed.append(fn)
     if healed:

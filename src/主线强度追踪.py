@@ -27,7 +27,6 @@ from report_logic import (
     assess_data_quality,
     reconcile_limit_pool,
     build_market_state,
-    build_scenario_probabilities,
     build_data_credibility_summary,
     build_lianban_review,
     build_mainline_review,
@@ -56,11 +55,27 @@ from data_sources.price_provider import (
 )
 from data_sources.run_context import current_run_id, generate_run_id, run_context
 from review_metrics import build_progression_chain, build_daily_delta_snapshot
+from market_thesis import build_market_thesis, summarize_phase_resonance
+from scenario_plan import build_scenario_plans
+from scenario_posterior import build_scenario_posterior_timeline
+from market_snapshot import (
+    append_phase_snapshot_once,
+    build_phase_snapshot,
+    load_phase_snapshots,
+)
+from outcome_definition import default_outcome_definition
 from report_audit import write_report_audit
-from prediction_review import append_prediction_once, build_prediction_review
+from prediction_review import (
+    append_prediction_once,
+    build_prediction_review,
+    build_prediction_snapshot,
+    build_scenario_calibration,
+    latest_prediction_id,
+)
 from ai_rebound import run_guarded_ai
 from market_stance import classify_market_stance, render_stance_html
 from screener import generate_focus_pool
+import price_gap_memo
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -87,7 +102,7 @@ from paths import (
     ZT_CACHE_FILE, PRICE_CACHE, INDUSTRY_CACHE,
     SENTIMENT_CACHE, CLS_PLATE_CACHE, OUTPUT_HTML,
     SITE_DIR, SITE_URL, SECURITY_MASTER_CACHE, UNIVERSE_CACHE,
-    PREDICTION_HISTORY, DAILY_SNAPSHOT_DIR, AUDIT_DIR,
+    PREDICTION_HISTORY, DAILY_SNAPSHOT_DIR, PHASE_SNAPSHOT_HISTORY, AUDIT_DIR,
 )
 CACHE_DIR = DATA_DIR  # 向后兼容: 旧代码引用 CACHE_DIR 的地方仍指向数据目录
 
@@ -570,9 +585,14 @@ def generate_wordclouds(plate_stock_data, output_dir):
             return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode('utf-8')
 
         print("    [1/2] 抓取全网热门股...")
-        cls = fetch_cls_top20()
-        em = fetch_eastmoney_top20()
-        ths = fetch_ths_top20()
+        # 三个热门榜互不依赖, 串行是三次 TLS 握手排队 (实测 cls 0.19s + em 1.13s
+        # + ths 0.13s), 并发后只等最慢的那个。每个函数内部各自 try/except 返回 [],
+        # 失败语义完全不变 (只是三条告警的打印顺序可能交错)。
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=3) as _hot_pool:
+            _hot_futures = [_hot_pool.submit(fn) for fn in
+                            (fetch_cls_top20, fetch_eastmoney_top20, fetch_ths_top20)]
+        cls, em, ths = (future.result() for future in _hot_futures)
 
         def weighted_list(names):
             weighted = []
@@ -1551,18 +1571,27 @@ def generate_rebound_analysis(advance_decline, sentiment_df, echelon, market_sta
         }
 
         # 6. 优先走 AI 研判 (判断+按模板填充+自行进化); 失败静默回落规则模板
+        #    诊断信息必须带出来: 两条路径渲染出来的卡片长得几乎一样, 不标注的话
+        #    读者分不清哪段文字是 AI 写的, 也看不到 AI 为什么没用上 (如 403 无权限)。
+        ai_reason = '' if mode == 'decision' else f'发布模式 {mode} 不调用 AI'
         if mode == 'decision':
             try:
-                from ai_rebound import generate_ai_rebound, render_ai_rebound_html
-                ai = generate_ai_rebound(facts)
+                from ai_rebound import (generate_ai_rebound, render_ai_rebound_html,
+                                        provenance_from_diagnostics, scrub_secrets)
+                ai, ai_diag = generate_ai_rebound(facts, return_diagnostics=True)
                 if ai:
-                    return render_ai_rebound_html(ai, facts, char_clr)
+                    return render_ai_rebound_html(
+                        ai, facts, char_clr, provenance_from_diagnostics(ai_diag))
+                ai_reason = scrub_secrets(ai_diag.get('reason') or 'AI 未返回可用结果')
             except Exception as e:
+                ai_reason = f'{type(e).__name__}: {e}'
                 print(f"  [提示] AI 研判不可用, 回落规则模板: {e}")
+        if ai_reason:
+            print(f"  [提示] 反弹复盘走规则模板 (原因: {ai_reason})")
 
         return _render_rebound_html(market_char, char_desc, char_clr,
                                     trend_desc, gap_warn, active_html, follow_html,
-                                    publication_mode=mode)
+                                    publication_mode=mode, source_reason=ai_reason)
     except Exception as e:
         print(f"  [警告] 反弹分类复盘生成失败: {e}")
         return ''
@@ -1704,8 +1733,20 @@ def _render_active_follow_html(active, follow, publication_mode='decision'):
 
 
 def _render_rebound_html(market_char, char_desc, char_clr,
-                         trend_desc, gap_warn, active_html='', follow_html='', publication_mode='decision'):
-    """渲染反弹分类复盘 HTML 卡片 (深色主题, 对齐报告风格)。"""
+                         trend_desc, gap_warn, active_html='', follow_html='', publication_mode='decision',
+                         source_label='规则模板', source_reason=''):
+    """渲染反弹分类复盘 HTML 卡片 (深色主题, 对齐报告风格)。
+
+    source_label / source_reason: 分析来源标注。同一个 section 既可能由 AI 写
+    (render_ai_rebound_html), 也可能回落到本函数的规则模板, 光看文字分不出来 ——
+    所以两边都必须自报身份, 且回落时把原因 (如 上游接口返回 403) 写进备注。
+    """
+    badge = ('<span style="font-size:12px;font-weight:normal;padding:2px 9px;border-radius:10px;'
+             'background:rgba(139,148,158,0.15);color:#8b949e;border:1px solid #8b949e55;'
+             f'white-space:nowrap;">📐 {html_lib.escape(str(source_label))} · 非 AI</span>')
+    note_text = ('备注: 本卡片文字由<b>规则模板</b>生成, 未使用 AI'
+                 + (f' ({html_lib.escape(str(source_reason))})' if source_reason else '')
+                 + '。硬数据与结论口径完全由规则引擎决定。')
     gap_clr = '#f85149' if gap_warn.startswith('⚠️') else '#8b949e'
     trend_block = (f'<div style="margin-top:8px;color:#e6edf3;font-size:14px;">'
                    f'<span style="color:#8b949e;">情绪趋势:</span> {trend_desc}</div>'
@@ -1725,7 +1766,7 @@ def _render_rebound_html(market_char, char_desc, char_clr,
     <div style="background:#0d1117;border:1px solid #30363d;border-left:4px solid {char_clr};
                 border-radius:12px;padding:22px;margin-bottom:30px;color:#c9d1d9;">
         <h2 style="color:{char_clr};font-size:19px;margin:0 0 14px;display:flex;align-items:center;gap:10px;">
-            🧭 反弹分类复盘 · 市场定性: {market_char}
+            🧭 反弹分类复盘 · 市场定性: {market_char} {badge}
         </h2>
         <div style="color:#e6edf3;font-size:14px;line-height:1.7;">
             <div><span style="color:#8b949e;">当日定性:</span> {char_desc}</div>
@@ -1736,6 +1777,7 @@ def _render_rebound_html(market_char, char_desc, char_clr,
         {follow_html}
         <div style="margin-top:14px;padding-top:12px;border-top:1px dashed #30363d;
                     font-size:12px;color:#8b949e;">
+            {note_text}<br>
             {footer_text}
         </div>
     </div>'''
@@ -2630,6 +2672,28 @@ def _price_fetch_start_for_breadth(
         return default
     return min(default, previous) if default else previous
 
+def _record_price_gap_outcome(frame, requested, target_dates):
+    """把本轮 (code, date) 的成败记进负缓存, 供下轮跳过。纯优化件, 失败静默。"""
+    if not requested or not target_dates:
+        return
+    try:
+        working = normalize_price_frame(frame)
+        if working.empty:
+            return
+        dates = [str(d) for d in target_dates]
+        rows = working[working['date'].astype(str).isin(dates)]
+        have = set()
+        if not rows.empty and {'close_raw', 'close_qfq'} <= set(rows.columns):
+            ok_rows = rows[rows['close_raw'].notna() & rows['close_qfq'].notna()]
+            have = set(zip(ok_rows['code'].astype(str), ok_rows['date'].astype(str)))
+        pairs = [(code, date) for code in requested for date in dates]
+        failed = [pair for pair in pairs if pair not in have]
+        success = [pair for pair in pairs if pair in have]
+        price_gap_memo.record_outcome(failed, success, attempted=len(pairs))
+    except Exception:
+        pass
+
+
 def _fill_price_gaps_with_provider(
     frame,
     universe_codes,
@@ -2680,6 +2744,28 @@ def _fill_price_gaps_with_provider(
     # 腾讯优先、AkShare 兜底，并在合并时保留已有 close_raw。
     qfq_requested = list(qfq_only_missing)
     requested = list(dict.fromkeys(raw_requested + qfq_requested))
+    # 负缓存: 在目标日期上"每一天都已判定抓不到"的代码直接剔除, 不再为它们跑网络。
+    _memo_skip = price_gap_memo.unobtainable_codes(requested, target_dates)
+    if _memo_skip:
+        raw_requested = [code for code in raw_requested if code not in _memo_skip]
+        qfq_requested = [code for code in qfq_requested if code not in _memo_skip]
+        requested = [code for code in requested if code not in _memo_skip]
+        print(f'  ⏭️ 价格缺口负缓存跳过 {len(_memo_skip)} 只 '
+              f'(历史日缺价不会再长出来; 强制重试设 PRICE_GAP_RETRY_ALL=1)')
+    # 长期缺价护栏: 上面按 (code,date) 精确匹配的负缓存管不了"新交易日的第一轮",
+    # 于是每个新日期都要为那几只常年没有前复权价的票再跑一轮备用源 (线上 CI 每天
+    # 都吃这 40s 换 0 行)。缺口规模很小时才启用, 代理故障式的大面积缺口不受影响。
+    _chronic_skip = set()
+    _chronic_limit = max(price_gap_memo.CHRONIC_MAX_CODES, int(len(all_codes) * 0.005))
+    if requested and len(requested) <= _chronic_limit:
+        _chronic_skip = price_gap_memo.chronic_codes(requested)
+        if _chronic_skip:
+            raw_requested = [code for code in raw_requested if code not in _chronic_skip]
+            qfq_requested = [code for code in qfq_requested if code not in _chronic_skip]
+            requested = [code for code in requested if code not in _chronic_skip]
+            print(f'  ⏭️ 长期缺价跳过 {len(_chronic_skip)} 只 '
+                  f'(已连续 {price_gap_memo.CHRONIC_MIN_DATES}+ 个历史日抓不到, '
+                  f'每 {price_gap_memo.CHRONIC_PROBE_DAYS} 天自动探针一次)')
     meta = {
         'fallback_requested': len(requested),
         'fallback_requested_codes': requested[:50],
@@ -2689,8 +2775,12 @@ def _fill_price_gaps_with_provider(
         'fallback_deferred': len(deferred),
         'fallback_deferred_codes': deferred[:50],
         'fallback_target_dates': target_dates,
+        'fallback_memo_skipped': len(_memo_skip),
+        'fallback_chronic_skipped': len(_chronic_skip),
         'fallback_status': (
-            'pending' if requested else ('deferred' if deferred else 'not_needed')
+            'pending' if requested
+            else ('deferred' if deferred else (
+                'memo_skipped' if (_memo_skip or _chronic_skip) else 'not_needed'))
         ),
         'fallback_message': '',
         'missing_before': len(missing_before),
@@ -2754,6 +2844,9 @@ def _fill_price_gaps_with_provider(
     remaining = [code for code in all_codes if code not in raw_after or code not in qfq_after]
     meta['fallback_covered'] = len(resolved)
     meta['missing_after'] = len(remaining)
+    if meta['fallback_status'] != 'failed':
+        # 整轮 failed 更像接口/代理故障, 不当作"这些票没有价"记账。
+        _record_price_gap_outcome(working, requested, target_dates)
     return working, meta
 
 
@@ -2874,7 +2967,28 @@ def update_price_cache(classified_df, return_meta=False, universe_codes=None):
             latest_qfq_ready = len(latest_qfq_codes & set(all_codes)) >= len(all_codes)
             pair_coverage = _price_pair_coverage(
                 price_df, all_codes, latest_zt_str, previous_trade_date_str)
-            if max_price_date >= latest_zt_str and latest_raw_ready and latest_qfq_ready and pair_coverage['breadth_pair_ready']:
+            gate_ready = latest_raw_ready and latest_qfq_ready
+            if not gate_ready:
+                # 负缓存兜底 (实测 2026-08-22): 门禁要求报告日 raw/qfq 覆盖 100%,
+                # 但停牌/无前复权价的票在该日本就没有收盘价, 覆盖永远到不了满分 ->
+                # 每轮跑批都判"数据落后", 为这几只跑一轮全市场重抓 (实测 53s 换 0 行)。
+                # 若"缺的这几只"已被负缓存判定抓不到, 直接放行; 覆盖率/meta 口径不变
+                # (重抓一轮也是同样的数字)。强制重试设 PRICE_GAP_RETRY_ALL=1。
+                _gap_codes = sorted(
+                    (set(all_codes) - latest_raw_codes) | (set(all_codes) - latest_qfq_codes)
+                )
+                _gap_skip = set(price_gap_memo.unobtainable_codes(_gap_codes, [latest_zt_str]))
+                # 报告日当天还没试过、但已被判为"长期缺价"的票同样放行 (口径见
+                # price_gap_memo.chronic_codes); 只在缺口很小时启用。
+                _chronic_limit = max(
+                    price_gap_memo.CHRONIC_MAX_CODES, int(len(all_codes) * 0.005))
+                if _gap_codes and len(_gap_codes) <= _chronic_limit:
+                    _gap_skip |= price_gap_memo.chronic_codes(_gap_codes)
+                if _gap_codes and len(_gap_skip) >= len(_gap_codes):
+                    gate_ready = True
+                    print(f'  ⏭️ 价格缺口负缓存: {len(_gap_codes)} 只在 {latest_zt_str} '
+                          f'已判定抓不到, 跳过重抓 (强制重试设 PRICE_GAP_RETRY_ALL=1)')
+            if max_price_date >= latest_zt_str and gate_ready and pair_coverage['breadth_pair_ready']:
                 return _finish(price_df)
             if max_price_date >= latest_zt_str:
                 # 缓存已有报告日的 legacy/qfq 数据，但缺少可审计的 raw 或 qfq。
@@ -3432,7 +3546,7 @@ def _render_timing_radar_html(timing_res, market_state=None):
 
 def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thresh,
                   leaders, dates, ratings, sub_ratings,
-                  echelon, top30_data, advance_decline, nday_leaders=None, wc_data=None, sentiment_df=None, plates=None, classified_df=None, return_leaders=None, mainline_ladder=None, sub_leaderboard=None, sub_tracks=None, price_df=None, focus_df=None, focus_catalysts=None, timing_result=None, market_state=None, previous_echelon=None, report_context=None):
+                  echelon, top30_data, advance_decline, nday_leaders=None, wc_data=None, sentiment_df=None, plates=None, classified_df=None, return_leaders=None, mainline_ladder=None, sub_leaderboard=None, sub_tracks=None, price_df=None, focus_df=None, focus_catalysts=None, timing_result=None, market_state=None, previous_echelon=None, report_context=None, phase_resonance_result=None):
 
     unified_context = dict(report_context or {})
     report_date_digits = _normalize_snapshot_date(
@@ -4648,7 +4762,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
             render_phase_resonance_html,
         )
         print(f"\n[{datetime.now().strftime('%H:%M:%S')}] 阶段共振分析 (指数阶段 × 板块)...")
-        phase_result = build_phase_resonance()
+        phase_result = phase_resonance_result if phase_resonance_result is not None else build_phase_resonance()
         if facts_only:
             trusted_phase_html = render_micro_cycle_html(phase_result)
             phase_html = phase_sanitize_marker
@@ -4656,6 +4770,24 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
             phase_html = render_phase_resonance_html(phase_result)
     except Exception as e:
         print(f"  [警告] 阶段共振模块失败 (不影响主流程): {e}")
+
+    # 高标追踪 (leader_tracker): 连板高标身份 / 引力 / 生死→情绪信号, 独立增量模块。
+    # 与 index-phase-leaders 涨幅榜互补 (按连板数/人气+生死信号, 不重叠)。
+    # 输出为服务端事实 + 规则化操作提示, 走可信通道避免被发布策略中和器裁剪。
+    leader_tracker_html = ''
+    trusted_leader_html = ''
+    leader_sanitize_marker = '<!-- trusted-leader-tracker -->'
+    leader_result = None
+    try:
+        from leader_tracker import build_leader_tracker, render_leader_tracker_html
+        _leader_report_date = dates[-1] if dates else None
+        leader_result = build_leader_tracker(report_date=_leader_report_date)
+        _leader_rendered = render_leader_tracker_html(leader_result)
+        if _leader_rendered:
+            trusted_leader_html = _leader_rendered
+            leader_tracker_html = leader_sanitize_marker
+    except Exception as e:
+        print(f"  [警告] 高标追踪模块失败 (不影响主流程): {e}")
 
     # 动态生成量化择时模块：必须服从统一三态发布策略。
     timing_res = dict(timing_result or generate_timing_signal(sentiment_df, advance_decline, echelon))
@@ -4675,6 +4807,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
             report_context=report_context,
         )
         _dash_ctx['stance'] = stance
+        _dash_ctx['leader'] = leader_result
         dashboard_section_html = generate_dashboard_section(_dash_ctx)
     except Exception as e:
         print(f"  [警告] 内嵌决策看板 section 生成失败 (不影响主流程): {e}")
@@ -4989,6 +5122,8 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
 
     {lianban_height_html}
 
+    {leader_tracker_html}
+
     {ladder_html}
 
     {echelon_html}
@@ -5051,6 +5186,8 @@ window.addEventListener('resize',function(){{c.resize();}});}})();
     html = sanitize_html_for_policy(html, policy)
     if trusted_phase_html:
         html = html.replace(phase_sanitize_marker, trusted_phase_html)
+    if trusted_leader_html:
+        html = html.replace(leader_sanitize_marker, trusted_leader_html)
     with open(OUTPUT_HTML, 'w', encoding='utf-8') as f:
         f.write(html)
 
@@ -6013,19 +6150,38 @@ def _main_impl():
         focus_df = None
         focus_catalysts = {}
 
+    def _optional_int_fact(value):
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return None
+        try:
+            return int(float(value))
+        except (TypeError, ValueError):
+            return None
+
     _breadth_total = float(advance_decline.get('up') or 0) + float(advance_decline.get('down') or 0)
-    _max_height = int(_ladder_metrics.get('height') or advance_decline.get('zt_max_height') or 0)
+    _height_raw = (
+        _ladder_metrics.get('height')
+        if 'height' in _ladder_metrics else advance_decline.get('zt_max_height')
+    )
+    _snapshot_max_height = _optional_int_fact(_height_raw)
+    _max_height = _snapshot_max_height or 0
     _gap_count = len(_ladder_metrics.get('gap_heights') or [])
     _ladder_integrity = (
         round(max(0.0, 1 - _gap_count / max(_max_height - 2, 1)), 4)
         if _max_height >= 3 else None
     )
+    _snapshot_limit_up = (
+        _optional_int_fact(_limit_count)
+        if (_authoritative_limit_count > 0 or _classified_limit_count > 0)
+        else _optional_int_fact(advance_decline.get('zt'))
+    )
+    _snapshot_limit_down = _optional_int_fact(advance_decline.get('dt'))
     _current_snapshot = {
         'report_date': _report_date,
         'run_id': current_run_id(),
-        'max_height': _max_height,
-        'limit_up': int(float(_limit_count or advance_decline.get('zt') or 0)),
-        'limit_down': int(float(advance_decline.get('dt') or 0)),
+        'max_height': _snapshot_max_height,
+        'limit_up': _snapshot_limit_up,
+        'limit_down': _snapshot_limit_down,
         'breadth_ratio': round(float(advance_decline.get('up') or 0) / _breadth_total, 4) if _breadth_total else None,
         'ladder_integrity': _ladder_integrity,
         'concentration': _mainline_concentration.get('top_share'),
@@ -6044,23 +6200,67 @@ def _main_impl():
     _previous_snapshot = _load_previous_daily_snapshot(_report_date)
     _daily_delta = build_daily_delta_snapshot(_current_snapshot, _previous_snapshot)
     _write_daily_snapshot(_report_date, _current_snapshot)
-
-    _scenarios = build_scenario_probabilities(
-        scene=(_report_timing or {}).get('scene'),
-        ad_ratio=_current_snapshot.get('breadth_ratio'),
-        zt=_current_snapshot.get('limit_up'), dt=_current_snapshot.get('limit_down'),
-        curr_h=_max_height,
-        pressure_5d=(_report_timing or {}).get('pressure_5d', 0),
-        ladder=_ladder_metrics.get('ladder', 0), h5=_ladder_metrics.get('h5', 0),
-        data_quality=_report_quality,
-        historical_samples=_report_quality.get('historical_samples', 0),
-        historical_stats=advance_decline.get('historical_stats', (_report_timing or {}).get('historical_stats')),
+    _close_phase_snapshot = build_phase_snapshot(
+        report_date=_report_date, phase='close', metrics=_current_snapshot,
+        run_id=current_run_id(), captured_at=None,
+        source_lineage={
+            'source': 'daily_close_snapshot',
+            'daily_snapshot_dir': DAILY_SNAPSHOT_DIR,
+            'facts_fingerprint_pending': True,
+            'data_cutoff': f'{_report_date}T15:00:00+08:00',
+        },
+        quality={
+            'status': _report_quality.get('status', 'unknown'),
+            'missing_fields': list(_report_quality.get('missing_fields') or []),
+        },
     )
+    append_phase_snapshot_once(PHASE_SNAPSHOT_HISTORY, _close_phase_snapshot)
+
+
+    # 阶段共振只计算一次；渲染、审计、预测快照统一消费 JSON-safe 摘要。
+    _phase_resonance_result = None
+    _phase_resonance_summary = {}
+    try:
+        from phase_resonance import build_phase_resonance
+        _phase_resonance_result = build_phase_resonance()
+        _phase_resonance_summary = summarize_phase_resonance(_phase_resonance_result)
+    except Exception as e:
+        print(f"  [警告] 阶段共振摘要失败 (不影响主流程): {e}")
+
+    _market_thesis = build_market_thesis(
+        report_date=_report_date,
+        market_snapshot=_current_snapshot,
+        progression_chain=_progression_chain,
+        ladder_metrics=_ladder_metrics,
+        mainline_concentration=_mainline_concentration,
+        timing=_report_timing,
+        market_state=_report_market_state,
+        micro_cycle=(_phase_resonance_summary.get('micro_cycle') or {}),
+        phase_resonance=_phase_resonance_summary,
+        evidence_ids=[
+            'market_snapshot', 'progression_chain', 'ladder_metrics',
+            'mainline_concentration', 'phase_resonance',
+        ],
+    )
+    _market_thesis_dict = _market_thesis.to_dict()
+
+    # 旧 A/B/C/D 仅保留在兼容渲染函数中；日报主流程只发布 ScenarioPlan。
+    _scenarios = []
+    _scenario_plans = build_scenario_plans(
+        report_date=_report_date,
+        market_thesis=_market_thesis_dict,
+        market_snapshot=_current_snapshot,
+        progression_chain=_progression_chain,
+        focus_pool=(),
+    )
+
     _ai_facts = {
         'report_date': _report_date,
         'market_snapshot': _current_snapshot,
         'daily_delta': _daily_delta,
         'progression_chain': _progression_chain,
+        'market_thesis': _market_thesis_dict,
+        'phase_resonance': _phase_resonance_summary,
         'quality_status': _report_quality.get('status'),
         # Keep the complete module quality snapshot in the AI input lineage so
         # later review can distinguish a weak inference from a weak data run.
@@ -6107,17 +6307,27 @@ def _main_impl():
         _decision_layer['publication_mode'] = _effective_mode
         _decision_layer['allow_strong_conclusion'] = _effective_mode == 'decision'
 
-    _scenarios = build_scenario_probabilities(
-        scene=(_report_timing or {}).get('scene'),
-        ad_ratio=_current_snapshot.get('breadth_ratio'),
-        zt=_current_snapshot.get('limit_up'), dt=_current_snapshot.get('limit_down'),
-        curr_h=_max_height,
-        pressure_5d=(_report_timing or {}).get('pressure_5d', 0),
-        ladder=_ladder_metrics.get('ladder', 0), h5=_ladder_metrics.get('h5', 0),
-        data_quality=_report_quality,
-        historical_samples=_report_quality.get('historical_samples', 0),
-        historical_stats=advance_decline.get('historical_stats', (_report_timing or {}).get('historical_stats')),
+    # 门禁可能改变 publication_mode；结构化盘面判断必须使用最终状态，
+    # 不能沿用门禁前的 thesis。
+    _market_thesis = build_market_thesis(
+        report_date=_report_date,
+        market_snapshot=_current_snapshot,
+        progression_chain=_progression_chain,
+        ladder_metrics=_ladder_metrics,
+        mainline_concentration=_mainline_concentration,
+        timing=_report_timing,
+        market_state=_report_market_state,
+        micro_cycle=(_phase_resonance_summary.get('micro_cycle') or {}),
+        phase_resonance=_phase_resonance_summary,
+        evidence_ids=[
+            'market_snapshot', 'progression_chain', 'ladder_metrics',
+            'mainline_concentration', 'phase_resonance',
+        ],
     )
+    _market_thesis_dict = _market_thesis.to_dict()
+
+    # 旧 A/B/C/D 仅保留在兼容渲染函数中；日报主流程只发布 ScenarioPlan。
+    _scenarios = []
 
     # 只有最终门禁允许 decision 时，才生成个股策略池和催化归因。
     if _policy.allow_focus_pool:
@@ -6137,6 +6347,37 @@ def _main_impl():
     else:
         focus_df = None
         focus_catalysts = {}
+    _scenario_calibration = build_scenario_calibration(PREDICTION_HISTORY)
+    _calibration_rows = (
+        _scenario_calibration.get('scenarios')
+        if isinstance(_scenario_calibration.get('scenarios'), dict) else {}
+    )
+    _calibrated_probabilities = {
+        scenario_id: row.get('calibrated_probability')
+        for scenario_id, row in _calibration_rows.items()
+        if isinstance(row, dict) and row.get('calibrated_probability') is not None
+    }
+    _scenario_priors = {
+        scenario_id: row.get('scenario_prior_probability')
+        for scenario_id, row in _calibration_rows.items()
+        if isinstance(row, dict) and row.get('scenario_prior_probability') is not None
+    }
+    _scenario_plans = build_scenario_plans(
+        report_date=_report_date,
+        market_thesis=_market_thesis_dict,
+        market_snapshot=_current_snapshot,
+        progression_chain=_progression_chain,
+        focus_pool=(
+            focus_df.to_dict('records')
+            if focus_df is not None and not focus_df.empty else ()
+        ),
+        probabilities=_calibrated_probabilities,
+        prior_probabilities=_scenario_priors,
+        threshold_adjustments=_calibration_rows,
+    )
+    _phase_snapshots = load_phase_snapshots(PHASE_SNAPSHOT_HISTORY, report_date=_report_date)
+    _scenario_posterior = build_scenario_posterior_timeline(_scenario_plans, _phase_snapshots)
+
     # 三类复盘摘要统一在主流程只计算一次，主报告、独立看板和内嵌看板共用。
     _data_credibility = build_data_credibility_summary(
         _report_quality,
@@ -6172,21 +6413,30 @@ def _main_impl():
         json.dumps(_ai_facts, ensure_ascii=False, sort_keys=True, default=str).encode('utf-8')
     ).hexdigest()
     if _policy.allow_scenarios:
-        append_prediction_once(
-            PREDICTION_HISTORY,
-            {
-                'prediction_id': f'{_report_date}:base',
-                'report_date': _report_date,
+        _focus_pool_snapshot = [
+            {'code': str(row.get('代码', row.get('code', ''))), 'name': str(row.get('名称', row.get('name', '')))}
+            for row in (focus_df.to_dict('records') if focus_df is not None and not focus_df.empty else [])
+        ]
+        _supersedes_prediction_id = latest_prediction_id(
+            PREDICTION_HISTORY, report_date=_report_date, as_of_phase='close',
+        )
+        _prediction_snapshot = build_prediction_snapshot(
+            report_date=_report_date, as_of_phase='close', prediction_version='v2',
+            market_thesis=_market_thesis_dict,
+            scenario_plans=[plan.to_dict() for plan in _scenario_plans],
+            market_snapshot=_current_snapshot, focus_pool=_focus_pool_snapshot,
+            facts_fingerprint=_facts_fingerprint,
+            supersedes_prediction_id=_supersedes_prediction_id,
+            outcome_definition_id=default_outcome_definition().outcome_definition_id,
+            publication_mode=_policy.mode,
+            extra={
                 'scene': (_report_timing or {}).get('scene'),
-                'publication_mode': _policy.mode,
-                'scenario': 'base',
-                'focus_pool': [
-                    {'code': str(row.get('代码', row.get('code', ''))), 'name': str(row.get('名称', row.get('name', '')))}
-                    for row in (focus_df.to_dict('records') if focus_df is not None and not focus_df.empty else [])
-                ],
-                'facts_fingerprint': _facts_fingerprint,
+                'scenario_calibration': _scenario_calibration,
+                'scenario_posterior': _scenario_posterior,
             },
         )
+        append_prediction_once(PREDICTION_HISTORY, _prediction_snapshot)
+    # 日报生成必须是只读复盘；T+1/T+3 回填由显式维护流程负责。
     _prediction_review = build_prediction_review(PREDICTION_HISTORY)
     _prediction_review['matured_count'] = _prediction_review.get('completed_count', 0)
     _prediction_review['pending_count'] = max(
@@ -6208,9 +6458,16 @@ def _main_impl():
         },
         observations={'ai': _ai_result},
         scenarios=_scenarios,
+        scenario_plans=[plan.to_dict() for plan in _scenario_plans],
         lineage=_lineage,
         daily_delta=_daily_delta,
         prediction_review=_prediction_review,
+        market_thesis=_market_thesis_dict,
+        micro_cycle=(_phase_resonance_summary.get('micro_cycle') or {}),
+        phase_resonance=_phase_resonance_summary,
+        phase_snapshots=_phase_snapshots,
+        scenario_posterior=_scenario_posterior,
+        scenario_calibration=_scenario_calibration,
     ).to_dict()
     write_report_audit(
         os.path.join(AUDIT_DIR, f'{_report_date}.json'),
@@ -6236,6 +6493,7 @@ def _main_impl():
         timing_result=_report_timing, market_state=_report_market_state,
         previous_echelon=previous_echelon,
         report_context=_report_context,
+        phase_resonance_result=_phase_resonance_result,
     )
 
     # 7.5 站点发布: 归档当日报告 + 决策看板 + 重建首页 (产品化: 首屏先给结论 + 可翻历史)
@@ -6283,6 +6541,11 @@ def _main_impl():
                 report_date=latest_date, focus_df=focus_df, focus_catalysts=focus_catalysts,
                 report_context=_report_context,
             )
+            try:
+                from leader_tracker import build_leader_tracker
+                _ctx['leader'] = build_leader_tracker(report_date=latest_date)
+            except Exception:
+                pass
             _dashboard_html = generate_dashboard_html(_ctx)
         except Exception as e:
             print(f"  [警告] 决策看板生成失败 (不影响主流程): {e}")

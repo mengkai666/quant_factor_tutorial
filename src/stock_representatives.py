@@ -48,7 +48,7 @@ from paths import (
 from time_utils import filter_completed_rows
 from data_sources.models import normalize_code
 from data_sources.name_resolver import NameResolution, resolve_names
-from data_sources.price_provider import build_price_matrix, price_value_column
+from data_sources.price_provider import build_price_matrix
 
 TOP_N = 6                # 每象限展示几只
 MID_CAP_MIN = 100.0      # 中军最小总市值 (亿元)
@@ -142,21 +142,23 @@ def build_turning_stock_leaders(
     return {"usable": True, "coverage": coverage, "rows": rows}
 
 def _phase_returns(phases):
-    """全市场个股各阶段收益 %。index=code, columns=阶段名。"""
+    """全市场个股各阶段收益 %。index=code, columns=阶段名。
+
+    本地价格缓存可能是「早期 close_legacy + 近期 close_qfq」的混合口径。
+    这里必须和其它报告模块一样走 build_price_matrix 做拼接，否则只要
+    下跌段落在 legacy 历史里，四象限个股代表就会被算成空。
+    """
     if not os.path.exists(PRICE_CACHE):
         return pd.DataFrame()
     df = pd.read_csv(PRICE_CACHE)
     df = filter_completed_rows(df, 'date')
-    value_column = price_value_column(df, 'qfq', allow_legacy=True)
-    if not value_column:
+    px = build_price_matrix(df, 'qfq', allow_legacy=True)
+    if px.empty:
         return pd.DataFrame()
-    df = df[pd.to_numeric(df[value_column], errors='coerce') > 0]
-    px = df.pivot_table(index='date', columns='code', values=value_column,
-                        aggfunc=lambda s: s.iloc[-1])
-    dates = list(px.index)
+    dates = [str(x) for x in px.index]
 
     def near(d):
-        c = [x for x in dates if x <= d]
+        c = [x for x in dates if x <= str(d)]
         return c[-1] if c else None
 
     out = {}
@@ -164,7 +166,9 @@ def _phase_returns(phases):
         ds, de = near(s), near(e)
         if not ds or not de or ds == de:
             continue
-        out[p] = (px.loc[de] / px.loc[ds] - 1) * 100
+        start = pd.to_numeric(px.loc[ds], errors='coerce')
+        end = pd.to_numeric(px.loc[de], errors='coerce')
+        out[p] = (end / start - 1) * 100
     return pd.DataFrame(out)
 
 
@@ -233,14 +237,32 @@ def build_representatives(phases, index_drawdown, fetch_cap=True):
     if 'code' not in df.columns:
         df = df.rename(columns={df.columns[0]: 'code'})
 
-    # 行业标注 (仅展示, 不参与计算)
+    # 中文名称用当前证券主表 / universe 解析；行业缓存只作行业展示兜底。
+    # 这样即使 industry_cache 缺失或名称列退化为代码，也不会在报告里显示 "sh600721 sh600721"。
+    name_resolution = _load_name_resolution()
+    df['name'] = df['code'].map(name_resolution.names)
     try:
-        ic = pd.read_csv(INDUSTRY_CACHE)[['code', 'name', 'industry']]
-        df = df.merge(ic, on='code', how='left')
+        ic = pd.read_csv(INDUSTRY_CACHE, dtype=str)
+        keep = [c for c in ('code', 'name', 'industry') if c in ic.columns]
+        ic = ic[keep].copy()
+        if 'code' in ic.columns:
+            ic['code'] = ic['code'].map(normalize_code)
+            ic = ic.drop_duplicates('code', keep='last')
+            rename = {}
+            if 'name' in ic.columns:
+                rename['name'] = 'industry_name'
+            ic = ic.rename(columns=rename)
+            df = df.merge(ic, on='code', how='left')
     except Exception:
-        df['name'] = df['code']
+        pass
+    if 'industry_name' in df.columns:
+        df['name'] = df['name'].fillna(df['industry_name'])
+    if 'industry' not in df.columns:
         df['industry'] = ''
-    df['name'] = df['name'].fillna(df['code'])
+    df['name'] = df['name'].where(
+        df['name'].notna() & (df['name'].astype(str).str.strip() != ''),
+        df['code'],
+    )
     df['industry'] = df['industry'].fillna('')
 
     # 涨停 (龙头认定)

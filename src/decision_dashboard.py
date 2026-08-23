@@ -310,11 +310,15 @@ def build_dashboard_ctx(timing=None, advance_decline=None, sentiment_df=None,
             attribution_source=(advance_decline.get('sector_source') or 'CLS+Eastmoney concepts'),
         )
 
-    scenarios = _default_scenarios(curr_h, prev_h, focus_df=focus_df)
-    by_code = {row['code']: row for row in scenario_probabilities}
-    for scenario, code in zip(scenarios, ('A', 'B', 'C', 'D')):
-        if code in by_code:
-            scenario.update(by_code[code])
+    scenario_plans = unified_context.get('scenario_plans') if isinstance(unified_context.get('scenario_plans'), list) else []
+    if scenario_plans:
+        scenarios = _scenario_plan_rows(scenario_plans)
+    else:
+        scenarios = _default_scenarios(curr_h, prev_h, focus_df=focus_df)
+        by_code = {row['code']: row for row in scenario_probabilities}
+        for scenario, code in zip(scenarios, ('A', 'B', 'C', 'D')):
+            if code in by_code:
+                scenario.update(by_code[code])
     _mark_base_scenario(scenarios)
 
     return {
@@ -347,6 +351,7 @@ def build_dashboard_ctx(timing=None, advance_decline=None, sentiment_df=None,
         'win_rate_confidence_interval': timing.get('win_rate_confidence_interval'),
         'scenario_probabilities': scenario_probabilities,
         'scenarios': scenarios,
+        'scenario_plans': scenario_plans,
         'echelon': list(echelon or []),
         'focus_df': focus_df,
         'focus_catalysts': focus_catalysts or {},
@@ -354,6 +359,10 @@ def build_dashboard_ctx(timing=None, advance_decline=None, sentiment_df=None,
         'report_context': unified_context,
         'daily_delta': unified_context.get('daily_delta', {}),
         'prediction_review': unified_context.get('prediction_review', {}),
+        'market_thesis': unified_context.get('market_thesis', {}),
+        'scenario_posterior': unified_context.get('scenario_posterior', {}),
+        'scenario_calibration': unified_context.get('scenario_calibration', {}),
+        'phase_snapshots': unified_context.get('phase_snapshots', []),
         'lineage': unified_context.get('lineage', {}),
         'progression_chain': (unified_context.get('facts') or {}).get('progression_chain', {}),
     }
@@ -457,22 +466,80 @@ def _build_action_plan(ctx: dict, judgement: dict | None = None) -> dict[str, An
             'groups': [],
         }
 
-    judgement = judgement or _overall_judgement(ctx, state)
-    signal_text = ' '.join(str(value or '') for value in (
-        ctx.get('scene'), judgement.get('title'), judgement.get('summary'), ctx.get('desc'),
-    ))
+    structured_position = None
+    structured_posture = None
+    structured_action = None
+    scenario_plans = ctx.get('scenario_plans') if isinstance(ctx.get('scenario_plans'), list) else []
+    posterior = ctx.get('scenario_posterior') if isinstance(ctx.get('scenario_posterior'), dict) else {}
+    timeline = posterior.get('timeline') if isinstance(posterior.get('timeline'), list) else []
+    latest_phase = timeline[-1] if timeline and isinstance(timeline[-1], dict) else {}
+    top_scenario_id = str(latest_phase.get('top_scenario_id') or '')
+    scenario_state = 'neutral'
+    for row in latest_phase.get('scenarios') or ():
+        if isinstance(row, dict) and str(row.get('scenario_id') or '') == top_scenario_id:
+            scenario_state = str(row.get('state') or 'neutral').lower()
+            break
+    active_plan = next((
+        plan for plan in scenario_plans
+        if isinstance(plan, dict) and str(plan.get('scenario_id') or '') == top_scenario_id
+    ), None)
+    if active_plan:
+        condition = 'any_invalidation' if scenario_state == 'invalidated' else (
+            'all_required_triggers' if scenario_state == 'supported' else 'partial_confirmation'
+        )
+        position_rule = next((
+            rule for rule in (active_plan.get('position_adjustment_rules') or ())
+            if isinstance(rule, dict) and str(rule.get('condition') or '') == condition
+        ), None)
+        try:
+            target = float(position_rule.get('target')) if position_rule else None
+        except (TypeError, ValueError):
+            target = None
+        if target is not None and 0 <= target <= 1:
+            value = target * 10
+            structured_position = f'{int(value)} 成' if value.is_integer() else f'{value:.1f} 成'
+            structured_posture = '场景确认' if condition == 'all_required_triggers' else (
+                '场景失效' if condition == 'any_invalidation' else '部分确认'
+            )
+            structured_action = {
+                'all_required_triggers': '按场景上限执行',
+                'partial_confirmation': '按场景中枢执行',
+                'any_invalidation': '降至场景下限',
+            }[condition]
+
+    # 仓位只允许由结构化盘面事实决定，不能从 scene/desc/AI 文案关键词反推。
+    # thesis 缺失时使用兼容性的数值事实降级，不使用中文文案。
+    thesis = ctx.get('market_thesis') if isinstance(ctx.get('market_thesis'), dict) else {}
+    breadth_relay = thesis.get('breadth_relay_state') if isinstance(thesis.get('breadth_relay_state'), dict) else {}
+    dimensions = thesis.get('dimensions') if isinstance(thesis.get('dimensions'), dict) else {}
+    breadth_state = str(
+        breadth_relay.get('breadth')
+        or (dimensions.get('index_breadth') or {}).get('state')
+        or ''
+    ).lower()
+    relay_state = str(
+        breadth_relay.get('relay')
+        or (dimensions.get('relay_quality') or {}).get('state')
+        or ''
+    ).lower()
+    feedback_state = str((dimensions.get('high_level_feedback') or {}).get('state') or '').lower()
     breadth = ctx.get('breadth_ratio', ctx.get('ad_ratio'))
     ladder = ctx.get('ladder')
     dt = int(ctx.get('dt') or 0)
-    weak = (isinstance(breadth, (int, float)) and breadth < 0.45) or dt >= 15
-    pressured = any(token in signal_text for token in (
-        '高位承压', '高位撕裂', '退潮', '断层', '结构换挡', '孤峰', '高位悬空',
-    ))
-    strong = (
-        isinstance(breadth, (int, float)) and breadth >= 0.65
-        and isinstance(ladder, (int, float)) and ladder >= 12
-        and dt <= 5 and not pressured
-    )
+    if thesis:
+        weak = breadth_state == 'weak' or feedback_state in {'negative', 'deteriorating'}
+        strong = (
+            breadth_state == 'strong'
+            and relay_state == 'strong'
+            and feedback_state in {'positive', 'supportive', 'confirmed', ''}
+        )
+    else:
+        weak = (isinstance(breadth, (int, float)) and breadth < 0.45) or dt >= 15
+        strong = (
+            isinstance(breadth, (int, float)) and breadth >= 0.65
+            and isinstance(ladder, (int, float)) and ladder >= 12
+            and dt <= 5
+        )
     if weak:
         position, posture = '0-2 成', '防守'
         core_action = '高位减仓，只保留最强观察仓'
@@ -482,6 +549,10 @@ def _build_action_plan(ctx: dict, judgement: dict | None = None) -> dict[str, An
     else:
         position, posture = '2-4 成', '试错'
         core_action = '只做低位晋级，高位孤峰不追'
+    position_source = 'market_thesis'
+    if structured_position is not None:
+        position, posture, core_action = structured_position, structured_posture, structured_action
+        position_source = 'scenario_plan'
 
     group_specs = {
         'attack': {
@@ -528,6 +599,8 @@ def _build_action_plan(ctx: dict, judgement: dict | None = None) -> dict[str, An
         'position': position,
         'posture': posture,
         'core_action': core_action,
+        'position_source': position_source,
+        'active_scenario_id': top_scenario_id or None,
         'groups': groups_out,
     }
 
@@ -849,6 +922,76 @@ def _render_focus_table(buckets: dict, catalysts: dict | None = None, mode: str 
     return f'''<div class="fp-wrap">{''.join(parts)}</div>'''
 
 
+def _scenario_plan_rows(plans: Any) -> list[dict]:
+    """把结构化 ScenarioPlan 映射为渲染层字段，不补齐固定 A/B/C/D。"""
+    rows: list[dict] = []
+    kind_map = {"主线延续": "attack", "低位扩散": "moderate", "分歧修复": "moderate",
+                "宽度修复": "moderate", "核心抱团": "moderate", "高位退潮": "defense",
+                "风险观察": "defense", "等待确认": "defense"}
+    for plan in plans or ():
+        if not isinstance(plan, dict):
+            continue
+        title = str(plan.get("title") or plan.get("scenario_id") or "条件场景").strip()
+        items: list[str] = []
+        buckets = (
+            ("竞价", plan.get("auction_triggers")),
+            ("9:35", plan.get("early_session_triggers")),
+            ("10:00", plan.get("confirmation_triggers")),
+            ("午后", plan.get("afternoon_triggers")),
+            ("失效", plan.get("invalidation_conditions")),
+        )
+        for label, values in buckets:
+            for value in values or ():
+                text = str(value or "").strip()
+                if text:
+                    items.append(f"{label}：{text}")
+        roles = [str(x).strip() for x in (plan.get("observation_roles") or ()) if str(x).strip()]
+        observation_pool = [str(x.get("name", x.get("股票", x))) if isinstance(x, dict) else str(x)
+                            for x in (plan.get("observation_pool") or ())]
+        candidates = [str(x.get("name", x.get("股票", x))) if isinstance(x, dict) else str(x)
+                      for x in (plan.get("trade_candidates") or ())]
+        if roles:
+            items.append("角色：" + "、".join(roles))
+        if observation_pool:
+            items.append("观察池：" + "、".join(x for x in observation_pool if x))
+        if candidates:
+            items.append("交易候选：" + "、".join(x for x in candidates if x))
+        conditional_probability = plan.get("probability")
+        prior_probability = plan.get("prior_probability")
+        try:
+            probability = float(prior_probability)
+            prob = f"校准先验 {probability * 100:.0f}%"
+        except (TypeError, ValueError):
+            probability = None
+            prob = "条件触发"
+        try:
+            hit_probability = float(conditional_probability)
+            items.append(f"历史条件命中率：{hit_probability * 100:.0f}%")
+        except (TypeError, ValueError):
+            pass
+        try:
+            floor = float(plan.get("position_floor", 0) or 0) * 10
+            ceiling = float(plan.get("position_ceiling", 0) or 0) * 10
+            if floor.is_integer() and ceiling.is_integer():
+                pos = f"仓位 · {int(floor)}-{int(ceiling)} 成"
+            else:
+                pos = f"仓位 · {floor:.1f}-{ceiling:.1f} 成"
+        except (TypeError, ValueError):
+            pos = "仓位 · 以条件确认"
+        rows.append({
+            "code": plan.get("scenario_id"),
+            "name": title,
+            "kind": kind_map.get(str(plan.get("scenario_type") or ""), "moderate"),
+            "probability": probability,
+            "prob": prob,
+            "items": items,
+            "pos": pos,
+            "sample_size": plan.get("sample_size", 0),
+            "confidence": plan.get("confidence", "条件触发"),
+        })
+    return rows
+
+
 def _default_scenarios(curr_h: int, prev_h: int, focus_df=None) -> list[dict]:
     """T+1 4 情形树的默认模板. 从 focus_df 挂具体标的:
     - A (双龙一字): 空间池最强 2 只锁仓
@@ -1050,11 +1193,18 @@ def _mark_base_scenario(scenarios: list[dict]) -> dict | None:
 def _prepare_scenarios(ctx: dict, curr_h: int, prev_h: int, focus_df, *,
                        breadth_ratio, zt, dt, pressure_5d, ladder, h5) -> list[dict]:
     """统一生成渲染层情形树，避免独立看板/内嵌看板回退到固定概率模板。"""
-    scenarios = ctx.get('scenarios') or _default_scenarios(curr_h, prev_h, focus_df=focus_df)
-    scenarios = [dict(row) for row in scenarios]
-    if len(scenarios) < 4:
-        defaults = _default_scenarios(curr_h, prev_h, focus_df=focus_df)
-        scenarios.extend(defaults[len(scenarios):])
+    plan_rows = ctx.get('scenario_plans') if isinstance(ctx.get('scenario_plans'), list) else []
+    if plan_rows:
+        scenarios = _scenario_plan_rows(plan_rows)
+    else:
+        scenarios = ctx.get('scenarios') or _default_scenarios(curr_h, prev_h, focus_df=focus_df)
+        scenarios = [dict(row) for row in scenarios]
+        if len(scenarios) < 4:
+            defaults = _default_scenarios(curr_h, prev_h, focus_df=focus_df)
+            scenarios.extend(defaults[len(scenarios):])
+    if plan_rows:
+        _mark_base_scenario(scenarios)
+        return scenarios
     dynamic = build_scenario_probabilities(
         scene=ctx.get('scene'), ad_ratio=breadth_ratio,
         zt=zt, dt=dt, curr_h=curr_h, pressure_5d=pressure_5d,
@@ -2277,6 +2427,60 @@ def _mainline_review_html(ctx: dict, prefix: str = '') -> str:
       <div class="{note}">{_esc(coverage_note or review.get('conclusion') or '主线结论按当前归因样本解释。')}</div>
     </div>'''
 
+def _outcome_reconciliation_html(
+    prediction: dict,
+    *,
+    panel_style: str,
+    title_style: str,
+    item_style: str,
+    warning_style: str,
+    muted_style: str,
+) -> str:
+    """渲染后验回填状态；unknown 表示事实不足，不等同于预测失败。"""
+    reconciliation = prediction.get('outcome_reconciliation')
+    if not isinstance(reconciliation, dict) or not reconciliation:
+        return ''
+
+    def _count(key: str) -> int:
+        try:
+            return max(0, int(reconciliation.get(key) or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    status = str(reconciliation.get('status') or '').strip().lower()
+    appended = _count('appended')
+    unknown = _count('unknown')
+    skipped = _count('skipped')
+    rows: list[str] = []
+
+    if status == 'failed':
+        rows.append(f'<div style="{warning_style}">后验回填失败，日报仍基于已有事件。</div>')
+    else:
+        if appended > 0:
+            rows.append(f'<div style="{item_style}">已回填 {_esc(str(appended))} 条</div>')
+        elif status == 'ok':
+            rows.append(f'<div style="{muted_style}">本次无新增回填记录。</div>')
+        if unknown > 0:
+            rows.append(f'<div style="{warning_style}">{_esc(str(unknown))} 条字段不足，待补事实。</div>')
+        if skipped > 0:
+            rows.append(f'<div style="{muted_style}">{_esc(str(skipped))} 条因日期或快照不足暂未处理。</div>')
+
+    definition_id = str(
+        reconciliation.get('definition_id')
+        or prediction.get('outcome_definition_id')
+        or ''
+    ).strip()
+    if definition_id:
+        rows.append(f'<div style="{muted_style}">口径：{_esc(definition_id)}</div>')
+    if not rows:
+        rows.append(f'<div style="{muted_style}">后验回填状态待确认。</div>')
+
+    return (
+        f'<div style="{panel_style}"><div style="{title_style}">后验回填</div>'
+        f'{"".join(rows)}</div>'
+    )
+
+
 def _review_closure_html(ctx: dict, prefix: str = '') -> str:
     """渲染简洁的日报闭环；详细来源仍由数据质量卡的折叠区承载。"""
     daily_delta = ctx.get('daily_delta') if isinstance(ctx.get('daily_delta'), dict) else {}
@@ -2286,7 +2490,9 @@ def _review_closure_html(ctx: dict, prefix: str = '') -> str:
         scored_count = int(prediction.get('scored_count') or 0)
     except (TypeError, ValueError):
         scored_count = 0
-    if scored_count <= 0:
+    outcome_reconciliation = prediction.get('outcome_reconciliation')
+    has_outcome_reconciliation = isinstance(outcome_reconciliation, dict) and bool(outcome_reconciliation)
+    if scored_count <= 0 and not has_outcome_reconciliation:
         return ''
     lineage = ctx.get('lineage') if isinstance(ctx.get('lineage'), dict) else {}
     quality = ctx.get('data_quality') if isinstance(ctx.get('data_quality'), dict) else {}
@@ -2439,6 +2645,16 @@ def _review_closure_html(ctx: dict, prefix: str = '') -> str:
     panels.append(
         f'<div style="{panel_style}"><div style="{title_style}">历史预测复盘</div>{prediction_html}</div>'
     )
+    outcome_reconciliation_html = _outcome_reconciliation_html(
+        prediction,
+        panel_style=panel_style,
+        title_style=title_style,
+        item_style=item_style,
+        warning_style=warning_style,
+        muted_style=muted_style,
+    )
+    if outcome_reconciliation_html:
+        panels.append(outcome_reconciliation_html)
     return f'''
     <div class="{block}" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;margin:16px 0 20px">{''.join(panels)}</div>'''
 
@@ -2600,8 +2816,16 @@ def generate_dashboard_html(ctx: dict) -> str:
         scenario_heading = '明日验证路径'
         scenario_sub = '按条件确认强弱变化'
     else:
-        scenario_heading, scenario_sub = '明日 T+1 · 4 情形决策树', '概率最高者为基准情形'
-    scenario_block = ''
+        scenario_heading, scenario_sub = '明日 T+1 · 条件场景树', '按竞价、9:35、10:00 与午后触发逐步验证'
+    scenario_block = (
+        f'<div class="section-title">{_esc(scenario_heading)}'
+        f'<span class="st-sub">{_esc(scenario_sub)}</span></div>'
+        f'<div class="scenario-tree">{scen_cards}</div>'
+    )
+    if observation_only and not (
+        isinstance(ctx.get('scenario_plans'), list) and ctx.get('scenario_plans')
+    ):
+        scenario_block = ''
     footer_note = (
         '数据质量未通过校验，仅展示事实与来源状态。'
         if policy['facts_only']
@@ -2639,12 +2863,19 @@ def generate_dashboard_html(ctx: dict) -> str:
             f'核心动作 {_esc(action_plan.get("core_action"))} · '
             f'{_esc(judgement.get("condition"))}'
         )
+    _leader = ctx.get('leader') or {}
+    leader_tag = ''
+    if _leader.get('signal') and not policy['facts_only']:
+        _lh = _leader.get('headline') or ''
+        leader_tag = (f'<div class="sub2">🏔️ 高标 · {_esc(_leader.get("signal"))}'
+                      f'{(" — " + _esc(_lh)) if _lh else ""}</div>')
     headline_html = f'''
     <div class="headline">
       <div class="box primary">
         <div class="lbl">{headline_label}</div>
         <div class="big">{headline_value}{pick_html}</div>
         <div class="sub2">{headline_sub}</div>
+        {leader_tag}
       </div>
       <div class="box gauge-wrap">
         <div class="lbl">盘面情绪温度</div>
@@ -3216,8 +3447,16 @@ def generate_dashboard_section(ctx: dict) -> str:
         scenario_heading = '明日验证路径'
         scenario_sub = '按条件确认强弱变化'
     else:
-        scenario_heading, scenario_sub = '明日 T+1 · 4 情形决策树', '基准情形已高亮'
-    scenario_block = ''
+        scenario_heading, scenario_sub = '明日 T+1 · 条件场景树', '按竞价、9:35、10:00 与午后触发逐步验证'
+    scenario_block = (
+        f'<div class="dbd-section-title">{_esc(scenario_heading)}'
+        f'<span class="dbd-st-sub">{_esc(scenario_sub)}</span></div>'
+        f'<div class="dbd-tree">{scen_cards}</div>'
+    )
+    if observation_only and not (
+        isinstance(ctx.get('scenario_plans'), list) and ctx.get('scenario_plans')
+    ):
+        scenario_block = ''
     wr_color = _win_rate_color(win_rate)
     wr_str = f'{win_rate * 100:.0f}%' if isinstance(win_rate, (int, float)) else '—'
     wr_evidence = _win_rate_stat_text(ctx, win_rate)
@@ -3251,12 +3490,19 @@ def generate_dashboard_section(ctx: dict) -> str:
             f'核心动作 {_esc(action_plan.get("core_action"))} · '
             f'{_esc(judgement.get("condition"))}'
         )
+    _leader = ctx.get('leader') or {}
+    leader_tag = ''
+    if _leader.get('signal') and not policy['facts_only']:
+        _lh = _leader.get('headline') or ''
+        leader_tag = (f'<div class="dbd-hsub">🏔️ 高标 · {_esc(_leader.get("signal"))}'
+                      f'{(" — " + _esc(_lh)) if _lh else ""}</div>')
     headline_html = f'''
     <div class="dbd-headline">
       <div class="dbd-hbox dbd-hbox-primary">
         <div class="dbd-hlbl">{headline_label}</div>
         <div class="dbd-hbig">{headline_value}{pick_html}</div>
         <div class="dbd-hsub">{headline_sub}</div>
+        {leader_tag}
       </div>
       <div class="dbd-hbox dbd-gauge-wrap">
         <div class="dbd-hlbl">盘面情绪温度</div>

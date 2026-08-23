@@ -434,6 +434,10 @@ def test_ai_gate_preserves_retry_failure_reason(tmp_path, monkeypatch):
 
     monkeypatch.setattr(ai_rebound, "AI_OUTPUT_CACHE_DIR", tmp_path / "ai-output-cache")
     monkeypatch.setattr(ai_rebound, "AI_PRIMARY_MAX_ATTEMPTS", 2)
+    # 本测试只核验"主模型重试耗尽后保留失败原因", 与备用模型无关。
+    # 必须显式清空 ANTHROPIC_FALLBACK_MODEL: 它是 import 期从 .env 读的模块常量,
+    # 开发机配了备用模型时会多发一次请求, 让 len(calls)/attempt_count 断言无故变红。
+    monkeypatch.setattr(ai_rebound, "ANTHROPIC_FALLBACK_MODEL", "")
 
     calls = []
 

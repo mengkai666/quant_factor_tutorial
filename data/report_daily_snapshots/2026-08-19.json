@@ -1,0 +1,199 @@
+{
+  "report_date": "2026-08-19",
+  "run_id": "20260819T171417987446Z-448194b4",
+  "max_height": 3,
+  "limit_up": 36,
+  "limit_down": 118,
+  "breadth_ratio": 0.0794,
+  "ladder_integrity": 1.0,
+  "concentration": 0.4583,
+  "promotion_rate": 0.08860759493670886,
+  "mainline_rank": "周期资源",
+  "limit_pool_rows": [
+    {
+      "code": "sh600127",
+      "name": "金健米业",
+      "height": 3
+    },
+    {
+      "code": "sh600371",
+      "name": "万向德农",
+      "height": 2
+    },
+    {
+      "code": "sh600403",
+      "name": "大有能源",
+      "height": 1
+    },
+    {
+      "code": "sh600610",
+      "name": "中毅达",
+      "height": 1
+    },
+    {
+      "code": "sh600783",
+      "name": "鲁信创投",
+      "height": 1
+    },
+    {
+      "code": "sh601011",
+      "name": "宝泰隆",
+      "height": 1
+    },
+    {
+      "code": "sh601015",
+      "name": "陕西黑猫",
+      "height": 1
+    },
+    {
+      "code": "sh603102",
+      "name": "百合股份",
+      "height": 1
+    },
+    {
+      "code": "sh603113",
+      "name": "金能科技",
+      "height": 1
+    },
+    {
+      "code": "sh603290",
+      "name": "斯达半导",
+      "height": 1
+    },
+    {
+      "code": "sh603366",
+      "name": "日出东方",
+      "height": 1
+    },
+    {
+      "code": "sh603395",
+      "name": "红四方",
+      "height": 3
+    },
+    {
+      "code": "sh603506",
+      "name": "南都物业",
+      "height": 1
+    },
+    {
+      "code": "sh603801",
+      "name": "志邦家居",
+      "height": 1
+    },
+    {
+      "code": "sh603848",
+      "name": "好太太",
+      "height": 1
+    },
+    {
+      "code": "sz000020",
+      "name": "深华发Ａ",
+      "height": 2
+    },
+    {
+      "code": "sz000059",
+      "name": "华锦股份",
+      "height": 1
+    },
+    {
+      "code": "sz000505",
+      "name": "京粮控股",
+      "height": 3
+    },
+    {
+      "code": "sz000526",
+      "name": "学大教育",
+      "height": 2
+    },
+    {
+      "code": "sz000560",
+      "name": "我爱我家",
+      "height": 1
+    },
+    {
+      "code": "sz000723",
+      "name": "美锦能源",
+      "height": 1
+    },
+    {
+      "code": "sz000736",
+      "name": "中交发展",
+      "height": 1
+    },
+    {
+      "code": "sz001277",
+      "name": "速达股份",
+      "height": 1
+    },
+    {
+      "code": "sz001301",
+      "name": "尚太科技",
+      "height": 1
+    },
+    {
+      "code": "sz001338",
+      "name": "永顺泰",
+      "height": 1
+    },
+    {
+      "code": "sz001400",
+      "name": "江顺科技",
+      "height": 1
+    },
+    {
+      "code": "sz002040",
+      "name": "南 京 港",
+      "height": 1
+    },
+    {
+      "code": "sz002333",
+      "name": "罗普斯金",
+      "height": 1
+    },
+    {
+      "code": "sz002412",
+      "name": "汉森制药",
+      "height": 1
+    },
+    {
+      "code": "sz002543",
+      "name": "万和电气",
+      "height": 1
+    },
+    {
+      "code": "sz002900",
+      "name": "哈三联",
+      "height": 1
+    },
+    {
+      "code": "sz002953",
+      "name": "日丰股份",
+      "height": 2
+    },
+    {
+      "code": "sz300069",
+      "name": "金利华电",
+      "height": 1
+    },
+    {
+      "code": "sz300911",
+      "name": "亿田智能",
+      "height": 1
+    },
+    {
+      "code": "sz301130",
+      "name": "西点药业",
+      "height": 1
+    },
+    {
+      "code": "sz301211",
+      "name": "亨迪药业",
+      "height": 1
+    }
+  ],
+  "snapshot_schema": "daily-fact-snapshot/v1",
+  "snapshot_source": "daily_snapshot",
+  "source": "daily_snapshot",
+  "date_verified": true,
+  "immutable": true
+}

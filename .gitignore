@@ -21,6 +21,7 @@ industry_cache.csv
 data/stock_universe.csv
 data/fetch_status.csv
 data/trading_calendar_cache.csv
+data/price_gap_negative_cache.csv
 data/limit_pool_cache_meta.csv
 data/market_data_quality.json
 
@@ -86,3 +87,17 @@ run_*.log
 
 # 运维脚本落库前的带时间戳备份 (tools/backfill_price_gap.py 等, 不入库)
 *.csv.bak.*
+
+# === 本机杂物 / 外部克隆 (绝不入库) ===
+# %SystemRoot% 是 shell 变量未展开时误建的空壳目录; ai_quant_trade 是外部克隆 (1.7G)
+%SystemRoot%/
+.playwright-cli/
+ai_quant_trade/
+
+# === AI 研判输出缓存 (运行时产物, 按输入指纹命名, 不入库) ===
+data/ai_output_cache/
+
+# === 一次性排查脚本与当日临时快照 ===
+data/analyze_today_*.py
+data/today_*.json
+data/preplan_candidates_*.json

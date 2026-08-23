@@ -192,3 +192,20 @@ def test_build_price_matrix_stitches_legacy_history_per_stock_without_backfill()
     assert matrix.loc["2026-08-07", "sh600001"] == 19.5
     assert matrix.loc["2026-07-17", "sz000002"] == 20.0
     assert pd.isna(matrix.loc["2026-07-17", "bj920001"])
+def test_normalize_price_frame_memo_returns_independent_copies():
+    """归一化带内容哈希记忆; 调用方就地改列不能污染下一次的返回值。"""
+    import pandas as pd
+    from data_sources import price_provider as pp
+
+    frame = pd.DataFrame([
+        {"date": "2026-08-19", "code": "600000", "close_raw": 10.0, "close_qfq": 9.5},
+        {"date": "2026-08-20", "code": "600000", "close_raw": 11.0, "close_qfq": 10.4},
+    ])
+    first = pp.normalize_price_frame(frame)
+    baseline = pp._normalize_price_frame_uncached(frame)
+    assert first.equals(baseline)
+
+    first.loc[0, "close_raw"] = -1.0
+    second = pp.normalize_price_frame(frame)
+    assert second.equals(baseline)
+    assert second is not first

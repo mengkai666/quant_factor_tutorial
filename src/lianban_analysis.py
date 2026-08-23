@@ -18,6 +18,7 @@
 import sys
 import os
 import time
+from functools import lru_cache
 import json
 import subprocess
 import warnings
@@ -42,9 +43,10 @@ _SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
 import hashlib
 import requests  # type: ignore
 
-def _normalize_date_token(value):
-    """将交易日值规范化为 YYYYMMDD；无法解析时返回空字符串。"""
-    text = str(value or "").strip().replace("-", "").replace("/", "")[:8]
+@lru_cache(maxsize=1 << 14)
+def _normalize_date_token_text(text: str) -> str:
+    """纯文本版 (被 lru_cache 记忆): 一轮报告调 3.7 万次, 但不同日期只 ~200 个。"""
+    text = text.strip().replace("-", "").replace("/", "")[:8]
     if len(text) != 8 or not text.isdigit():
         return ""
     try:
@@ -54,8 +56,19 @@ def _normalize_date_token(value):
     return text
 
 
+def _normalize_date_token(value):
+    """将交易日值规范化为 YYYYMMDD；无法解析时返回空字符串。"""
+    return _normalize_date_token_text(str(value or ""))
+
+
 _TRADE_DATE_MARKER = "__CODEX_TRADE_DATES__"
 _TRADE_DATE_TIMEOUT_SECONDS = 12
+
+
+# 交易日清单记忆 (按涨停缓存文件指纹 + cutoff): 一轮报告调 2 次, 每次重读整份缓存
+# (实测 0.59s/次)。⚠️ key 必须含文件指纹 —— 步骤1 会在运行中途写入当日涨停池,
+# 只按 cutoff 记会把当天新写的交易日钉成看不见 (同 time_utils.get_latest_date 的事故)。
+_TRADE_DATES_MEMO: dict = {}
 
 
 def get_cached_trading_dates():
@@ -63,7 +76,13 @@ def get_cached_trading_dates():
     if not os.path.exists(CACHE_FILE):
         return []
     try:
-        from time_utils import get_latest_date
+        from time_utils import get_latest_date, _cache_file_stamp
+
+        cutoff = get_latest_date().strftime("%Y%m%d")
+        stamp = _cache_file_stamp(CACHE_FILE)
+        key = (stamp, cutoff)
+        if stamp is not None and key in _TRADE_DATES_MEMO:
+            return list(_TRADE_DATES_MEMO[key])
 
         frame = pd.read_csv(
             CACHE_FILE,
@@ -73,13 +92,16 @@ def get_cached_trading_dates():
         )
         if frame.empty:
             return []
-        cutoff = get_latest_date().strftime("%Y%m%d")
         dates = {
             token
             for token in frame["日期"].map(_normalize_date_token)
             if token and token <= cutoff
         }
-        return sorted(dates)
+        result = sorted(dates)
+        if stamp is not None:
+            _TRADE_DATES_MEMO.clear()
+            _TRADE_DATES_MEMO[key] = result
+        return list(result)
     except Exception as exc:
         print(f"  ⚠️ 本地交易日缓存读取失败: {exc}")
         return []
@@ -566,11 +588,10 @@ def analyze_lianban(zt_data, dt_data):
     stock_history = {}
     for d_str, df in zt_data.items():
         if '代码' in df.columns and '连板数' in df.columns:
-            for _, row in df.iterrows():
-                code = str(row['代码'])
-                height = int(row['连板数'])
-                if code not in stock_history: stock_history[code] = {}
-                stock_history[code][d_str] = height
+            # ⚠️ 两列 tolist() 取代 iterrows(): 后者每行造一个 Series
+            #    (实测 10453 行 0.83s), 逐值结果完全一致。
+            for code, height in zip(df['代码'].tolist(), df['连板数'].tolist()):
+                stock_history.setdefault(str(code), {})[d_str] = int(height)
 
     # 预处理：找出所有【曾作为市场最高板】且【高度>=3】的龙头
     all_historical_lts = {} 
@@ -705,7 +726,14 @@ def analyze_lianban(zt_data, dt_data):
 
     # === 后处理: 对 up=0 且 down=0 的日期, 直接从 LongHu API 补全 ===
     # 这解决了 price_cache 陈旧时 MarketSentimentFactor 返回 fallback 值的问题
-    if 'up' in final_df.columns and 'down' in final_df.columns:
+    #
+    # ⚠️ 默认关闭 (2026-08-22): LongHu 接口忽略 Day 参数, 对任意历史日期都返回
+    #    当前最新快照 —— 下方陈旧检测每轮都在第 3~4 个请求就 break, 一天也补不进,
+    #    纯白跑 ≈ 2.6s/轮。A/D 家数的唯一真源是价格缓存 (见 sentiment 对账),
+    #    这条通道只作历史排查用: 需要时设 LONGHU_AD_BACKFILL=1 打开。
+    _longhu_backfill_on = os.environ.get(
+        'LONGHU_AD_BACKFILL', '').strip().lower() in {'1', 'true', 'yes'}
+    if _longhu_backfill_on and 'up' in final_df.columns and 'down' in final_df.columns:
         missing_mask = (
             ~final_df.get('ad_available', pd.Series(False, index=final_df.index)).fillna(False)
             | final_df['up'].isna()
@@ -719,6 +747,11 @@ def analyze_lianban(zt_data, dt_data):
             print(f"  📡 补全 {len(missing_dates)} 天的涨跌家数 (LongHu API)...")
             filled = 0
             last_api_key = None  # 用于检测陈旧 API 响应
+            stale_streak = 0     # 连续陈旧响应计数 (见下方提前收口)
+            # LongHu 接口忽略 Day 参数, 对任意历史日期都回当前最新快照 —— 一旦
+            # 连续 3 天拿到同一组数值, 后面几十天必然也是同一份, 请求纯属白跑
+            # (60 天 × 0.27s ≈ 16s)。检测到就提前收口, 结果与跑完全一致。
+            STALE_STREAK_LIMIT = 3
             for d_str in missing_dates:
                 d_api = f"{d_str[:4]}-{d_str[4:6]}-{d_str[6:]}" if '-' not in d_str else d_str
                 try:
@@ -744,8 +777,14 @@ def analyze_lianban(zt_data, dt_data):
                             if last_api_key == curr_key and up_val > 0:
                                 # 陈旧数据, 跳过 (不填充)
                                 last_api_key = curr_key
+                                stale_streak += 1
+                                if stale_streak >= STALE_STREAK_LIMIT:
+                                    print(f"  ⏭️ API 连续 {stale_streak} 天返回同一快照 "
+                                          f"(接口忽略 Day 参数), 停止无效补全")
+                                    break
                                 continue
                             last_api_key = curr_key
+                            stale_streak = 0
                             if up_val > 0:
                                 idx = final_df[final_df['日期'] == d_str].index[0]
                                 final_df.at[idx, 'up'] = up_val

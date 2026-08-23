@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import pytest
 import threading
@@ -377,12 +378,14 @@ def test_plate_provider_treats_eastmoney_rc102_as_not_listed_empty(monkeypatch):
             return {"rc": 102, "data": None}
 
     class Session:
-        trust_env = True
+        trust_env = False
 
         def get(self, *_args, **_kwargs):
             return Response()
 
-    monkeypatch.setattr("data_sources.plate_provider.requests.Session", Session)
+    # fetcher 走 http_session.get_session() 复用线程会话 (省 TLS 握手),
+    # 测试在这个接缝上替换会话即可。
+    monkeypatch.setattr("data_sources.plate_provider.get_session", lambda: Session())
 
     assert PlateProvider._eastmoney_fetcher("sh600599", "2026-08-05") == []
 
@@ -430,3 +433,93 @@ def test_limit_pool_cache_persists_only_canonical_codes(monkeypatch, tmp_path):
 
     saved = pd.read_csv(cache, encoding="utf-8-sig", dtype=str)
     assert set(saved["代码"]) == {"sh600000", "bj920230"}
+
+
+def _em_module(tmp_path, monkeypatch):
+    """把归因缓存重定向到 tmp_path 并清掉进程内记忆 (按文件指纹记的)。"""
+    import em_stock_plates
+
+    monkeypatch.setattr(em_stock_plates, "EM_PLATE_CACHE", str(tmp_path / "plates.csv"))
+    em_stock_plates._ALL_ATTR_MEMO.clear()
+    em_stock_plates._DAY_CACHE_MEMO.clear()
+    return em_stock_plates
+
+
+def _empty_provider(status="zero", message="", actual=None, data=None, calls=None):
+    """造一个"请求成功但没返回板块"的 provider (真实场景: 东财对这些票答复空)。"""
+    class Provider:
+        def fetch_codes(self, codes, date):
+            if calls is not None:
+                calls.append(list(codes))
+            frame = data if data is not None else pd.DataFrame(columns=PLATE_COLUMNS)
+            count = actual if actual is not None else len(list(codes))
+            return FetchResult(
+                dataset="plates", date=date, source="fixture",
+                status=FetchStatus(status), expected_count=len(list(codes)),
+                actual_count=count, scope="SH,SZ,BJ", message=message, data=frame,
+            )
+
+    return Provider()
+
+
+def test_attribute_codes_negative_caches_empty_answers(tmp_path, monkeypatch):
+    """接口答复"无板块"的票要写负缓存, 否则同一天每跑一轮都白抓一遍 (实测 11 只 4.4s 换 0 行)。"""
+    em = _em_module(tmp_path, monkeypatch)
+    calls = []
+    codes = ["sh600000", "bj920117"]
+
+    first = em.attribute_codes(codes, lambda _t: (None, None), lambda _n: (None, None),
+                               ["金融"], trade_date="20260820",
+                               plate_provider=_empty_provider(calls=calls))
+    assert first == {}
+    assert calls == [codes]
+
+    rows = pd.read_csv(str(tmp_path / "plates.csv"), dtype=str).fillna("")
+    assert sorted(rows["code"]) == sorted(codes)
+    assert set(rows["sub"]) == {""} and set(rows["mainline"]) == {""}
+
+    em._ALL_ATTR_MEMO.clear()
+    em._DAY_CACHE_MEMO.clear()
+    second = em.attribute_codes(codes, lambda _t: (None, None), lambda _n: (None, None),
+                                ["金融"], trade_date="20260820",
+                                plate_provider=_empty_provider(calls=calls))
+    assert second == {}
+    assert calls == [codes]                      # 第二轮完全没再发请求
+    assert em.load_all_attributions() == {}      # 负缓存不污染正向归因
+
+
+def test_attribute_codes_keeps_failed_codes_retriable(tmp_path, monkeypatch):
+    """网络失败的票不能记成"无板块": message 里点名的那只下一轮还要重试。"""
+    em = _em_module(tmp_path, monkeypatch)
+    codes = ["sh600000", "sz000001"]
+    message = "sz000001: HTTPSConnectionPool(host='push2.eastmoney.com', port=443): timed out"
+
+    em.attribute_codes(codes, lambda _t: (None, None), lambda _n: (None, None), ["金融"],
+                       trade_date="20260820",
+                       plate_provider=_empty_provider(status="partial", message=message,
+                                                      actual=1))
+
+    rows = pd.read_csv(str(tmp_path / "plates.csv"), dtype=str).fillna("")
+    assert rows["code"].tolist() == ["sh600000"]
+
+
+def test_attribute_codes_skips_recording_on_systemic_emptiness(tmp_path, monkeypatch):
+    """整片答复空更像接口维护, 整轮不记账 (否则一次故障就把全市场钉成"无板块")。"""
+    em = _em_module(tmp_path, monkeypatch)
+    codes = [f"sz{300000 + i:06d}" for i in range(60)]
+
+    em.attribute_codes(codes, lambda _t: (None, None), lambda _n: (None, None), ["金融"],
+                       trade_date="20260820", plate_provider=_empty_provider())
+
+    assert not os.path.exists(str(tmp_path / "plates.csv"))
+
+
+def test_attribute_codes_ignores_unverifiable_counts(tmp_path, monkeypatch):
+    """actual_count 与"有板块+空答复"对不上时宁可多抓一轮, 不写负缓存。"""
+    em = _em_module(tmp_path, monkeypatch)
+
+    em.attribute_codes(["sh600000", "sz000001"], lambda _t: (None, None),
+                       lambda _n: (None, None), ["金融"], trade_date="20260820",
+                       plate_provider=_empty_provider(actual=0))
+
+    assert not os.path.exists(str(tmp_path / "plates.csv"))

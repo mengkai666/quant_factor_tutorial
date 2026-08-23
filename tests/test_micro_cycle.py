@@ -269,8 +269,9 @@ def test_phase_payload_does_not_publish_resonance_before_close_confirmation(monk
     monkeypatch.setattr(phase_resonance, "build_price_matrix", lambda *_args, **_kwargs: pd.DataFrame())
     monkeypatch.setattr(
         phase_resonance,
-        "build_cycle_resonance",
+        "build_market_resonance",
         lambda *_args, **_kwargs: {"mainlines": [{"name": "AI算力"}]},
+        raising=False,
     )
 
     payload = phase_resonance._build_micro_cycle_payload(
@@ -299,8 +300,10 @@ def test_phase_payload_filters_price_cache_to_historical_report_cutoff(monkeypat
     def read_cache(path, **_kwargs):
         return prices.copy() if path == phase_resonance.PRICE_CACHE else pd.DataFrame()
 
-    def capture_resonance(_sectors, _chain, price_matrix, *_args, **_kwargs):
-        captured["matrix"] = price_matrix.copy()
+    def capture_resonance(_history, raw_matrix, qfq_matrix, *_args, **kwargs):
+        captured["raw_matrix"] = raw_matrix.copy()
+        captured["qfq_matrix"] = qfq_matrix.copy()
+        captured["previous_date"] = kwargs.get("previous_date")
         return {}
 
     monkeypatch.setattr(
@@ -328,7 +331,9 @@ def test_phase_payload_filters_price_cache_to_historical_report_cutoff(monkeypat
         "build_sector_return_table",
         lambda *_args, **_kwargs: pd.DataFrame(),
     )
-    monkeypatch.setattr(phase_resonance, "build_cycle_resonance", capture_resonance)
+    monkeypatch.setattr(
+        phase_resonance, "build_market_resonance", capture_resonance, raising=False,
+    )
 
     phase_resonance._build_micro_cycle_payload(
         {
@@ -343,9 +348,13 @@ def test_phase_payload_filters_price_cache_to_historical_report_cutoff(monkeypat
         {},
     )
 
-    assert list(captured["matrix"].index) == ["20260804", "20260807"]
-    assert captured["matrix"].loc["20260804", "sh600001"] == 15.0
-    assert captured["matrix"].loc["20260807", "sh600001"] == 18.0
+    assert list(captured["raw_matrix"].index) == ["20260804", "20260807"]
+    assert list(captured["qfq_matrix"].index) == ["20260804", "20260807"]
+    assert captured["raw_matrix"].loc["20260804", "sh600001"] == 10.0
+    assert captured["raw_matrix"].loc["20260807", "sh600001"] == 12.0
+    assert captured["qfq_matrix"].loc["20260804", "sh600001"] == 15.0
+    assert captured["qfq_matrix"].loc["20260807", "sh600001"] == 18.0
+    assert captured["previous_date"] == "2026-08-06"
 
 
 def test_build_sector_return_table_uses_period_returns_and_returns_empty_frame_for_empty_cache():
@@ -549,3 +558,95 @@ def test_unknown_index_return_keeps_excess_return_unknown_and_cannot_confirm_ind
     assert sectors.loc[0, "excess_return"] is None
     assert result["strong_industries"] == []
     assert result["mainlines"] == []
+
+
+def test_market_resonance_uses_full_report_day_pool_and_keeps_continuous_core_separate():
+    from micro_cycle import build_market_resonance
+
+    history = pd.DataFrame([
+        {"日期": "20260810", "类型": "ZT", "代码": "600001", "名称": "算力龙头", "连板数": 5},
+        {"日期": "20260810", "类型": "ZT", "代码": "sh600002", "名称": "算力中军", "连板数": 2},
+        {"日期": "20260810", "类型": "ZT", "代码": "sz000003", "名称": "算力首板", "连板数": 1},
+        {"日期": "20260810", "类型": "ZT", "代码": "sh600004", "名称": "创新药甲", "连板数": 3},
+        {"日期": "20260810", "类型": "ZT", "代码": "sh600005", "名称": "创新药乙", "连板数": 1},
+        {"日期": "20260807", "类型": "ZT", "代码": "sh600099", "名称": "旧样本", "连板数": 4},
+    ])
+    cls = pd.DataFrame([
+        {"date": "20260810", "code": "600001", "sub": "算力", "mainline": "AI算力"},
+        {"date": "20260810", "code": "sh600002", "sub": "算力", "mainline": "AI算力"},
+        {"date": "20260810", "code": "sz000003", "sub": "算力", "mainline": "AI算力"},
+        {"date": "20260810", "code": "sh600004", "sub": "创新药", "mainline": "医药"},
+        {"date": "20260810", "code": "sh600005", "sub": "创新药", "mainline": "医药"},
+        # 旧日期不能给报告日未归因股票补标签。
+        {"date": "20260807", "code": "sh600099", "sub": "算力", "mainline": "AI算力"},
+    ])
+    raw = pd.DataFrame(
+        [[10, 10, 10, 10, 10], [11, 10.8, 10.5, 11.5, 10.6]],
+        index=["2026-08-07", "2026-08-10"],
+        columns=["sh600001", "sh600002", "sz000003", "sh600004", "sh600005"],
+    )
+    qfq = pd.DataFrame(
+        [[8, 10, 10, 9, 10], [11, 10.8, 10.5, 11.5, 10.6]],
+        index=["2026-08-04", "2026-08-10"],
+        columns=raw.columns,
+    )
+    sectors = pd.DataFrame([
+        {"name": "电子化学品", "return": 14.0, "excess_return": 10.0},
+        {"name": "半导体", "return": 12.0, "excess_return": 8.0},
+        {"name": "医疗服务", "return": 8.0, "excess_return": 4.0},
+    ])
+    names = NameResolution(
+        names={code: name for code, name in [
+            ("sh600001", "算力龙头"), ("sh600002", "算力中军"),
+            ("sz000003", "算力首板"), ("sh600004", "创新药甲"),
+            ("sh600005", "创新药乙"),
+        ]},
+        sources={}, conflicts=[],
+    )
+    core = {"usable": True, "rows": [{"code": "sh600004", "name": "创新药甲"}]}
+
+    result = build_market_resonance(
+        history, raw, qfq, sectors, "2026-08-04", "2026-08-10",
+        previous_date="2026-08-07", names=names, cls_attribution=cls,
+        continuous_core=core,
+    )
+
+    assert result["daily_sectors"][0]["name"] == "算力"
+    assert result["daily_sectors"][0]["limit_count"] == 3
+    assert result["daily_sectors"][0]["max_height"] == 5
+    assert [row["name"] for row in result["daily_sectors"][0]["leaders"]] == [
+        "算力龙头", "算力中军", "算力首板",
+    ]
+    assert result["daily_sectors"][0]["leaders"][0]["return"] == 10.0
+    assert result["mainlines"][0]["name"] == "AI算力"
+    assert result["mainlines"][0]["limit_count"] == 3
+    assert result["mainlines"][0]["max_height"] == 5
+    assert result["cycle_sectors"][0]["name"] == "电子化学品"
+    assert result["cycle_sectors"][0]["return"] == 14.0
+    assert "算力龙头" in [row["name"] for row in result["cycle_sectors"][0]["leaders"]]
+    assert result["continuous_core"] == [{
+        "code": "sh600004", "name": "创新药甲", "return": pytest.approx(27.78, abs=0.01),
+    }]
+
+
+def test_market_resonance_limits_leaders_and_reports_small_missing_return_hint():
+    from micro_cycle import build_market_resonance
+
+    history = pd.DataFrame([
+        {"date": "20260810", "type": "ZT", "code": f"sh60000{i}", "name": f"股票{i}", "height": i}
+        for i in range(1, 6)
+    ])
+    cls = pd.DataFrame([
+        {"date": "20260810", "code": f"sh60000{i}", "sub": "机器人", "mainline": "机器人"}
+        for i in range(1, 6)
+    ])
+    result = build_market_resonance(
+        history, pd.DataFrame(), pd.DataFrame(), pd.DataFrame(),
+        "2026-08-04", "2026-08-10", previous_date="2026-08-07",
+        names=NameResolution(names={}, sources={}, conflicts=[]), cls_attribution=cls,
+        continuous_core={"usable": False, "rows": []},
+    )
+
+    assert len(result["daily_sectors"][0]["leaders"]) == 3
+    assert len(result["mainlines"][0]["leaders"]) == 3
+    assert "部分个股收益暂缺" in result["hint"]

@@ -668,6 +668,38 @@ def _parse_json(text: str) -> dict | None:
     return None
 
 
+_SECRET_RE = re.compile(r"sk-[A-Za-z0-9_\-]{6,}")
+
+
+def scrub_secrets(text) -> str:
+    """把可能混进错误信息里的 API key 换成掩码。
+
+    来源备注要印在报告 HTML 里, 而中转的报错文本偶尔会回显 key,
+    所以进入渲染前统一过一遍。
+    """
+    return _SECRET_RE.sub(lambda m: m.group(0)[:6] + "…", str(text or ""))
+
+
+def provenance_from_diagnostics(diagnostics: dict | None) -> dict:
+    """把 generate_ai_rebound 的 diagnostics 折成渲染用的来源标注。
+
+    真正答复的模型可能是**备用模型** (主模型失败后切换), 所以从 model_attempts 里
+    取最后一个 http_status==200 的那次, 而不是直接写 ANTHROPIC_MODEL —— 否则备注
+    会声称是主模型写的。
+    """
+    diag = diagnostics or {}
+    model = ""
+    for item in diag.get("model_attempts") or ():
+        if isinstance(item, dict) and item.get("http_status") == 200:
+            model = str(item.get("model") or "")
+    return {
+        "mode": "ai",
+        "model": model or ANTHROPIC_MODEL,
+        "attempt_count": diag.get("attempt_count"),
+        "http_status": diag.get("http_status"),
+    }
+
+
 def render_ai_rebound_html(ai: dict, facts: dict, char_clr: str,
                            provenance: dict | None = None) -> str:
     """把 AI 研判结果渲染成深色卡片, 视觉对齐既有报告风格。
@@ -684,9 +716,32 @@ def render_ai_rebound_html(ai: dict, facts: dict, char_clr: str,
     if provenance.get("mode") == "rule_fallback":
         provenance_label = "规则降级"
         provenance_detail = str(provenance.get("reason") or "AI 不可用")
+        badge_text = "📐 规则模板 · 非 AI"
+        badge_clr, badge_bg = "#8b949e", "rgba(139,148,158,0.15)"
+        note_text = ("备注: AI 未能出结果, 本卡片文字为<b>规则模板</b>所写 "
+                     f"({_esc(provenance_detail)})。")
     else:
         provenance_label = "AI"
         provenance_detail = str(provenance.get("model") or ANTHROPIC_MODEL)
+        # 尝试次数 / HTTP 状态由调用方从 generate_ai_rebound 的 diagnostics 透传,
+        # 没有也不影响渲染 (老调用方只给 model)。
+        extra = []
+        if provenance.get("attempt_count"):
+            extra.append(f"第{provenance['attempt_count']}次尝试成功")
+        if provenance.get("cache_hit"):
+            extra.append("命中输出缓存")
+        badge_text = f"🤖 AI 分析 · {_esc(provenance_detail)}"
+        badge_clr, badge_bg = "#58a6ff", "rgba(88,166,255,0.15)"
+        note_text = (
+            "备注: 本卡片的<b>解读文字</b>由 AI 生成 "
+            f"(模型 {_esc(provenance_detail)}"
+            + (", " + _esc(" · ".join(extra)) if extra else "")
+            + "); <b>硬数据</b>(涨跌家数 / 梯队高度 / 主线涨停数) 全部来自规则引擎, "
+              "AI 只做解读、不可改写数字。"
+        )
+    badge = (f'<span style="font-size:12px;font-weight:normal;padding:2px 9px;'
+             f'border-radius:10px;background:{badge_bg};color:{badge_clr};'
+             f'border:1px solid {badge_clr}55;white-space:nowrap;">{badge_text}</span>')
 
     def _block(label, val, clr="#e6edf3"):
         if not val:
@@ -729,7 +784,7 @@ def render_ai_rebound_html(ai: dict, facts: dict, char_clr: str,
     <div style="background:#0d1117;border:1px solid #30363d;border-left:4px solid {char_clr};
                 border-radius:12px;padding:22px;margin-bottom:30px;color:#c9d1d9;">
         <h2 style="color:{char_clr};font-size:19px;margin:0 0 14px;display:flex;align-items:center;gap:10px;">
-            🧭 反弹分类复盘 · AI 研判: {market_summary}
+            🧭 反弹分类复盘 · AI 研判: {market_summary} {badge}
         </h2>
         <div style="color:#e6edf3;font-size:14px;line-height:1.7;">
             <div><span style="color:#8b949e;">当日定性:</span> {_esc(char_desc)}</div>
@@ -741,6 +796,7 @@ def render_ai_rebound_html(ai: dict, facts: dict, char_clr: str,
         {operation_block}
         <div style="margin-top:14px;padding-top:12px;border-top:1px dashed #30363d;
                     font-size:12px;color:#8b949e;">
+            {note_text}<br>
             分析方式: {_esc(provenance_label)} ({_esc(provenance_detail)}) · 基于规则引擎的客观数据，硬数据不可篡改。
             分类框架: 主动反弹(可追) / 跟随反弹(减亏离场) / 高度断层(回避追高)。
         </div>

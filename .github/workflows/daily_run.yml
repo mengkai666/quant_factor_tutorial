@@ -91,6 +91,11 @@ jobs:
           data/industry_cache.csv
           data/stock_universe.csv
           data/fetch_status.csv
+          data/report_prediction_history.jsonl
+          data/report_daily_snapshots
+          data/market_phase_snapshots.jsonl
+          data/trading_calendar_cache.csv
+          data/price_gap_negative_cache.csv
         key: market-data-cache-${{ github.run_number }}
         restore-keys: |
           market-data-cache-
@@ -151,6 +156,11 @@ jobs:
       run: |
         python src/主线强度追踪.py
 
+    - name: 自动回填成熟的 T+1 / T+3 结果
+      if: steps.idempotency.outputs.skip != 'true'
+      run: |
+        python tools/reconcile_prediction_outcomes.py
+
     - name: 提交并推送更新的缓存数据
       if: steps.idempotency.outputs.skip != 'true'
       # 只提交小体积的种子缓存 (涨停历史、板块、情绪)
@@ -161,6 +171,7 @@ jobs:
         git config --local user.name "github-actions[bot]"
         # 只 add 小体积缓存文件 (data/ 下), 不 add 大体积 CSV 和 HTML
         git add data/涨停历史缓存.csv data/cls_plate_cache.csv data/sentiment_history_cache.csv data/ths_sector_hist.json 2>/dev/null || true
+        git add data/report_prediction_history.jsonl data/report_daily_snapshots/*.json data/market_phase_snapshots.jsonl 2>/dev/null || true
         # 空暂存区是正常情况，不能让后续 Pages 部署被跳过。
         if git diff --staged --quiet; then
           echo "缓存无变化，跳过提交"

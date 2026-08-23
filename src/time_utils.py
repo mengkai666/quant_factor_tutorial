@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, time as dt_time, timedelta
+from functools import lru_cache
 
 import pandas as pd
 
@@ -8,15 +9,25 @@ _cached_latest_date_key = None
 _MARKET_DATA_READY_TIME = dt_time(15, 30)
 
 
-def _parse_date(value):
-    """Parse YYYYMMDD / YYYY-MM-DD-like values into a date, or return None."""
-    text = str(value or "").strip().replace("-", "")[:8]
+@lru_cache(maxsize=1 << 14)
+def _parse_date_text(text: str):
+    """纯文本 → date/None; 与 _parse_date 语义一致, 只是入参已 str 化。
+
+    ⚠️ 热点: 一轮报告调 1.8 万次 (缓存里只有 ~200 个不同日期), strptime 本身很贵。
+       date 是不可变对象, 共享返回值安全。
+    """
+    text = text.strip().replace("-", "")[:8]
     if len(text) != 8 or not text.isdigit():
         return None
     try:
         return datetime.strptime(text, "%Y%m%d").date()
     except ValueError:
         return None
+
+
+def _parse_date(value):
+    """Parse YYYYMMDD / YYYY-MM-DD-like values into a date, or return None."""
+    return _parse_date_text(str(value or ""))
 
 
 def get_report_cutoff(*, now=None, report_date=None):
@@ -53,11 +64,17 @@ def filter_completed_rows(frame, date_col, *, now=None, report_date=None):
         return frame.copy() if frame is not None else pd.DataFrame()
 
     cutoff_text = get_report_cutoff(now=now, report_date=report_date).strftime("%Y%m%d")
-    normalized = (
-        frame[date_col].astype(str).str.strip().str.replace("-", "", regex=False).str[:8]
-    )
-    valid = normalized.str.fullmatch(r"\d{8}", na=False) & (normalized <= cutoff_text)
-    return frame.loc[valid].copy()
+    # ⚠️ 只在**去重后的日期取值**上做字符串规范化: 18 万行价格缓存里只有 ~200 个不同
+    #    日期, 而整列 astype/strip/replace/fullmatch 要跑四遍逐元素 (实测 11 次调用
+    #    合计 3.1s)。isin 是 C 层哈希, 结果与逐行判定逐值一致
+    #    (isdecimal 即正则 \d 的 Unicode Nd 集合)。
+    series = frame[date_col]
+    accepted = set()
+    for value in pd.unique(series):
+        text = str(value).strip().replace("-", "")[:8]
+        if len(text) == 8 and text.isdecimal() and text <= cutoff_text:
+            accepted.add(value)
+    return frame.loc[series.isin(accepted)].copy()
 
 
 def _cache_file_stamp(path):

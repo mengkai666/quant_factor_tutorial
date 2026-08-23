@@ -980,7 +980,7 @@ def test_phase_turning_summary_hides_empty_rankings_and_keeps_small_coverage_hin
     assert "nan" not in html.lower()
 
 
-def test_micro_cycle_template_renders_events_strong_industries_and_mainline_leaders():
+def test_micro_cycle_template_renders_four_compact_resonance_sections():
     from phase_resonance import _micro_cycle_html
 
     html = _micro_cycle_html({
@@ -997,24 +997,32 @@ def test_micro_cycle_template_renders_events_strong_industries_and_mainline_lead
         },
         "micro_chain": {"usable": True, "consecutive_days": 4, "rows": [{"code": "sz002552", "name": "宝鼎科技"}], "hint": "历史事实交集"},
         "micro_resonance": {
-            "strong_industries": [{"name": "电子化学品", "return": 17.14}, {"name": "贵金属", "return": 15.13}],
+            "daily_sectors": [{
+                "name": "算力", "limit_count": 6, "max_height": 5,
+                "leaders": [{"code": "sz002552", "name": "宝鼎科技", "return": 10.0}],
+            }],
             "mainlines": [{
-                "name": "AI算力", "level": "核心共振", "chain_count": 4, "chain_total": 7,
-                "industry_evidence": ["电子化学品", "元件", "半导体"],
+                "name": "AI算力", "limit_count": 19, "max_height": 5,
                 "leaders": [{"code": "sz002552", "name": "宝鼎科技", "return": 26.77}],
             }],
-            "attribution_coverage": 1.0, "leader_coverage": 1.0, "unattributed_count": 0,
+            "cycle_sectors": [{
+                "name": "电子化学品", "return": 17.14, "excess_return": 12.0,
+                "leaders": [{"code": "sz002552", "name": "宝鼎科技", "return": 26.77}],
+            }],
+            "continuous_core": [{"code": "sz002552", "name": "宝鼎科技", "return": 26.77}],
+            "hint": "部分个股收益暂缺",
         },
     })
 
     for token in (
         "短周期结构", "小周期主升", "7/20", "7/22-23", "7/30", "8/4",
-        "转强信号", "8/5", "突破确认", "强行业", "电子化学品", "共振主线",
-        "核心共振", "AI算力", "板块领涨个股", "宝鼎科技", "+26.8%",
+        "转强信号", "8/5", "突破确认", "单日共振", "算力", "涨停 6",
+        "当前主线", "AI算力", "涨停 19", "周期共振", "电子化学品",
+        "连续核心", "宝鼎科技", "+26.8%", "部分个股收益暂缺",
     ):
         assert token in html
-    assert "贵金属" in html
-    assert "贵金属</strong>" not in html
+    for old_title in ("强行业", "共振主线", "板块领涨个股"):
+        assert old_title not in html
     assert "micro-cycle-timeline" in html
 
 
@@ -1033,8 +1041,10 @@ def test_micro_cycle_template_hides_empty_evidence_headings_and_keeps_small_hint
 
     assert "短周期结构" in html
     assert "历史事实不足" in html
-    assert "强行业" not in html
-    assert "共振主线" not in html
+    assert "单日共振" not in html
+    assert "当前主线" not in html
+    assert "周期共振" not in html
+    assert "连续核心" not in html
     assert "转强后" not in html
     assert "连续 0 日收涨" not in html
     assert "None" not in html
@@ -1079,3 +1089,262 @@ def test_observation_mode_removes_generic_scenarios_and_uses_direct_plan_copy():
         assert "按条件确认强弱变化" not in page
         assert "建议仓位" in page
         assert "今日无合格标的，不开新仓" in page
+
+def test_action_plan_uses_structured_thesis_not_description_keywords():
+    from decision_dashboard import _build_action_plan
+
+    base = _context()
+    base.update({
+        "publication_mode": "decision",
+        "breadth_ratio": 0.80,
+        "ladder": 12,
+        "dt": 2,
+        "desc": "退潮 高位承压",
+        "market_thesis": {
+            "breadth_relay_state": {
+                "state": "breadth_strong_relay_weak",
+                "breadth": "strong",
+                "relay": "weak",
+            },
+            "dimensions": {
+                "high_level_feedback": {"state": "positive"},
+                "relay_quality": {"state": "weak"},
+            },
+        },
+        "echelon": [{
+            "height": "3连板",
+            "stock_details": [{"name": "结构样本", "code": "sh600001", "ml": "AI算力"}],
+        }],
+    })
+    pressured_plan = _build_action_plan(base)
+
+    changed = dict(base)
+    changed["desc"] = "主升加速 核心强势"
+    changed_plan = _build_action_plan(changed)
+
+    assert pressured_plan["position"] == changed_plan["position"] == "2-4 成"
+
+
+def test_dashboard_prefers_dynamic_scenario_plans_over_fixed_four_case_tree():
+    from decision_dashboard import _prepare_scenarios
+
+    plans = [{
+        "scenario_id": "repair_after_breadth_only",
+        "scenario_type": "分歧修复",
+        "title": "广度强、接力弱：等待晋级修复",
+        "probability": 0.42,
+        "auction_triggers": ["竞价不追高位加速"],
+        "early_session_triggers": ["9:35 前涨跌家数保持强区"],
+        "confirmation_triggers": ["10:00 前晋级数量较昨日改善"],
+        "afternoon_triggers": ["午后扩散到主线第二梯队才可加仓"],
+        "invalidation_conditions": ["跌停家数明显扩张"],
+        "position_floor": 0.1,
+        "position_ceiling": 0.4,
+        "observation_roles": ["observation_pool"],
+        "trade_candidates": [],
+    }]
+    rows = _prepare_scenarios(
+        {"scenario_plans": plans, "market_thesis": {}, "data_quality": {}},
+        curr_h=4, prev_h=3, focus_df=None,
+        breadth_ratio=0.8, zt=80, dt=2, pressure_5d=3, ladder=8, h5=1,
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["name"] == "广度强、接力弱：等待晋级修复"
+    assert any("10:00 前晋级数量较昨日改善" in item for item in rows[0]["items"])
+    assert "A · 双龙一字" not in rows[0]["name"]
+    assert "竞价" in " ".join(rows[0]["items"])
+
+
+
+def _dynamic_scenario_plan():
+    return [{
+        "scenario_id": "repair_after_breadth_only",
+        "scenario_type": "分歧修复",
+        "title": "广度强、接力弱：等待晋级修复",
+        "probability": None,
+        "auction_triggers": ["竞价不追高位加速"],
+        "early_session_triggers": ["9:35 前涨跌家数保持强区"],
+        "confirmation_triggers": ["10:00 前晋级数量较昨日改善"],
+        "afternoon_triggers": ["午后扩散到主线第二梯队才可加仓"],
+        "invalidation_conditions": ["跌停家数明显扩张"],
+        "position_floor": 0.1,
+        "position_ceiling": 0.4,
+        "observation_roles": ["observation_pool"],
+        "trade_candidates": [],
+    }]
+
+
+def test_dynamic_scenario_plan_is_rendered_in_decision_mode_on_both_surfaces():
+    ctx = _context()
+    ctx["scenario_plans"] = _dynamic_scenario_plan()
+    ctx["publication_mode"] = "decision"
+    ctx["data_quality"].update({
+        "ok": True,
+        "status": "ok",
+        "publication_mode": "decision",
+        "name_conflicts": 0,
+        "limit_pool_status": "ok",
+        "missing_fields": [],
+        "decision_degraded": [],
+    })
+    ctx["market_state"].update({
+        "status": "ok",
+        "publication_mode": "decision",
+        "allow_strong_conclusion": True,
+        "statistics_layer": {"status": "ok"},
+        "decision_layer": {"status": "ready", "publication_mode": "decision"},
+    })
+
+    for html in (generate_dashboard_html(ctx), generate_dashboard_section(ctx)):
+        assert "广度强、接力弱：等待晋级修复" in html
+        assert "竞价不追高位加速" in html
+        assert "9:35 前涨跌家数保持强区" in html
+        assert "10:00 前晋级数量较昨日改善" in html
+        assert "午后扩散到主线第二梯队才可加仓" in html
+        assert "跌停家数明显扩张" in html
+        assert "仓位 · 1-4 成" in html
+        assert "A · 双龙一字" not in html
+        assert "B · 空间一字 + 接力分歧" not in html
+
+
+def test_dynamic_scenario_plan_keeps_validation_but_filters_actions_in_observation_mode():
+    ctx = _context()
+    ctx["scenario_plans"] = _dynamic_scenario_plan()
+
+    for html in (generate_dashboard_html(ctx), generate_dashboard_section(ctx)):
+        assert "广度强、接力弱：等待晋级修复" in html
+        assert "竞价不追高位加速" in html
+        assert "9:35 前涨跌家数保持强区" in html
+        assert "10:00 前晋级数量较昨日改善" in html
+        assert "跌停家数明显扩张" in html
+        assert "午后扩散到主线第二梯队才可加仓" not in html
+        assert "等待验证信号" in html
+        assert "仓位 · 1-4 成" not in html
+
+
+def test_outcome_reconciliation_status_is_visible_without_fake_failures():
+    ctx = _context()
+    ctx["prediction_review"] = {
+        "prediction_count": 2,
+        "pending_count": 1,
+        "incomplete_count": 1,
+        "scored_count": 0,
+        "outcome_reconciliation": {
+            "status": "ok",
+            "appended": 1,
+            "unknown": 1,
+            "skipped": 0,
+            "definition_id": "market-thesis/v1",
+        },
+    }
+
+    for html in (generate_dashboard_html(ctx), generate_dashboard_section(ctx)):
+        assert "后验回填" in html
+        assert "已回填 1 条" in html
+        assert "1 条字段不足" in html
+        assert "预测失败" not in html
+        assert "market-thesis/v1" in html
+
+
+def test_outcome_reconciliation_failure_is_labeled_as_backfill_failure():
+    ctx = _context()
+    ctx["prediction_review"] = {
+        "prediction_count": 1,
+        "scored_count": 0,
+        "outcome_reconciliation": {
+            "status": "failed",
+            "appended": 0,
+            "unknown": 0,
+            "skipped": 0,
+            "definition_id": "market-thesis/v1",
+        },
+    }
+
+    for html in (generate_dashboard_html(ctx), generate_dashboard_section(ctx)):
+        assert "后验回填失败" in html
+        assert "日报仍基于已有事件" in html
+        assert "预测失败" not in html
+
+
+def test_action_plan_prefers_structured_scenario_position_rules():
+    from decision_dashboard import _build_action_plan
+    ctx = _context()
+    ctx["publication_mode"] = "decision"
+    ctx["echelon"] = [{
+        "height": "2连板",
+        "stock_details": [{"name": "结构候选", "code": "sh600001", "ml": "AI应用"}],
+    }]
+    ctx["scenario_plans"] = [{
+        "scenario_id": "structured",
+        "position_floor": 0.1,
+        "position_ceiling": 0.3,
+        "position_adjustment_rules": [
+            {"condition": "all_required_triggers", "action": "set_target", "target": 0.3},
+            {"condition": "any_invalidation", "action": "set_target", "target": 0.1},
+        ],
+    }]
+    ctx["scenario_posterior"] = {"timeline": [{
+        "phase": "confirm_1000", "top_scenario_id": "structured",
+        "scenarios": [{"scenario_id": "structured", "state": "supported"}],
+    }]}
+    plan = _build_action_plan(ctx)
+    assert plan["position"] == "3 成"
+    assert plan["position_source"] == "scenario_plan"
+
+
+# ── 高标追踪 (leader_tracker) 渲染 ──────────────────────────────
+def _leader_full():
+    return {
+        "as_of": "20260820",
+        "identity": {
+            "space_leader": {"code": "603221", "name": "爱丽家居", "height": 10,
+                             "first_board_date": "20260806", "consec_days": 5,
+                             "today_status": "10板(孤峰候选)", "theme": "贵金属"},
+            "popularity_leader": {"code": "600664", "name": "哈药股份",
+                                  "zt_count_20d": 8, "height": 3, "theme": "医药"},
+            "top_cohort": [{"code": "603221", "name": "爱丽家居", "height": 10}],
+        },
+        "gravity": {
+            "echelon": {"max_h": 10, "n_at_max": 1, "n_at_max_1": 0,
+                        "n_at_max_2": 0, "ladder": 4},
+            "is_lonely_peak": True, "lonely_peak_reason": "10板下方无承接, 空中楼阁。",
+            "cluster": {"theme": "贵金属", "count": 3,
+                        "members": [{"code": "600547", "name": "山东黄金", "height": 3}]},
+            "imitation": {"count": 0, "members": []},
+            "catchup": {"count": 0, "members": [], "partial": True},
+        },
+        "death_signal": {
+            "event_today": True, "regime": "过热", "ad_today": 0.72,
+            "table": [{"regime": "过热", "n": 7, "weaken_rate": 86.0, "ad_delta": -0.275},
+                      {"regime": "中性", "n": 8, "weaken_rate": 38.0, "ad_delta": 0.011},
+                      {"regime": "冰点", "n": 14, "weaken_rate": 14.0, "ad_delta": 0.315}],
+            "action": "⚠️ 高标今日断板 + 盘面过热 → 历史同类次日 86% 概率退潮。",
+        },
+        "headline": "⚠️ 高标今日断板 + 盘面过热 → 历史同类次日 86% 概率退潮。",
+    }
+
+
+def test_leader_tracker_render_has_three_blocks_actions_and_overflow_guard():
+    from leader_tracker import render_leader_tracker_html
+
+    html = render_leader_tracker_html(_leader_full())
+    # 三块标题
+    for title in ("① 高标身份", "② 高标引力", "③ 生死→情绪信号"):
+        assert title in html, title
+    # 每块后有"怎么操作"操作文案
+    assert html.count("怎么操作") == 3
+    # 防溢出 class 与单列断点
+    assert "overflow-wrap" in html and "min-width:0" in html and "max-width:760px" in html
+    # 无 None/nan 泄漏
+    assert "None" not in html
+    assert "nan" not in html.lower()
+
+
+def test_dashboard_section_surfaces_leader_signal_in_headline():
+    ctx = _context()
+    ctx["stance"] = "进攻"
+    ctx["leader"] = {"status": "空间10板·爱丽家居(5连板)", "signal": "孤峰预警",
+                     "stage": "孤峰", "headline": "10板高标成孤峰, 无承接, 别接力空中票。"}
+    html = generate_dashboard_section(ctx)
+    assert "高标 · 孤峰预警" in html

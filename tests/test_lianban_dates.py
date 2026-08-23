@@ -33,6 +33,47 @@ def test_trading_dates_include_current_day_after_close(monkeypatch):
     assert dates == ["20260806", "20260805"]
 
 
+def test_trading_dates_refresh_full_cache_when_latest_closed_day_is_missing(monkeypatch):
+    class _FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 8, 10, 16, 30, tzinfo=tz)
+
+    cached = [day.strftime("%Y%m%d") for day in pd.bdate_range(end="2026-08-07", periods=120)]
+    monkeypatch.setattr(lianban_analysis, "datetime", _FixedDateTime)
+    monkeypatch.setattr(lianban_analysis, "get_cached_trading_dates", lambda: cached)
+    monkeypatch.setattr(
+        lianban_analysis,
+        "_fetch_external_trade_dates",
+        lambda: ["20260807", "20260810"],
+    )
+
+    dates = lianban_analysis.get_trading_dates(120)
+
+    assert dates[0] == "20260810"
+
+
+def test_trading_dates_historical_report_reuses_cache_at_report_cutoff(monkeypatch):
+    class _FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 8, 11, 0, 30, tzinfo=tz)
+
+    cached = [day.strftime("%Y%m%d") for day in pd.bdate_range(end="2026-08-07", periods=120)]
+    monkeypatch.setenv("REPORT_DATE", "2026-08-07")
+    monkeypatch.setattr(lianban_analysis, "datetime", _FixedDateTime)
+    monkeypatch.setattr(lianban_analysis, "get_cached_trading_dates", lambda: cached)
+    monkeypatch.setattr(
+        lianban_analysis,
+        "_fetch_external_trade_dates",
+        lambda: (_ for _ in ()).throw(AssertionError("historical cache should be current")),
+    )
+
+    dates = lianban_analysis.get_trading_dates(120)
+
+    assert dates[0] == "20260807"
+
+
 def test_cache_future_dates_are_removed_before_selection():
     zt = {
         "20260806": pd.DataFrame({"代码": ["000001"]}),

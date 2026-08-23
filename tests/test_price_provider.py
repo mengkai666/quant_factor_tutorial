@@ -6,7 +6,7 @@ import pytest
 from data_sources.fetch_status import FetchStatusStore
 from data_sources.models import FetchStatus
 from data_sources.price_provider import PRICE_COLUMNS, PriceProvider
-from data_sources.price_provider import parse_tencent_kline_payload
+from data_sources.price_provider import parse_tencent_kline_payload, parse_tencent_qfq_payload
 from market_data import compute_advance_decline, compute_period_returns
 
 
@@ -246,3 +246,80 @@ def test_default_fetcher_falls_back_to_sina_when_tencent_is_limited(monkeypatch)
     result = PriceProvider._default_fetcher("sh600000", "2026-08-04", "2026-08-05")
     assert calls == [("tencent", "sh600000"), ("sina", "sh600000")]
     assert result.loc[0, "source_qfq"] == "sina_qfq"
+
+
+def test_parse_tencent_qfq_payload_keeps_raw_close_empty():
+    payload = {"data": {"sh600000": {"qfqday": [
+        ["2026-08-07", "4", "5", "6", "3", "100"],
+        ["2026-08-10", "5", "5.5", "6", "4", "120"],
+    ]}}}
+
+    frame = parse_tencent_qfq_payload("sh600000", payload)
+
+    assert frame["close_raw"].isna().all()
+    assert frame["close_qfq"].tolist() == [5.0, 5.5]
+    assert frame["source_raw"].eq("").all()
+    assert frame["source_qfq"].eq("tencent_qfq").all()
+
+
+def test_fetch_qfq_range_uses_qfq_fetcher_without_calling_full_fetcher(tmp_path):
+    full_calls = []
+    qfq_calls = []
+
+    def full_fetcher(*args):
+        full_calls.append(args)
+        raise AssertionError("qfq-only repair must not fetch raw prices again")
+
+    def qfq_fetcher(code, start, end):
+        qfq_calls.append((code, start, end))
+        return pd.DataFrame({
+            "date": [start, end],
+            "close_raw": [pd.NA, pd.NA],
+            "close_qfq": [10.0, 11.0],
+            "trade_status": ["traded", "traded"],
+            "source_raw": ["", ""],
+            "source_qfq": ["fixture_qfq", "fixture_qfq"],
+        })
+
+    provider = PriceProvider(
+        fetcher=full_fetcher,
+        qfq_fetcher=qfq_fetcher,
+        status_store=FetchStatusStore(tmp_path / "status.csv"),
+        max_workers=1,
+    )
+    result = provider.fetch_qfq_range(
+        pd.DataFrame({"code": ["sh600000"]}),
+        ["2026-08-07", "2026-08-10"],
+    )
+
+    assert result.status is FetchStatus.SUCCESS
+    assert full_calls == []
+    assert qfq_calls == [("sh600000", "2026-08-07", "2026-08-10")]
+    assert result.data["close_raw"].isna().all()
+    assert result.data["close_qfq"].tolist() == [10.0, 11.0]
+
+
+def test_default_qfq_fetcher_falls_back_to_akshare_when_tencent_fails(monkeypatch):
+    calls = []
+
+    def tencent(code, start, end):
+        calls.append(("tencent", code))
+        raise RuntimeError("temporary failure")
+
+    def akshare(code, start, end):
+        calls.append(("akshare", code))
+        return pd.DataFrame({
+            "date": [end], "close_raw": [pd.NA], "close_qfq": [9.0],
+            "trade_status": ["traded"], "source_raw": [""],
+            "source_qfq": ["akshare_qfq"],
+        })
+
+    monkeypatch.setattr(PriceProvider, "_tencent_qfq_fetcher", staticmethod(tencent))
+    monkeypatch.setattr(PriceProvider, "_sina_qfq_fetcher", staticmethod(akshare))
+
+    frame = PriceProvider._default_qfq_fetcher(
+        "sh600000", "2026-08-07", "2026-08-10",
+    )
+
+    assert calls == [("tencent", "sh600000"), ("akshare", "sh600000")]
+    assert frame.loc[0, "source_qfq"] == "akshare_qfq"

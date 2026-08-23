@@ -25,6 +25,7 @@ import os
 import re
 import time
 import unicodedata
+from concurrent.futures import ThreadPoolExecutor
 from html import escape
 
 import pandas as pd
@@ -37,7 +38,7 @@ from time_utils import filter_completed_rows
 from data_sources.name_resolver import resolve_names
 from data_sources.price_provider import build_price_matrix, price_value_column
 from micro_cycle import (
-    build_cycle_resonance, build_sector_return_table,
+    build_cycle_resonance, build_market_resonance, build_sector_return_table,
     build_signal_limit_chain, detect_micro_cycle,
 )
 from report_logic import neutralize_for_policy, scan_forbidden_semantics
@@ -197,26 +198,32 @@ def fetch_sectors(latest_date, need_start=None, force=False):
     start = (pd.Timestamp(need_start) - pd.Timedelta(days=120)).strftime('%Y%m%d')
     end = pd.Timestamp(latest_date).strftime('%Y%m%d')
     print(f'  🌐 拉取 {len(names)} 个板块指数日线...')
-    ok = 0
-    for i, n in enumerate(names, 1):
+
+    def fetch_one(name):
+        """单板块日线; 三次重试后仍失败返回 None (由调用方保留旧缓存)。"""
         for attempt in range(3):
             try:
                 d = ak.stock_board_industry_index_ths(
-                    symbol=n, start_date=start, end_date=end)
+                    symbol=name, start_date=start, end_date=end)
                 if d is not None and len(d):
                     d = d.rename(columns={'日期': 'date', '收盘价': 'close',
                                           '最高价': 'high', '最低价': 'low',
                                           '成交额': 'amount'})
                     d['date'] = pd.to_datetime(d['date']).dt.strftime('%Y-%m-%d')
-                    cache[n] = d[['date', 'close', 'high', 'low', 'amount']].to_dict('records')
-                    ok += 1
-                break
+                    return name, d[['date', 'close', 'high', 'low', 'amount']].to_dict('records')
+                return name, None
             except Exception:
                 time.sleep(0.8 * (attempt + 1))
-        if i % 30 == 0:
-            print(f'    {i}/{len(names)} ...', flush=True)
-            with open(THS_CACHE, 'w', encoding='utf-8') as f:
-                json.dump(cache, f, ensure_ascii=False)
+        return name, None
+
+    # 90 个板块逐个串行请求约 20~80s, 且互不依赖 —— 并发 8 路压到几秒。
+    # 单板块失败只丢它自己 (保留该板块旧缓存), 不影响其余板块。
+    ok = 0
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        for name, recs in pool.map(fetch_one, names):
+            if recs:
+                cache[name] = recs
+                ok += 1
     with open(THS_CACHE, 'w', encoding='utf-8') as f:
         json.dump(cache, f, ensure_ascii=False)
     print(f'  ✅ 板块指数 {ok}/{len(names)}')
@@ -287,8 +294,13 @@ def market_breadth(det):
         if not value_column:
             return {}
         df = df[pd.to_numeric(df[value_column], errors='coerce') > 0]
-        px = df.pivot_table(index='date', columns='code', values=value_column,
-                            aggfunc=lambda s: s.iloc[-1])
+        # ⚠️ 同一 (date,code) 可能有 raw/qfq/legacy 多行, 取最后一行 (与旧的
+        #    aggfunc=lambda s: s.iloc[-1] 同义)。别退回 pivot_table+lambda:
+        #    5.6 万个分组各调一次 Python 函数, 实测占 3.8s, 这里 <0.3s。
+        px = (
+            df.drop_duplicates(['date', 'code'], keep='last')
+            .pivot(index='date', columns='code', values=value_column)
+        )
     except Exception as e:
         print(f'  ⚠️ 市场宽度计算跳过: {e}')
         return {}
@@ -465,12 +477,22 @@ def _build_micro_cycle_payload(det, cache):
         price_history = filter_completed_rows(
             price_history, "date", report_date=det["latest"]["date"],
         )
-        prices = build_price_matrix(price_history, "qfq", allow_legacy=True)
-        micro_resonance = build_cycle_resonance(
-            sector_returns, micro_chain, prices,
-            micro_cycle["signal_date"], det["latest"]["date"],
+        raw_prices = build_price_matrix(price_history, "raw", allow_legacy=True)
+        qfq_prices = build_price_matrix(price_history, "qfq", allow_legacy=True)
+        latest_date = det["latest"]["date"]
+        ordered_dates = sorted(
+            str(value) for value in trading_dates if str(value) <= latest_date
+        )
+        previous_dates = [date for date in ordered_dates if date < latest_date]
+        previous_date = previous_dates[-1] if previous_dates else ""
+        micro_resonance = build_market_resonance(
+            history, raw_prices, qfq_prices, sector_returns,
+            micro_cycle["signal_date"], latest_date,
+            previous_date=previous_date,
+            names=names,
             cls_attribution=_read_csv(CLS_PLATE_CACHE, dtype=str),
             em_attribution=_read_csv(EM_PLATE_CACHE, dtype=str),
+            continuous_core=micro_chain,
         )
     return {
         "micro_cycle": micro_cycle,
@@ -796,73 +818,110 @@ def _micro_cycle_html(res, *, restricted=False):
     )
 
     resonance = (res or {}).get("micro_resonance") or {}
-    industry_html = "".join(
-        f'<span>{escape(name, quote=True)} '
-        f'<i style="color:{_micro_color(row.get("return"))};">{_micro_return(row.get("return"))}</i></span>'
-        for row in resonance.get("strong_industries") or []
-        if (name := text_value(row.get("name")))
-    )
-    industry_section = (
-        f'<div class="micro-subhead">强行业</div><div class="micro-strong-industries">{industry_html}</div>'
-        if industry_html else ""
-    )
+    chain = (res or {}).get("micro_chain") or {}
 
-    mainline_html = ""
-    for row in resonance.get("mainlines") or []:
-        raw_level = (
-            _micro_policy_normalized_text(row.get("level"))
-            if restricted else _micro_text(row.get("level"))
-        )
-        level = raw_level if restricted and raw_level in _MICRO_FACT_LEVELS else text_value(raw_level)
-        name = text_value(row.get("name"))
-        if restricted and raw_level not in _MICRO_FACT_LEVELS:
-            level = ""
-        if not level and not name:
-            continue
-        evidence = " · ".join(
-            item for value in row.get("industry_evidence") or []
-            if (item := text_value(value))
-        )
-        leader_rows = []
-        for stock in row.get("leaders") or []:
+    def leader_html(stock_rows):
+        items = []
+        for stock in stock_rows or []:
             code = text_value(stock.get("code"))
             display = text_value(stock.get("name")) or code
             if not display:
                 continue
             code_html = f'<small>{escape(code, quote=True)}</small>' if code else ""
-            leader_rows.append(
-                '<span class="micro-leader">'
-                f'{escape(display, quote=True)}{code_html}'
-                f'<i style="color:{_micro_color(stock.get("return"))};">'
-                f'{_micro_return(stock.get("return"))}</i></span>'
+            stock_return = _micro_number(stock.get("return"))
+            return_html = (
+                f'<i style="color:{_micro_color(stock_return)};">{_micro_return(stock_return)}</i>'
+                if stock_return is not None else ""
             )
-        leaders = "".join(leader_rows)
-        leader_block = (
-            f'<div class="micro-leaders"><em>板块领涨个股</em>{leaders}</div>'
-            if leaders else ""
+            items.append(
+                '<span class="micro-leader">'
+                f'{escape(display, quote=True)}{code_html}{return_html}</span>'
+            )
+        return '<div class="micro-leaders">' + "".join(items) + "</div>" if items else ""
+
+    def resonance_rows(rows, kind):
+        rendered = []
+        for row in rows or []:
+            name = text_value(row.get("name"))
+            raw_level = (
+                _micro_policy_normalized_text(row.get("level"))
+                if restricted else _micro_text(row.get("level"))
+            )
+            level = raw_level if restricted and raw_level in _MICRO_FACT_LEVELS else text_value(raw_level)
+            if restricted and raw_level not in _MICRO_FACT_LEVELS:
+                level = ""
+            if not name and not level:
+                continue
+
+            metrics = []
+            limit_count = _micro_number(row.get("limit_count"))
+            max_height = _micro_number(row.get("max_height"))
+            if limit_count is not None:
+                metrics.append(f"涨停 {int(limit_count)}")
+            if max_height is not None and max_height > 0:
+                metrics.append(f"最高 {int(max_height)}板")
+            if kind == "cycle":
+                sector_return = _micro_number(row.get("return"))
+                if sector_return is not None:
+                    metrics.append(f"区间 {_micro_return(sector_return)}")
+            elif kind == "mainline":
+                sector_return = _micro_number(row.get("sector_return"))
+                if sector_return is not None:
+                    metrics.append(f"板块 {_micro_return(sector_return)}")
+
+            if limit_count is None and row.get("chain_count") is not None:
+                metrics.append(
+                    f'启动 {_micro_integer(row.get("chain_count"))}/'
+                    f'{_micro_integer(row.get("chain_total"))}'
+                )
+            evidence = [
+                item for value in row.get("industry_evidence") or []
+                if (item := text_value(value))
+            ]
+            metrics.extend(evidence)
+            level_html = f'<b>{escape(level, quote=True)}</b>' if level else ""
+            name_html = f'<strong>{escape(name, quote=True)}</strong>' if name else ""
+            meta_html = f'<small>{escape(" · ".join(metrics), quote=True)}</small>' if metrics else ""
+            rendered.append(
+                '<div class="micro-mainline-row">'
+                f'<div>{level_html}{name_html}{meta_html}</div>'
+                f'{leader_html(row.get("leaders"))}</div>'
+            )
+        return "".join(rendered)
+
+    cards = []
+    daily_html = resonance_rows(resonance.get("daily_sectors"), "daily")
+    if daily_html:
+        cards.append(f'<div class="micro-signal-card"><div class="micro-subhead">单日共振</div>{daily_html}</div>')
+
+    mainline_html = resonance_rows(resonance.get("mainlines"), "mainline")
+    if mainline_html:
+        cards.append(f'<div class="micro-signal-card"><div class="micro-subhead">当前主线</div>{mainline_html}</div>')
+
+    cycle_rows = resonance.get("cycle_sectors") or resonance.get("strong_industries") or []
+    cycle_html = resonance_rows(cycle_rows, "cycle")
+    if cycle_html:
+        cards.append(f'<div class="micro-signal-card"><div class="micro-subhead">周期共振</div>{cycle_html}</div>')
+
+    core_rows = resonance.get("continuous_core")
+    if core_rows is None and chain.get("usable"):
+        core_rows = chain.get("rows") or []
+    core_html = leader_html(core_rows)
+    if core_html:
+        cards.append(
+            '<div class="micro-signal-card micro-core-card">'
+            f'<div class="micro-subhead">连续核心</div>{core_html}</div>'
         )
-        level_html = f'<b>{escape(level, quote=True)}</b>' if level else ""
-        name_html = f'<strong>{escape(name, quote=True)}</strong>' if name else ""
-        evidence_html = f' · 行业证据 {escape(evidence, quote=True)}' if evidence else ""
-        mainline_html += (
-            '<div class="micro-mainline-row">'
-            f'<div>{level_html}{name_html}'
-            f'<small>启动 {_micro_integer(row.get("chain_count"))}/{_micro_integer(row.get("chain_total"))}'
-            f'{evidence_html}</small></div>{leader_block}</div>'
-        )
-    mainline_section = (
-        f'<div class="micro-subhead">共振主线</div>{mainline_html}' if mainline_html else ""
+    resonance_section = (
+        '<div class="micro-signal-grid">' + "".join(cards) + "</div>" if cards else ""
     )
 
-    chain = (res or {}).get("micro_chain") or {}
-    hints = [text_value(chain.get("hint"))]
-    attribution_coverage = _micro_number(resonance.get("attribution_coverage", 1.0))
-    if attribution_coverage is not None and attribution_coverage < 1.0:
-        hints.append(f"主线归因覆盖 {attribution_coverage:.0%}")
-    leader_coverage = _micro_number(resonance.get("leader_coverage", 1.0))
-    if leader_coverage is not None and leader_coverage < 0.8:
-        hints.append("个股前复权端点覆盖不足，收益暂不展示")
-    hint_html = " · ".join(escape(item, quote=True) for item in hints if item)
+    hints = []
+    for value in (chain.get("hint"), resonance.get("hint")):
+        hint = text_value(value)
+        if hint and hint not in hints:
+            hints.append(hint)
+    hint_html = " · ".join(escape(item, quote=True) for item in hints)
     hint_block = f'<div class="micro-cycle-hint">{hint_html}</div>' if hint_html else ""
     full_date = date_value(micro.get("full_confirmation_date"))
     full_text = f" · {escape(full_date, quote=True)} 全面突破" if full_date else ""
@@ -891,24 +950,26 @@ def _micro_cycle_html(res, *, restricted=False):
       .micro-cycle-event+.micro-cycle-event{{border-left:1px solid rgba(48,54,61,.7);}}
       .micro-cycle-event b{{color:#58a6ff;font-size:13px;}}.micro-cycle-event span{{color:#e6edf3;font-size:12px;font-weight:700;}}
       .micro-cycle-event small{{color:#8b949e;font-size:11px;line-height:1.45;}}
-      .micro-subhead{{margin:14px 16px 8px;color:#8b949e;font-size:11px;font-weight:700;}}
-      .micro-strong-industries{{display:flex;flex-wrap:wrap;gap:8px 16px;margin:0 16px;}}
-      .micro-strong-industries span{{color:#e6edf3;font-size:12px;}}.micro-strong-industries i{{font-style:normal;font-weight:700;}}
-      .micro-mainline-row{{display:grid;grid-template-columns:minmax(220px,.8fr) minmax(0,1.5fr);gap:16px;padding:11px 16px;border-top:1px solid rgba(48,54,61,.55);}}
-      .micro-mainline-row>div:first-child{{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;}}
-      .micro-mainline-row b{{color:#d29922;font-size:11px;}}.micro-mainline-row strong{{color:#e6edf3;font-size:14px;}}
+      .micro-signal-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;margin-top:14px;border-top:1px solid rgba(48,54,61,.7);border-bottom:1px solid rgba(48,54,61,.7);background:rgba(48,54,61,.7);}}
+      .micro-signal-card{{min-width:0;background:#0d1117;padding:0 0 8px;}}
+      .micro-subhead{{margin:0;padding:10px 16px 8px;color:#8b949e;font-size:11px;font-weight:800;letter-spacing:.06em;}}
+      .micro-mainline-row{{padding:9px 16px;border-top:1px solid rgba(48,54,61,.45);}}
+      .micro-mainline-row>div:first-child{{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap;}}
+      .micro-mainline-row b{{color:#d29922;font-size:10px;}}.micro-mainline-row strong{{color:#e6edf3;font-size:13px;}}
       .micro-mainline-row small{{color:#8b949e;font-size:10px;}}
-      .micro-leaders{{display:flex;gap:8px 12px;align-items:center;flex-wrap:wrap;}}.micro-leaders em{{color:#8b949e;font-size:10px;font-style:normal;}}
+      .micro-leaders{{display:flex;gap:6px 12px;align-items:center;flex-wrap:wrap;margin-top:6px;padding:0 16px;}}
+      .micro-mainline-row .micro-leaders{{padding:0;margin-top:6px;}}
       .micro-leader{{display:inline-flex;gap:5px;align-items:baseline;color:#e6edf3;font-size:12px;flex-wrap:wrap;}}
       .micro-leader small{{font-size:9px;}}.micro-leader i{{font-size:11px;font-style:normal;font-weight:700;}}
-      .micro-cycle-hint{{margin:10px 16px 0;}}
-      @media(max-width:760px){{.micro-cycle-head{{align-items:flex-start;flex-direction:column;}}.micro-cycle-timeline{{grid-template-columns:1fr;}}.micro-cycle-event+.micro-cycle-event{{border-left:0;border-top:1px solid rgba(48,54,61,.55);}}.micro-mainline-row{{grid-template-columns:1fr;gap:8px;}}}}
+      .micro-core-card>.micro-leaders{{padding-bottom:7px;}}
+      .micro-cycle-hint{{margin:9px 16px 0;}}
+      @media(max-width:760px){{.micro-cycle-head{{align-items:flex-start;flex-direction:column;}}.micro-cycle-timeline{{grid-template-columns:1fr;}}.micro-cycle-event+.micro-cycle-event{{border-left:0;border-top:1px solid rgba(48,54,61,.55);}}.micro-signal-grid{{grid-template-columns:1fr;}}}}
     </style>
     <section class="micro-cycle-section">
       <div class="micro-cycle-head"><div><h3>短周期结构</h3>{status_html}</div>
       {signal_summary}</div>
       <div class="micro-cycle-timeline">{event_html}</div>
-      {industry_section}{mainline_section}
+      {resonance_section}
       {hint_block}
     </section>'''
 

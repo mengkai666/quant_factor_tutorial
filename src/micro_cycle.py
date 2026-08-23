@@ -374,3 +374,275 @@ def build_cycle_resonance(
         "leader_coverage": round(leader_coverage, 4),
         "unattributed_count": chain_total - len(attributed),
     }
+
+
+def _exact_attribution_records(
+    frame: pd.DataFrame | None,
+    report_date: str,
+) -> dict[str, dict[str, str]]:
+    """Return attribution rows locked to one report date."""
+    if frame is None or not isinstance(frame, pd.DataFrame) or frame.empty:
+        return {}
+    if not {"date", "code"}.issubset(frame.columns):
+        return {}
+    work = frame.copy()
+    work["_date"] = work["date"].astype(str).str.replace("-", "", regex=False)
+    work = work[work["_date"].eq(report_date.replace("-", ""))]
+    if work.empty:
+        return {}
+    work["_code"] = work["code"].map(_safe_code)
+    work = work[work["_code"].ne("")]
+    result = {}
+    # ⚠️ 列 tolist() 取代 iterrows() (每行一个 Series, 实测 2700 行 0.23s);
+    #    逐元素表达式与旧实现逐字相同 (含 NaN → "nan" 这种既有行为)。
+    unique = work.drop_duplicates("_code", keep="last")
+    blank = [""] * len(unique)
+    subs = unique["sub"].tolist() if "sub" in unique.columns else blank
+    mainlines = unique["mainline"].tolist() if "mainline" in unique.columns else blank
+    for code, sub_value, ml_value in zip(unique["_code"].tolist(), subs, mainlines):
+        sub = str(sub_value or "").strip()
+        mainline = str(ml_value or "").strip()
+        result[code] = {
+            "sub": "" if sub in INVALID_MAINLINES else sub,
+            "mainline": "" if mainline in INVALID_MAINLINES else mainline,
+        }
+    return result
+
+
+def _normalized_matrix_returns(
+    price_matrix: pd.DataFrame | None,
+    codes: list[str],
+    start_date: str,
+    end_date: str,
+) -> dict[str, float]:
+    if price_matrix is None or not isinstance(price_matrix, pd.DataFrame) or price_matrix.empty:
+        return {}
+    lookup = {
+        str(index).replace("-", ""): index
+        for index in price_matrix.index
+    }
+    start_key = lookup.get(start_date.replace("-", ""))
+    end_key = lookup.get(end_date.replace("-", ""))
+    if start_key is None or end_key is None:
+        return {}
+    result = {}
+    for code in codes:
+        if code not in price_matrix.columns:
+            continue
+        start = pd.to_numeric(price_matrix.at[start_key, code], errors="coerce")
+        end = pd.to_numeric(price_matrix.at[end_key, code], errors="coerce")
+        if pd.isna(start) or pd.isna(end) or float(start) == 0:
+            continue
+        result[code] = round((float(end) / float(start) - 1) * 100, 2)
+    return result
+
+
+def _market_leaders(rows: list[dict], returns: dict[str, float], *, limit: int = 3) -> list[dict]:
+    ordered = sorted(
+        rows,
+        key=lambda row: (
+            -int(row.get("height") or 0),
+            -returns.get(row["code"], float("-inf")),
+            row["code"],
+        ),
+    )[:limit]
+    return [
+        {
+            "code": row["code"],
+            "name": row["name"],
+            "return": returns.get(row["code"]),
+        }
+        for row in ordered
+    ]
+
+
+def build_market_resonance(
+    limit_history: pd.DataFrame,
+    raw_price_matrix: pd.DataFrame,
+    qfq_price_matrix: pd.DataFrame,
+    sector_returns: pd.DataFrame,
+    signal_date: str,
+    latest_date: str,
+    *,
+    previous_date: str,
+    names: NameResolution,
+    cls_attribution: pd.DataFrame | None = None,
+    em_attribution: pd.DataFrame | None = None,
+    continuous_core: dict | None = None,
+) -> dict:
+    """Build report-day and cycle resonance from the full immutable limit-up pool.
+
+    The strict daily limit-up intersection is intentionally kept only in
+    ``continuous_core``; it never narrows the market-wide sector samples.
+    """
+    empty = {
+        "daily_sectors": [], "mainlines": [], "cycle_sectors": [],
+        "continuous_core": [], "attribution_coverage": 0.0,
+        "daily_return_coverage": 0.0, "cycle_return_coverage": 0.0,
+        "hint": "",
+    }
+    if limit_history is None or not isinstance(limit_history, pd.DataFrame) or limit_history.empty:
+        return empty
+    date_col = _column(limit_history, "date", "日期")
+    code_col = _column(limit_history, "code", "代码")
+    type_col = _column(limit_history, "type", "类型")
+    name_col = _column(limit_history, "name", "名称")
+    height_col = _column(limit_history, "height", "连板数", "streak")
+    if not date_col or not code_col:
+        return empty
+
+    frame = limit_history.copy()
+    frame["_date"] = frame[date_col].astype(str).str.replace("-", "", regex=False)
+    frame = frame[frame["_date"].eq(latest_date.replace("-", ""))]
+    if type_col:
+        frame = frame[frame[type_col].astype(str).str.upper().eq("ZT")]
+    frame["_code"] = frame[code_col].map(_safe_code)
+    frame = frame[frame["_code"].ne("")]
+    if frame.empty:
+        return empty
+
+    cls_map = _exact_attribution_records(cls_attribution, latest_date)
+    em_map = _exact_attribution_records(em_attribution, latest_date)
+    attribution = {**em_map, **cls_map}
+    pool = []
+    for _, row in frame.drop_duplicates("_code", keep="last").iterrows():
+        code = row["_code"]
+        raw_height = pd.to_numeric(row.get(height_col), errors="coerce") if height_col else 1
+        height = 1 if pd.isna(raw_height) else max(1, int(float(raw_height)))
+        cached_name = str(row.get(name_col) or "").strip() if name_col else ""
+        attr = attribution.get(code) or {"sub": "", "mainline": ""}
+        pool.append({
+            "code": code,
+            "name": names.names.get(code) or cached_name or code,
+            "height": height,
+            "sub": attr.get("sub", ""),
+            "mainline": attr.get("mainline", ""),
+        })
+
+    codes = [row["code"] for row in pool]
+    daily_returns = _normalized_matrix_returns(
+        raw_price_matrix, codes, previous_date, latest_date,
+    )
+    qfq_returns = _normalized_matrix_returns(
+        qfq_price_matrix, codes, signal_date, latest_date,
+    )
+    raw_cycle_returns = _normalized_matrix_returns(
+        raw_price_matrix, codes, signal_date, latest_date,
+    )
+    cycle_returns = dict(qfq_returns)
+    raw_fallback_codes = set()
+    for code, value in raw_cycle_returns.items():
+        if code not in cycle_returns:
+            cycle_returns[code] = value
+            raw_fallback_codes.add(code)
+
+    daily_sectors = []
+    attributed_subs = [row for row in pool if row["sub"]]
+    if attributed_subs:
+        for sub, rows in pd.DataFrame(attributed_subs).groupby("sub", sort=False):
+            row_list = rows.to_dict("records")
+            values = [daily_returns[row["code"]] for row in row_list if row["code"] in daily_returns]
+            daily_sectors.append({
+                "name": str(sub),
+                "limit_count": len(row_list),
+                "max_height": max(row["height"] for row in row_list),
+                "return": round(sum(values) / len(values), 2) if values else None,
+                "leaders": _market_leaders(row_list, daily_returns),
+            })
+    daily_sectors.sort(key=lambda row: (
+        -row["limit_count"], -row["max_height"],
+        -(row["return"] if row["return"] is not None else float("-inf")), row["name"],
+    ))
+
+    sector_frame = pd.DataFrame()
+    if isinstance(sector_returns, pd.DataFrame) and not sector_returns.empty:
+        sector_frame = sector_returns.copy()
+        sector_frame["return"] = pd.to_numeric(sector_frame.get("return"), errors="coerce")
+        sector_frame["excess_return"] = pd.to_numeric(
+            sector_frame.get("excess_return"), errors="coerce",
+        )
+        sector_frame = sector_frame.dropna(subset=["name", "return"])
+
+    mainlines = []
+    attributed_mainlines = [row for row in pool if row["mainline"]]
+    if attributed_mainlines:
+        for mainline, rows in pd.DataFrame(attributed_mainlines).groupby("mainline", sort=False):
+            row_list = rows.to_dict("records")
+            related = MAINLINE_INDUSTRIES.get(str(mainline), set())
+            evidence = sector_frame[sector_frame["name"].astype(str).isin(related)] if not sector_frame.empty else pd.DataFrame()
+            sector_return = float(evidence["return"].max()) if not evidence.empty else None
+            mainlines.append({
+                "name": str(mainline),
+                "limit_count": len(row_list),
+                "max_height": max(row["height"] for row in row_list),
+                "sector_return": round(sector_return, 2) if sector_return is not None else None,
+                "leaders": _market_leaders(row_list, cycle_returns),
+            })
+    mainlines.sort(key=lambda row: (
+        -row["limit_count"], -row["max_height"],
+        -(row["sector_return"] if row["sector_return"] is not None else float("-inf")),
+        row["name"],
+    ))
+
+    cycle_sectors = []
+    if not sector_frame.empty and attributed_mainlines:
+        strong = sector_frame[sector_frame["excess_return"].ge(2.0)].sort_values(
+            ["return", "name"], ascending=[False, True],
+        )
+        for _, sector in strong.iterrows():
+            sector_name = str(sector["name"])
+            matching_mainlines = {
+                mainline for mainline, industries in MAINLINE_INDUSTRIES.items()
+                if sector_name in industries
+            }
+            candidates = [
+                row for row in attributed_mainlines
+                if row["sub"] == sector_name or row["mainline"] in matching_mainlines
+            ]
+            if not candidates:
+                continue
+            mainline_counts = pd.Series([row["mainline"] for row in candidates]).value_counts()
+            cycle_sectors.append({
+                "name": sector_name,
+                "mainline": str(mainline_counts.index[0]) if not mainline_counts.empty else "",
+                "limit_count": len(candidates),
+                "max_height": max(row["height"] for row in candidates),
+                "return": round(float(sector["return"]), 2),
+                "leaders": _market_leaders(candidates, cycle_returns),
+            })
+            if len(cycle_sectors) >= 5:
+                break
+
+    core_rows = []
+    if (continuous_core or {}).get("usable"):
+        for row in (continuous_core or {}).get("rows") or []:
+            code = _safe_code(row.get("code"))
+            if not code:
+                continue
+            core_rows.append({
+                "code": code,
+                "name": str(row.get("name") or names.names.get(code) or code),
+                "return": cycle_returns.get(code),
+            })
+        core_rows.sort(key=lambda row: (
+            -cycle_returns.get(row["code"], float("-inf")), row["code"],
+        ))
+
+    hints = []
+    attributed_count = sum(bool(row["sub"] or row["mainline"]) for row in pool)
+    if attributed_count < len(pool):
+        hints.append("部分涨停股暂未归因")
+    if len(daily_returns) < len(pool) or len(cycle_returns) < len(pool):
+        hints.append("部分个股收益暂缺")
+    if raw_fallback_codes:
+        hints.append("少量区间收益使用原始价")
+    return {
+        "daily_sectors": daily_sectors[:5],
+        "mainlines": mainlines[:5],
+        "cycle_sectors": cycle_sectors,
+        "continuous_core": core_rows[:8],
+        "attribution_coverage": round(attributed_count / len(pool), 4),
+        "daily_return_coverage": round(len(daily_returns) / len(pool), 4),
+        "cycle_return_coverage": round(len(cycle_returns) / len(pool), 4),
+        "hint": " · ".join(hints),
+    }

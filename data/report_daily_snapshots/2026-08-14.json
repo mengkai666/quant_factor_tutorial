@@ -1,0 +1,334 @@
+{
+  "report_date": "2026-08-14",
+  "run_id": "20260816T143208773779Z-dea4d045",
+  "max_height": 5,
+  "limit_up": 63,
+  "limit_down": 10,
+  "breadth_ratio": 0.4464,
+  "ladder_integrity": 0.6667,
+  "concentration": 0.5735,
+  "promotion_rate": 0.1864406779661017,
+  "mainline_rank": "AI算力",
+  "limit_pool_rows": [
+    {
+      "code": "bj920083",
+      "name": "金戈新材",
+      "height": 1
+    },
+    {
+      "code": "sh600186",
+      "name": "莲花控股",
+      "height": 1
+    },
+    {
+      "code": "sh600198",
+      "name": "大唐电信",
+      "height": 1
+    },
+    {
+      "code": "sh600272",
+      "name": "开开实业",
+      "height": 1
+    },
+    {
+      "code": "sh600288",
+      "name": "大恒科技",
+      "height": 1
+    },
+    {
+      "code": "sh600353",
+      "name": "旭光电子",
+      "height": 1
+    },
+    {
+      "code": "sh600487",
+      "name": "亨通光电",
+      "height": 1
+    },
+    {
+      "code": "sh600613",
+      "name": "神奇制药",
+      "height": 2
+    },
+    {
+      "code": "sh600645",
+      "name": "中源协和",
+      "height": 1
+    },
+    {
+      "code": "sh600769",
+      "name": "祥龙电业",
+      "height": 1
+    },
+    {
+      "code": "sh600815",
+      "name": "厦工股份",
+      "height": 1
+    },
+    {
+      "code": "sh600829",
+      "name": "人民同泰",
+      "height": 1
+    },
+    {
+      "code": "sh601609",
+      "name": "金田股份",
+      "height": 1
+    },
+    {
+      "code": "sh603025",
+      "name": "大豪科技",
+      "height": 1
+    },
+    {
+      "code": "sh603079",
+      "name": "圣达生物",
+      "height": 1
+    },
+    {
+      "code": "sh603083",
+      "name": "剑桥科技",
+      "height": 1
+    },
+    {
+      "code": "sh603089",
+      "name": "正裕工业",
+      "height": 1
+    },
+    {
+      "code": "sh603095",
+      "name": "越剑智能",
+      "height": 1
+    },
+    {
+      "code": "sh603115",
+      "name": "海星股份",
+      "height": 1
+    },
+    {
+      "code": "sh603118",
+      "name": "共进股份",
+      "height": 2
+    },
+    {
+      "code": "sh603177",
+      "name": "德创环保",
+      "height": 1
+    },
+    {
+      "code": "sh603186",
+      "name": "华正新材",
+      "height": 1
+    },
+    {
+      "code": "sh603330",
+      "name": "天洋新材",
+      "height": 3
+    },
+    {
+      "code": "sh603382",
+      "name": "海阳科技",
+      "height": 1
+    },
+    {
+      "code": "sh603618",
+      "name": "杭电股份",
+      "height": 1
+    },
+    {
+      "code": "sh603629",
+      "name": "利通电子",
+      "height": 1
+    },
+    {
+      "code": "sh603725",
+      "name": "天安新材",
+      "height": 1
+    },
+    {
+      "code": "sh603881",
+      "name": "数据港",
+      "height": 1
+    },
+    {
+      "code": "sh603989",
+      "name": "艾华集团",
+      "height": 1
+    },
+    {
+      "code": "sh688286",
+      "name": "敏芯股份",
+      "height": 1
+    },
+    {
+      "code": "sh688485",
+      "name": "九州一轨",
+      "height": 1
+    },
+    {
+      "code": "sh688662",
+      "name": "富信科技",
+      "height": 1
+    },
+    {
+      "code": "sz000620",
+      "name": "盈新发展",
+      "height": 1
+    },
+    {
+      "code": "sz000831",
+      "name": "中国稀土",
+      "height": 1
+    },
+    {
+      "code": "sz000936",
+      "name": "华西股份",
+      "height": 3
+    },
+    {
+      "code": "sz000950",
+      "name": "重药控股",
+      "height": 1
+    },
+    {
+      "code": "sz001260",
+      "name": "坤泰股份",
+      "height": 3
+    },
+    {
+      "code": "sz002081",
+      "name": "金 螳 螂",
+      "height": 3
+    },
+    {
+      "code": "sz002172",
+      "name": "澳洋健康",
+      "height": 3
+    },
+    {
+      "code": "sz002322",
+      "name": "理工能科",
+      "height": 2
+    },
+    {
+      "code": "sz002418",
+      "name": "康盛股份",
+      "height": 1
+    },
+    {
+      "code": "sz002628",
+      "name": "成都路桥",
+      "height": 1
+    },
+    {
+      "code": "sz002645",
+      "name": "华宏科技",
+      "height": 1
+    },
+    {
+      "code": "sz002651",
+      "name": "利君股份",
+      "height": 1
+    },
+    {
+      "code": "sz002658",
+      "name": "雪迪龙",
+      "height": 1
+    },
+    {
+      "code": "sz002724",
+      "name": "海洋王",
+      "height": 2
+    },
+    {
+      "code": "sz002766",
+      "name": "索菱股份",
+      "height": 1
+    },
+    {
+      "code": "sz002774",
+      "name": "快意电梯",
+      "height": 1
+    },
+    {
+      "code": "sz002811",
+      "name": "郑中设计",
+      "height": 1
+    },
+    {
+      "code": "sz002820",
+      "name": "桂发祥",
+      "height": 1
+    },
+    {
+      "code": "sz002907",
+      "name": "华森制药",
+      "height": 1
+    },
+    {
+      "code": "sz002951",
+      "name": "金时科技",
+      "height": 1
+    },
+    {
+      "code": "sz002988",
+      "name": "豪美新材",
+      "height": 1
+    },
+    {
+      "code": "sz002989",
+      "name": "中天精装",
+      "height": 1
+    },
+    {
+      "code": "sz003031",
+      "name": "中瓷电子",
+      "height": 1
+    },
+    {
+      "code": "sz300017",
+      "name": "网宿科技",
+      "height": 1
+    },
+    {
+      "code": "sz300120",
+      "name": "经纬辉开",
+      "height": 1
+    },
+    {
+      "code": "sz300404",
+      "name": "博济医药",
+      "height": 2
+    },
+    {
+      "code": "sz300684",
+      "name": "中石科技",
+      "height": 1
+    },
+    {
+      "code": "sz300862",
+      "name": "蓝盾光电",
+      "height": 5
+    },
+    {
+      "code": "sz300929",
+      "name": "华骐环保",
+      "height": 1
+    },
+    {
+      "code": "sz301130",
+      "name": "西点药业",
+      "height": 1
+    },
+    {
+      "code": "sz301419",
+      "name": "阿莱德",
+      "height": 1
+    }
+  ],
+  "snapshot_schema": "daily-fact-snapshot/v1",
+  "snapshot_source": "daily_snapshot",
+  "source": "daily_snapshot",
+  "date_verified": true,
+  "immutable": true
+}

@@ -10,6 +10,7 @@
   - price_history_cache.csv (全市场涨跌家数)
 """
 
+import numpy as np
 import pandas as pd
 import os
 import requests
@@ -30,6 +31,27 @@ from report_logic import normalize_stock_code
 
 
 MIN_MARKET_BREADTH = 4000
+
+
+# ─────────────────────────────────────────────────────────────
+# 进程级 A/D 记忆 (按价格缓存文件指纹)
+# ─────────────────────────────────────────────────────────────
+# 一次日报运行里 MarketSentimentFactor 会被独立构造 3+ 次
+# (主报告最新日校准 / A/D 对账 / lianban 分析), 每个实例的 self._ad_cache
+# 只对自己有效, 于是 10MB 价格缓存被反复 parse + groupby, 实测每次约 19s。
+# 这里按 (mtime_ns, size) 指纹做进程级共享: 文件没变就复用, 文件被重写
+# (如价格抓取后 to_csv) 指纹立即失效, 自动重算, 不会读到旧值。
+# 所有调用方都只读该 dict (.get), 故共享同一对象是安全的。
+_AD_CACHE_MEMO: dict = {}
+
+
+def _price_cache_fingerprint():
+    """价格缓存文件指纹; 取不到 (文件不存在/权限) 返回 None 表示不可缓存。"""
+    try:
+        st = os.stat(PRICE_CACHE_FILE)
+        return (st.st_mtime_ns, st.st_size)
+    except OSError:
+        return None
 
 
 class MarketSentimentFactor:
@@ -136,7 +158,23 @@ class MarketSentimentFactor:
             return {}
 
     def _load_ad_cache(self):
-        """从价格缓存计算A/D家数比 (带内部内存缓存)"""
+        """从价格缓存计算 A/D 家数比 (实例缓存 → 进程级指纹缓存 → 真正计算)。"""
+        if self._ad_cache is not None:
+            return self._ad_cache
+
+        fp = _price_cache_fingerprint()
+        if fp is not None and fp in _AD_CACHE_MEMO:
+            self._ad_cache = _AD_CACHE_MEMO[fp]
+            return self._ad_cache
+
+        result = self._compute_ad_cache()
+        if fp is not None:
+            # 用计算前的指纹入库: 计算过程只读不写价格缓存, 指纹仍代表这份输入。
+            _AD_CACHE_MEMO[fp] = result
+        return result
+
+    def _compute_ad_cache(self):
+        """从价格缓存实际计算 A/D 家数比 (无进程级缓存, 供包装器调用)。"""
         if self._ad_cache is not None:
             return self._ad_cache
 
@@ -208,21 +246,21 @@ class MarketSentimentFactor:
                     df[column] = pd.NA
                 df[column] = pd.to_numeric(df[column], errors='coerce')
 
-            def choose_price(row):
-                for column, basis in (
-                    ('close_raw', 'raw'),
-                    ('close_qfq', 'qfq_fallback'),
-                    ('close_legacy', 'legacy_mixed'),
-                    ('close', 'legacy_mixed'),
-                ):
-                    value = row[column]
-                    if pd.notna(value) and float(value) > 0:
-                        return float(value), basis
-                return None, 'unavailable'
-
-            selected = df.apply(choose_price, axis=1, result_type='expand')
-            selected.columns = ['ad_close', 'ad_basis']
-            df[['ad_close', 'ad_basis']] = selected
+            # 按 raw → qfq → legacy 优先级取第一个 >0 的收盘价。
+            # ⚠️ 向量化实现 (np.select 天然"首个命中优先"), 不要退回 df.apply(axis=1):
+            #    18 万行逐行 Python 调用实测占整轮 17.6s, 这里 <0.1s, 结果逐值等价。
+            _priority = (
+                ('close_raw', 'raw'),
+                ('close_qfq', 'qfq_fallback'),
+                ('close_legacy', 'legacy_mixed'),
+                ('close', 'legacy_mixed'),
+            )
+            _conds = [(df[column] > 0).to_numpy() for column, _ in _priority]
+            df['ad_close'] = np.select(
+                _conds, [df[column].to_numpy(dtype=float) for column, _ in _priority],
+                default=np.nan)
+            df['ad_basis'] = np.select(
+                _conds, [basis for _, basis in _priority], default='unavailable')
             df = df.dropna(subset=['ad_close']).copy()
             if df.empty:
                 self._ad_cache = {}

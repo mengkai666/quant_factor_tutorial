@@ -10,6 +10,7 @@ import math
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 from statistics import NormalDist
 from typing import Any, Iterable
@@ -70,9 +71,19 @@ class ReportContext:
     facts: dict[str, Any] = field(default_factory=dict)
     observations: dict[str, Any] = field(default_factory=dict)
     scenarios: list[dict[str, Any]] = field(default_factory=list)
+    # 条件化 T+1 推演；scenarios 保留为旧版兼容字段。
+    scenario_plans: list[dict[str, Any]] = field(default_factory=list)
     lineage: dict[str, Any] = field(default_factory=dict)
     daily_delta: dict[str, Any] = field(default_factory=dict)
     prediction_review: dict[str, Any] = field(default_factory=dict)
+    # 盘面语义层的唯一结构化入口；保留 facts 作为兼容的原始事实容器。
+    market_thesis: dict[str, Any] = field(default_factory=dict)
+    # 周期背景作为一等事实暴露，避免消费者从 market_thesis 或 HTML 反解析。
+    micro_cycle: dict[str, Any] = field(default_factory=dict)
+    phase_resonance: dict[str, Any] = field(default_factory=dict)
+    phase_snapshots: list[dict[str, Any]] = field(default_factory=list)
+    scenario_posterior: dict[str, Any] = field(default_factory=dict)
+    scenario_calibration: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -88,9 +99,16 @@ class ReportContext:
             "facts": self.facts,
             "observations": self.observations if self.policy.allow_observations else {},
             "scenarios": self.scenarios if self.policy.allow_scenarios else [],
+            "scenario_plans": self.scenario_plans if self.policy.allow_scenarios else [],
             "lineage": self.lineage,
             "daily_delta": self.daily_delta,
             "prediction_review": self.prediction_review,
+            "market_thesis": self.market_thesis,
+            "micro_cycle": self.micro_cycle,
+            "phase_resonance": self.phase_resonance,
+            "phase_snapshots": self.phase_snapshots,
+            "scenario_posterior": self.scenario_posterior,
+            "scenario_calibration": self.scenario_calibration,
         }
 
 
@@ -1981,7 +1999,17 @@ def evaluate_prediction(prediction: dict[str, Any], actual: dict[str, Any]) -> d
 
 def normalize_stock_code(value: Any) -> str:
     """将证券代码统一为 sh/sz/bj + 六位数字，覆盖常见来源格式。"""
-    raw = str(value or "").strip().lower().replace(" ", "")
+    return _normalize_stock_code_text(str(value or ""))
+
+
+@lru_cache(maxsize=1 << 17)
+def _normalize_stock_code_text(text: str) -> str:
+    """纯文本版本, 供 normalize_stock_code 复用。
+
+    ⚠️ 热点函数 (一轮报告 62 万+ 次调用, 实测占 6.2s): 纯字符串函数且输入
+       取值集合很小 (全市场几千个代码), 按文本 lru_cache 后近乎零成本。
+    """
+    raw = text.strip().lower().replace(" ", "")
     if not raw:
         return ""
     raw = raw.replace("_", "").replace("-", "")

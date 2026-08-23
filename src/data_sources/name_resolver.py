@@ -31,19 +31,22 @@ def _rows(frame, source: str):
     if not code_col or not name_col:
         return []
 
-    selected = frame.copy()
+    selected = frame
     date_col = _column(selected, ("date", "日期"))
     if source == "classified" and date_col:
+        selected = frame.copy()
         selected["_name_date"] = selected[date_col].astype(str).str.replace("-", "", regex=False)
         selected = selected.sort_values("_name_date").drop_duplicates(code_col, keep="last")
 
+    # ⚠️ 用两列的 tolist() 而不是 iterrows(): 后者每行都要造一个 Series,
+    #    实测 7.5 万行 × 24 次调用占整轮 9.5s; 取值与顺序完全一致。
     result = []
-    for _, row in selected.iterrows():
+    for raw_code, raw_name in zip(selected[code_col].tolist(), selected[name_col].tolist()):
         try:
-            code = normalize_code(row[code_col])
+            code = normalize_code(raw_code)
         except ValueError:
             continue
-        name = str(row[name_col]).strip() if pd.notna(row[name_col]) else ""
+        name = str(raw_name).strip() if pd.notna(raw_name) else ""
         if name:
             result.append((code, name, source))
     return result
