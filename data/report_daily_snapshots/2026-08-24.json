@@ -1,0 +1,249 @@
+{
+  "report_date": "2026-08-24",
+  "run_id": "20260824T092442029865Z-d614c604",
+  "max_height": 4,
+  "limit_up": 46,
+  "limit_down": 11,
+  "breadth_ratio": 0.3479,
+  "ladder_integrity": 1.0,
+  "concentration": 0.25,
+  "promotion_rate": 0.18518518518518517,
+  "mainline_rank": "周期资源",
+  "limit_pool_rows": [
+    {
+      "code": "sh600272",
+      "name": "开开实业",
+      "height": 1
+    },
+    {
+      "code": "sh600367",
+      "name": "红星发展",
+      "height": 1
+    },
+    {
+      "code": "sh600403",
+      "name": "大有能源",
+      "height": 1
+    },
+    {
+      "code": "sh600508",
+      "name": "上海能源",
+      "height": 1
+    },
+    {
+      "code": "sh600594",
+      "name": "益佰制药",
+      "height": 1
+    },
+    {
+      "code": "sh600604",
+      "name": "市北高新",
+      "height": 1
+    },
+    {
+      "code": "sh600610",
+      "name": "中毅达",
+      "height": 1
+    },
+    {
+      "code": "sh600613",
+      "name": "神奇制药",
+      "height": 1
+    },
+    {
+      "code": "sh600785",
+      "name": "新华百货",
+      "height": 2
+    },
+    {
+      "code": "sh601083",
+      "name": "锦江航运",
+      "height": 1
+    },
+    {
+      "code": "sh601212",
+      "name": "白银有色",
+      "height": 2
+    },
+    {
+      "code": "sh601700",
+      "name": "风范股份",
+      "height": 1
+    },
+    {
+      "code": "sh603032",
+      "name": "德新科技",
+      "height": 1
+    },
+    {
+      "code": "sh603089",
+      "name": "正裕工业",
+      "height": 1
+    },
+    {
+      "code": "sh603105",
+      "name": "芯能科技",
+      "height": 1
+    },
+    {
+      "code": "sh603200",
+      "name": "上海洗霸",
+      "height": 1
+    },
+    {
+      "code": "sh603330",
+      "name": "天洋新材",
+      "height": 2
+    },
+    {
+      "code": "sh603565",
+      "name": "中谷物流",
+      "height": 1
+    },
+    {
+      "code": "sh603958",
+      "name": "哈森股份",
+      "height": 3
+    },
+    {
+      "code": "sh605198",
+      "name": "安德利",
+      "height": 1
+    },
+    {
+      "code": "sh605286",
+      "name": "同力天启",
+      "height": 1
+    },
+    {
+      "code": "sz000017",
+      "name": "深中华A",
+      "height": 3
+    },
+    {
+      "code": "sz000065",
+      "name": "北方国际",
+      "height": 1
+    },
+    {
+      "code": "sz000620",
+      "name": "盈新发展",
+      "height": 1
+    },
+    {
+      "code": "sz000723",
+      "name": "美锦能源",
+      "height": 1
+    },
+    {
+      "code": "sz000925",
+      "name": "众合科技",
+      "height": 1
+    },
+    {
+      "code": "sz000931",
+      "name": "中 关 村",
+      "height": 3
+    },
+    {
+      "code": "sz001268",
+      "name": "联合精密",
+      "height": 1
+    },
+    {
+      "code": "sz002015",
+      "name": "协鑫能科",
+      "height": 1
+    },
+    {
+      "code": "sz002017",
+      "name": "东信和平",
+      "height": 2
+    },
+    {
+      "code": "sz002041",
+      "name": "登海种业",
+      "height": 1
+    },
+    {
+      "code": "sz002052",
+      "name": "同洲电子",
+      "height": 1
+    },
+    {
+      "code": "sz002084",
+      "name": "海鸥住工",
+      "height": 1
+    },
+    {
+      "code": "sz002172",
+      "name": "澳洋健康",
+      "height": 1
+    },
+    {
+      "code": "sz002277",
+      "name": "友阿股份",
+      "height": 1
+    },
+    {
+      "code": "sz002412",
+      "name": "汉森制药",
+      "height": 4
+    },
+    {
+      "code": "sz002445",
+      "name": "中南文化",
+      "height": 1
+    },
+    {
+      "code": "sz002580",
+      "name": "圣阳股份",
+      "height": 1
+    },
+    {
+      "code": "sz002651",
+      "name": "利君股份",
+      "height": 1
+    },
+    {
+      "code": "sz002716",
+      "name": "湖南白银",
+      "height": 2
+    },
+    {
+      "code": "sz002882",
+      "name": "金龙羽",
+      "height": 1
+    },
+    {
+      "code": "sz002906",
+      "name": "华阳集团",
+      "height": 1
+    },
+    {
+      "code": "sz003035",
+      "name": "南网能源",
+      "height": 1
+    },
+    {
+      "code": "sz003040",
+      "name": "楚天龙",
+      "height": 2
+    },
+    {
+      "code": "sz300313",
+      "name": "天山生物",
+      "height": 1
+    },
+    {
+      "code": "sz301152",
+      "name": "天力锂能",
+      "height": 1
+    }
+  ],
+  "snapshot_schema": "daily-fact-snapshot/v1",
+  "snapshot_source": "daily_snapshot",
+  "source": "daily_snapshot",
+  "date_verified": true,
+  "immutable": true
+}
