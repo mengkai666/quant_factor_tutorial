@@ -4755,6 +4755,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     # 独立模块, 失败静默返回空串, 不影响主流程
     phase_html = ''
     trusted_phase_html = ''
+    phase_result = phase_resonance_result
     phase_sanitize_marker = '<!-- trusted-micro-cycle-facts -->'
     try:
         from phase_resonance import (
@@ -4770,6 +4771,25 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
             phase_html = render_phase_resonance_html(phase_result)
     except Exception as e:
         print(f"  [警告] 阶段共振模块失败 (不影响主流程): {e}")
+
+    # 长期趋势层 (trend_regime): 上升/震荡/下跌 × 小趋势, 独立增量模块。
+    # 与 phase_resonance 不重叠: 本层管方向与仓位上限 (均线体系, 永远有输出),
+    # phase_resonance 管区间与破位线 (窗口内的段, 识别不到会返回 None, 实测近 1 年
+    # 抽样 50% 的交易日为 None)。定位是单侧风险闸门, 只在下跌档收紧。
+    trend_regime_html = ''
+    trusted_trend_html = ''
+    trend_sanitize_marker = '<!-- trusted-trend-regime -->'
+    trend_result = None
+    try:
+        from trend_regime import build_trend_regime, render_trend_regime_html
+        _sub_phase = ((phase_result or {}).get('det') or {}).get('sub_phase')
+        trend_result = build_trend_regime(sub_phase=_sub_phase, sentiment_regime=stance)
+        _trend_rendered = render_trend_regime_html(trend_result)
+        if _trend_rendered:
+            trusted_trend_html = _trend_rendered
+            trend_regime_html = trend_sanitize_marker
+    except Exception as e:
+        print(f"  [警告] 长期趋势层失败 (不影响主流程): {e}")
 
     # 高标追踪 (leader_tracker): 连板高标身份 / 引力 / 生死→情绪信号, 独立增量模块。
     # 与 index-phase-leaders 涨幅榜互补 (按连板数/人气+生死信号, 不重叠)。
@@ -4788,6 +4808,23 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
             leader_tracker_html = leader_sanitize_marker
     except Exception as e:
         print(f"  [警告] 高标追踪模块失败 (不影响主流程): {e}")
+
+    # 龙头接替·监管周期 teaser: 一张精炼入口卡, 引流到已发布的 dragon/latest.html 完整谱系子页。
+    # 主报告已很长, 重内容(接替谱系/监管阶梯/情绪崩溃)不内嵌全文, teaser 只做点击器。
+    # 含具名龙头, 走可信通道避免被发布策略中和器裁剪; href 用绝对 SITE_URL, 3 份副本全部可跳。
+    dragon_teaser_html = ''
+    trusted_dragon_html = ''
+    dragon_sanitize_marker = '<!-- trusted-dragon-teaser -->'
+    try:
+        from dragon_succession import build_dragon_succession, render_dragon_teaser_html
+        _dragon_report_date = dates[-1] if dates else None
+        _dragon_result = build_dragon_succession(report_date=_dragon_report_date)
+        _dragon_teaser_rendered = render_dragon_teaser_html(_dragon_result)
+        if _dragon_teaser_rendered:
+            trusted_dragon_html = _dragon_teaser_rendered
+            dragon_teaser_html = dragon_sanitize_marker
+    except Exception as e:
+        print(f"  [警告] 龙头接替 teaser 生成失败 (不影响主流程): {e}")
 
     # 动态生成量化择时模块：必须服从统一三态发布策略。
     timing_res = dict(timing_result or generate_timing_signal(sentiment_df, advance_decline, echelon))
@@ -4808,6 +4845,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
         )
         _dash_ctx['stance'] = stance
         _dash_ctx['leader'] = leader_result
+        _dash_ctx['trend'] = trend_result
         dashboard_section_html = generate_dashboard_section(_dash_ctx)
     except Exception as e:
         print(f"  [警告] 内嵌决策看板 section 生成失败 (不影响主流程): {e}")
@@ -5088,6 +5126,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
 
     {legacy_decision_block_html}
 
+    {trend_regime_html}
     {phase_html}
 
     <div class="summary-grid">
@@ -5123,6 +5162,8 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     {lianban_height_html}
 
     {leader_tracker_html}
+
+    {dragon_teaser_html}
 
     {ladder_html}
 
@@ -5188,6 +5229,10 @@ window.addEventListener('resize',function(){{c.resize();}});}})();
         html = html.replace(phase_sanitize_marker, trusted_phase_html)
     if trusted_leader_html:
         html = html.replace(leader_sanitize_marker, trusted_leader_html)
+    if trusted_trend_html:
+        html = html.replace(trend_sanitize_marker, trusted_trend_html)
+    if trusted_dragon_html:
+        html = html.replace(dragon_sanitize_marker, trusted_dragon_html)
     with open(OUTPUT_HTML, 'w', encoding='utf-8') as f:
         f.write(html)
 
@@ -6227,6 +6272,19 @@ def _main_impl():
     except Exception as e:
         print(f"  [警告] 阶段共振摘要失败 (不影响主流程): {e}")
 
+    # 长期趋势闸门也进 AI 输入: 否则研判层可能在下跌档里写"回踩加仓"。
+    # 指数全历史在进程内记忆化, 这里与 generate_html 里那次共用同一份, 不重复联网。
+    _trend_summary = {}
+    try:
+        from trend_regime import build_trend_regime
+        _tr = build_trend_regime(sub_phase=(_phase_resonance_summary.get('sub_phase') or None))
+        if _tr:
+            _trend_summary = {k: _tr.get(k) for k in (
+                'as_of', 'label', 'raw', 'pending', 'run_days', 'close', 'ma',
+                'ma_period', 'slope', 'pos_pct', 'near', 'cap', 'stage', 'headline')}
+    except Exception as e:
+        print(f"  [警告] 长期趋势摘要失败 (不影响主流程): {e}")
+
     _market_thesis = build_market_thesis(
         report_date=_report_date,
         market_snapshot=_current_snapshot,
@@ -6261,6 +6319,7 @@ def _main_impl():
         'progression_chain': _progression_chain,
         'market_thesis': _market_thesis_dict,
         'phase_resonance': _phase_resonance_summary,
+        'trend_regime': _trend_summary,
         'quality_status': _report_quality.get('status'),
         # Keep the complete module quality snapshot in the AI input lineage so
         # later review can distinguish a weak inference from a weak data run.
@@ -6550,12 +6609,23 @@ def _main_impl():
         except Exception as e:
             print(f"  [警告] 决策看板生成失败 (不影响主流程): {e}")
 
+        # === 龙头接替·监管周期: 完整谱系子页归档到 site/dragon/ (主报告 teaser 的引流目标) ===
+        _dragon_html = None
+        try:
+            from dragon_succession import build_dragon_succession, generate_dragon_html
+            _dragon_result = build_dragon_succession(report_date=latest_date)
+            # 无周期(深度冰点)时 generate_dragon_html 返 ''; 归一为 None → publish 跳过归档且首页不挂入口卡, 无死链。
+            _dragon_html = generate_dragon_html(_dragon_result) or None
+        except Exception as e:
+            print(f"  [警告] 龙头接替谱系子页生成失败 (不影响主流程): {e}")
+
         publish(
             OUTPUT_HTML,
             SITE_DIR,
             report_date=latest_date,
             summary=_summary,
             dashboard_html=_dashboard_html,
+            dragon_html=_dragon_html,
         )
     except Exception as e:
         print(f"  [警告] 站点发布失败 (不影响主流程): {e}")

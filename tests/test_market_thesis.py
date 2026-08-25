@@ -178,3 +178,18 @@ def test_positive_cycle_background_conflicting_with_weak_daily_breadth_is_not_re
         micro_cycle={"status": "反弹确认"},
     )
     assert thesis.to_dict()["dimensions"]["index_sector_stock_resonance"]["state"] in {"conflicted", "partial"}
+
+
+def test_summarize_phase_resonance_carries_the_sub_phase_for_tomorrow():
+    from market_thesis import summarize_phase_resonance
+
+    summary = summarize_phase_resonance({
+        "phase_shape": "箱体/趋势临界 (偏上行, 区间 3768~3994, 振幅 6.0% ...)",
+        "sub_phase": {"name": "回撤段", "high_date": "2026-08-18", "high_close": 3990.3,
+                      "bars": 3, "retrace": -2.13, "ref_low": 3767.5,
+                      "action": "不破 3768 按上升中继处理"},
+    })
+
+    assert summary["sub_phase"]["name"] == "回撤段"
+    assert summary["sub_phase"]["retrace"] == -2.13
+    assert summary["sub_phase"]["ref_low"] == 3767.5      # 破位线要带走, 明天才有基准

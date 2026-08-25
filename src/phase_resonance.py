@@ -52,6 +52,9 @@ TOP_LOOKBACK = 30       # 顶只在底之前这么多交易日内找 (锁定"贴
 MIN_DRAWDOWN = 4.0      # 顶→底 至少跌这么多 % 才认作"有效下跌段"
 V_WINDOW = 5            # 底部之后几个交易日内的最高收盘 = 见底反弹脉冲终点
 BOX_MAX_AMP = 6.0       # 震荡段振幅 <= 此值 算箱体, 否则算趋势
+BOX_AMP_BUFFER = 0.5    # 箱体/趋势临界缓冲带: 振幅落在 BOX_MAX_AMP±此值 内不硬定性
+SUB_RETRACE_PCT = 1.5   # 小阶段: 距阶段高回撤 >= 此值 (%) 判"回撤段"
+SUB_MIN_BARS = 3        # 小阶段: 阶段高之后已走 >= 此根 K 也算独立小阶段
 STRONG_Q = 0.70         # 四象限: 底部至今收益分位 >= 此值 算强
 WEAK_Q = 0.30           # 四象限: <= 此值 算弱
 
@@ -65,6 +68,33 @@ def fetch_index(symbol='sh000001', lookback=LOOKBACK_DAYS):
     df = filter_completed_rows(df, 'date')
     df = df.tail(lookback + 40)
     return df[['date', 'open', 'high', 'low', 'close', 'volume']].to_dict('records')
+
+
+def sub_phase_action(sub):
+    """小阶段的"怎么操作"。每个读数后面必须跟一条动作 (全项目一贯要求)。"""
+    hi = sub.get('high_close')
+    hi_s = f"{hi:.0f}" if isinstance(hi, (int, float)) else '—'
+    low = sub.get('ref_low')
+    low_s = f"{low:.0f}" if isinstance(low, (int, float)) else '震荡区间下沿'
+    bars = sub.get('bars') or 0
+    rt = sub.get('retrace')
+    rt_s = f"{abs(rt):.2f}%" if isinstance(rt, (int, float)) else '—'
+    name = sub.get('name')
+    if name == '创阶段新高':
+        return (f'阶段高就是今天 ({hi_s}) —— 持有为主, 新高当日不追高不打板; '
+                f'等回撤段成形再谈加仓, 跌破 {low_s} 才谈把大段结论降一档。')
+    near = sub.get('low_close')
+    near_s = f"{near:.0f}" if isinstance(near, (int, float)) else None
+    if name == '回撤段':
+        watch = f'先看回撤低点 {near_s} 守不守住, ' if near_s else ''
+        return (f'已从阶段高 {hi_s} 回撤 {rt_s}、走了 {bars} 个交易日 —— '
+                f'{watch}只要不破区间下沿 {low_s} 就按上升中继处理 '
+                f'(回撤中不加仓、不抄最弱的), 一旦收盘破 {low_s} 就把大段结论降一档, 仓位跟着降。')
+    if name == '高位盘整':
+        return (f'阶段高 {hi_s} 之后横了 {bars} 个交易日不创新高, 回撤只有 {rt_s} —— '
+                f'不新开仓、不摊平, 等放量收上 {hi_s} 再跟; 跌破 {low_s} 先减一半。')
+    return (f'离阶段高 {hi_s} 只 {bars} 个交易日、回撤 {rt_s} 未到 {SUB_RETRACE_PCT:.1f}% 门槛 —— '
+            f'小阶段还没成形, 沿用大段结论, 别提前定性; 盯住 {hi_s} (上破) 与 {low_s} (下破) 两条线。')
 
 
 def detect_phases(idx, lookback=LOOKBACK_DAYS):
@@ -122,17 +152,59 @@ def detect_phases(idx, lookback=LOOKBACK_DAYS):
         box_lo = min(r['low'] for r in seg)
         amp = (box_hi / box_lo - 1) * 100
         c_last = latest['close']
-        if amp <= BOX_MAX_AMP:
+        pos = ((c_last - box_lo) / (box_hi - box_lo) * 100) if box_hi > box_lo else 50.0
+        # 振幅正好压在 BOX_MAX_AMP 上时, 一天的高/低点就能让标签在"箱体震荡"和
+        # "反弹趋势段"之间来回翻 (实测 2026-08-21 振幅 6.00%, 紧贴 6.0 阈值, 两个标签
+        # 的操作含义却相反)。故留 ±BOX_AMP_BUFFER 的临界带: 带内明写"临界"并给出偏向,
+        # 不硬定性; 带外与原判据逐字一致, 历史口径不变。
+        if amp <= BOX_MAX_AMP - BOX_AMP_BUFFER:
             if c_last >= box_hi * 0.997:
                 shape = f'箱体突破 (箱体 {box_lo:.0f}~{box_hi:.0f}, 振幅 {amp:.1f}%, 收在上沿)'
             elif c_last <= box_lo * 1.003:
                 shape = f'箱体下沿 (箱体 {box_lo:.0f}~{box_hi:.0f}, 振幅 {amp:.1f}%, 收在下沿)'
             else:
-                pos = (c_last - box_lo) / (box_hi - box_lo) * 100
                 shape = f'箱体震荡 (箱体 {box_lo:.0f}~{box_hi:.0f}, 振幅 {amp:.1f}%, 当前位于箱体 {pos:.0f}% 处)'
+        elif amp >= BOX_MAX_AMP + BOX_AMP_BUFFER:
+            trend = '反弹趋势段' if c_last > seg[0]['close'] else '二次探底'
+            shape = f'{trend} (区间 {box_lo:.0f}~{box_hi:.0f}, 振幅 {amp:.1f}%)'
         else:
-            shape = ('反弹趋势段' if c_last > seg[0]['close'] else '二次探底') + \
-                    f' (区间 {box_lo:.0f}~{box_hi:.0f}, 振幅 {amp:.1f}%)'
+            lean = '偏上行' if c_last > seg[0]['close'] else '偏回落'
+            shape = (f'箱体/趋势临界 ({lean}, 区间 {box_lo:.0f}~{box_hi:.0f}, '
+                     f'振幅 {amp:.1f}% 压在 {BOX_MAX_AMP:.1f}% 阈值 ±{BOX_AMP_BUFFER:.1f} 内, '
+                     f'当前位于区间 {pos:.0f}% 处, 暂不定性)')
+
+    # ── 小阶段: 在 底部至今 内部再切最新的一刀 ──
+    # 大段是回溯口径: 底一旦锚定 (= 回看窗口内最低收盘) 就不再动, 于是反弹走得越久,
+    # 震荡段就越长, 最新的结构会被整段吞掉 (实测 2026-08-21: 震荡段已横跨 21 个交易日,
+    # 把 8/18 见阶段高之后的 3 天回撤埋进了"振幅 6.0%"这一个数里, 盘面早变了标签没变)。
+    # 这里以"底之后的最高收盘"为界单独命名最新的一小段, 不动任何大段的起止,
+    # 因此历史对账口径不变, 只是多给一层更贴近当下的读数。
+    rally = win[bi:]
+    hi_off = max(range(len(rally)), key=lambda i: rally[i]['close'])
+    stage_hi = rally[hi_off]
+    after = rally[hi_off + 1:]
+    bars_after = len(after)
+    retrace = round((latest['close'] / stage_hi['close'] - 1) * 100, 2) if stage_hi['close'] else None
+    low_rec = min(after, key=lambda r: r['close']) if after else None
+    if bars_after == 0:
+        sub_name = '创阶段新高'
+    elif retrace is not None and retrace <= -SUB_RETRACE_PCT:
+        sub_name = '回撤段'
+    elif bars_after >= SUB_MIN_BARS:
+        sub_name = '高位盘整'
+    else:
+        sub_name = '阶段高附近'
+    sub_phase = {
+        'name': sub_name,
+        'start': stage_hi['date'], 'end': latest['date'],
+        'high_date': stage_hi['date'], 'high_close': stage_hi['close'],
+        'low_date': low_rec['date'] if low_rec else None,
+        'low_close': low_rec['close'] if low_rec else None,
+        'deepest': round((low_rec['close'] / stage_hi['close'] - 1) * 100, 2) if low_rec else None,
+        'bars': bars_after, 'retrace': retrace,
+        'ref_low': box_lo,   # 震荡区间下沿 = 客观破位线 (不是拍脑袋的支撑)
+    }
+    sub_phase['action'] = sub_phase_action(sub_phase)
 
     return {
         'phases': phases, 'shape': shape,
@@ -143,6 +215,7 @@ def detect_phases(idx, lookback=LOOKBACK_DAYS):
         'latest': {'date': latest['date'], 'close': latest['close']},
         'drawdown': round(dd, 2),
         'index_series': win,
+        'sub_phase': sub_phase,
     }
 
 
@@ -230,9 +303,15 @@ def fetch_sectors(latest_date, need_start=None, force=False):
     return cache
 
 
-def sector_table(cache, det):
-    """板块 × 阶段收益表 (含量比与距顶幅度)。"""
-    ph = det['phases']
+def sector_table(cache, det, extra_segments=None):
+    """板块 × 阶段收益表 (含量比与距顶幅度)。
+
+    extra_segments: 额外的 {段名: (start, end)}, 用来把"小阶段"当成一列并进来。
+    与 det['phases'] 同名的键会被忽略 (大段口径永远优先, 不被覆盖)。
+    """
+    ph = dict(det['phases'])
+    if extra_segments:
+        ph.update({k: v for k, v in extra_segments.items() if k not in ph})
     fall_s, fall_e = ph['下跌段']
     bot_s, bot_e = ph['底部至今']
     rows = []
@@ -283,8 +362,11 @@ def quadrants(t, det):
     return {k: v.sort_values('底部至今', ascending=False) for k, v in out.items()}
 
 
-def market_breadth(det):
-    """全市场个股各阶段收益中位数 + 上涨占比 (指数震荡时底下到底涨没涨)。"""
+def market_breadth(det, extra_segments=None):
+    """全市场个股各阶段收益中位数 + 上涨占比 (指数震荡时底下到底涨没涨)。
+
+    extra_segments: 额外的 {段名: (start, end)} ("小阶段"), 同名键不覆盖大段。
+    """
     if not os.path.exists(PRICE_CACHE):
         return {}
     try:
@@ -310,8 +392,11 @@ def market_breadth(det):
         c = [x for x in dates if x <= d]
         return c[-1] if c else None
 
+    segments = dict(det['phases'])
+    if extra_segments:
+        segments.update({k: v for k, v in extra_segments.items() if k not in segments})
     out = {}
-    for p, (s, e) in det['phases'].items():
+    for p, (s, e) in segments.items():
         ds, de = near(s), near(e)
         if not ds or not de or ds == de:
             continue
@@ -366,6 +451,9 @@ def build_turning_summary(det, table, stock_leaders, *, sector_top_n=3):
             "latest_date": latest_date,
             "index_return": index_return,
             "trading_days": trading_days,
+            # 小阶段: 大段的底一锚定就不动, 反弹走久了这条产品带会看着像"写死的";
+            # 把最新一刀带进来, 常驻摘要才跟得上盘面。
+            "sub": (det or {}).get("sub_phase") or {},
         },
         "turning_leaders": {
             "sectors": sectors,
@@ -528,7 +616,13 @@ def _build(force_fetch=False):
         print('  ⚠️ 阶段共振: 板块指数为空, 跳过')
         return None
 
-    t = sector_table(cache, det)
+    # 小阶段单独当一列/一行并进来 (只在它确实跨了 >=1 个交易日时; 创阶段新高那天
+    # start==end, 收益恒 0, 并进来只是噪音)。
+    sub = det.get('sub_phase') or {}
+    sub_seg = ({sub['name']: (sub['start'], sub['end'])}
+               if sub.get('start') and sub.get('end') and sub['start'] != sub['end'] else {})
+
+    t = sector_table(cache, det, sub_seg)
     if t.empty:
         return None
     # 下跌段全空 = 板块历史不够长, 四象限与相关系数会哑掉。显式告警, 不静默出残页。
@@ -537,14 +631,17 @@ def _build(force_fetch=False):
               f"四象限/相关性不可用 (下次运行会自动重拉)")
 
     ph = list(det['phases'].keys())
+    # timeline_segments = 大段 + 小阶段 (渲染/排名用); phase_names 保持只有大段,
+    # 下游 (stock_representatives / market_thesis / 既有测试) 的契约不变。
+    segments = {**det['phases'], **sub_seg}
     idx_ret = {p: _seg_ret(det['index_series'], s, e)
-               for p, (s, e) in det['phases'].items()}
+               for p, (s, e) in segments.items()}
     # 相关性: 下跌段跌幅 vs 底部至今涨幅 (负 = 超跌反弹主导, 正 = 强者延续)
     cc = t[['下跌段', '底部至今']].dropna()
     corr = round(cc['下跌段'].corr(cc['底部至今']), 3) if len(cc) > 5 else None
 
     ranks = {}
-    for p in ph:
+    for p in segments:
         if p in t.columns and t[p].notna().any():
             ranks[p] = t.nlargest(8, p)[['板块', p, '量比']].to_dict('records')
 
@@ -569,9 +666,12 @@ def _build(force_fetch=False):
 
     result = {
         'det': det, 'phase_names': ph, 'index_ret': idx_ret,
+        'sub_phase': det.get('sub_phase'),
+        'timeline_segments': segments,
+        'timeline_names': list(segments.keys()),
         'table': t, 'ranks': ranks, 'quadrants': quadrants(t, det),
         'reps_html': reps_html,
-        'corr': corr, 'breadth': market_breadth(det),
+        'corr': corr, 'breadth': market_breadth(det, sub_seg),
         'top_overall': t.nlargest(12, '底部至今').to_dict('records'),
         'bottom_overall': t.nsmallest(8, '底部至今').to_dict('records'),
         'new_high': t[t['距顶'] > 0].sort_values('距顶', ascending=False)
@@ -624,11 +724,27 @@ def _turning_summary_html(res):
     latest_date = safe(phase.get("latest_date"))
     trading_days = phase.get("trading_days")
     day_text = f" · {int(trading_days)} 个交易日" if trading_days else ""
+    sub = phase.get("sub") or {}
+    sub_html = ""
+    if sub.get("name"):
+        sub_bits = []
+        if isinstance(sub.get("retrace"), (int, float)):
+            sub_bits.append(f'距阶段高 {sub["retrace"]:+.2f}%')
+        if sub.get("bars"):
+            sub_bits.append(f'{int(sub["bars"])} 个交易日')
+        if isinstance(sub.get("ref_low"), (int, float)):
+            sub_bits.append(f'破位线 {sub["ref_low"]:.0f}')
+        sub_html = (
+            f'<div class="phase-turning-sub">小阶段 <b>{safe(sub.get("name"))}</b>'
+            f'{" · " + safe(" · ".join(sub_bits)) if sub_bits else ""}</div>'
+            f'<div class="phase-turning-sub-act">怎么操作: {safe(sub.get("action"))}</div>'
+        )
     current = f'''
       <div class="phase-turning-col">
         <div class="phase-turning-kicker">当前阶段</div>
         <div class="phase-turning-stage">{safe(phase.get("label"))}</div>
         {detail_html}
+        {sub_html}
         <div class="phase-turning-meta">主要转折 {turning_date} · 至 {latest_date}{day_text}</div>
         <div class="phase-turning-index">上证区间 <span style="color:{index_color};">{index_text}</span></div>
       </div>'''
@@ -669,6 +785,8 @@ def _turning_summary_html(res):
       .phase-turning-stage {{color:#e6edf3;font-size:20px;font-weight:800;line-height:1.2;}}
       .phase-turning-detail {{color:#8b949e;font-size:12px;line-height:1.6;margin-top:5px;}}
       .phase-turning-meta,.phase-turning-index {{color:#8b949e;font-size:11px;line-height:1.6;margin-top:7px;}}
+      .phase-turning-sub {{color:#d29922;font-size:12px;font-weight:600;line-height:1.6;margin-top:7px;min-width:0;overflow-wrap:anywhere;}}
+      .phase-turning-sub-act {{color:#8b949e;font-size:11px;line-height:1.6;margin-top:2px;min-width:0;overflow-wrap:anywhere;}}
       .phase-turning-index span {{font-weight:800;}}
       .phase-turning-row {{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:5px 0;color:#e6edf3;font-size:12px;}}
       .phase-turning-row > span:first-child {{min-width:0;}}
@@ -982,9 +1100,15 @@ def render_micro_cycle_html(res):
 def _phase_timeline(res):
     """阶段时间轴表: 每段区间 + 指数涨跌 + 个股中位 + 上涨占比。"""
     det, br = res['det'], res['breadth']
+    # 兼容旧 payload: 没有 timeline_* 时退回大段 (既有测试只喂 phases/phase_names)
+    segs = res.get('timeline_segments') or det['phases']
+    names = res.get('timeline_names') or res['phase_names']
+    sub_name = ((res.get('sub_phase') or {}) or {}).get('name')
     rows = ''
-    for p in res['phase_names']:
-        s, e = det['phases'][p]
+    for p in names:
+        if p not in segs:
+            continue
+        s, e = segs[p]
         ir = res['index_ret'].get(p)
         b = br.get(p) or {}
         med, win = b.get('median'), b.get('win')
@@ -992,9 +1116,14 @@ def _phase_timeline(res):
         flag = ''
         if ir is not None and med is not None and ir < 0 < med:
             flag = '<span style="color:#d29922;font-weight:bold;"> ⚠背离</span>'
+        is_sub = (p == sub_name)
+        # 小阶段与震荡段/最新日在时间上重叠, 不是并列切分 —— 标 🔍 + 底色区分, 免得
+        # 被当成"又多了一段"去做加总。
+        tr_bg = 'background:rgba(88,166,255,0.06);' if is_sub else ''
         rows += (
-            f'<tr style="border-bottom:1px solid rgba(48,54,61,0.5);">'
-            f'<td style="padding:7px 10px;color:#e6edf3;font-weight:bold;white-space:nowrap;">{p}{flag}</td>'
+            f'<tr style="border-bottom:1px solid rgba(48,54,61,0.5);{tr_bg}">'
+            f'<td style="padding:7px 10px;color:#e6edf3;font-weight:bold;white-space:nowrap;">'
+            f'{"🔍 " if is_sub else ""}{p}{flag}</td>'
             f'<td style="padding:7px 10px;color:#8b949e;font-size:12px;white-space:nowrap;">{s} → {e}</td>'
             f'<td style="padding:7px 10px;color:{_clr(ir)};font-weight:bold;text-align:right;">{_pct(ir)}</td>'
             f'<td style="padding:7px 10px;color:{_clr(med)};text-align:right;">{_pct(med)}</td>'
@@ -1002,6 +1131,14 @@ def _phase_timeline(res):
             f'{"—" if win is None else f"{win:.0f}%"}</td>'
             f'</tr>'
         )
+    sub_note = ''
+    if sub_name and any(p == sub_name for p in names):
+        sub = res.get('sub_phase') or {}
+        sub_note = (
+            f'<div style="color:#8b949e;font-size:11px;margin:6px 2px 0;'
+            f'min-width:0;overflow-wrap:anywhere;">🔍 {escape(str(sub_name))} = 小阶段 '
+            f'(底部至今内部最新的一刀, 与震荡段/最新日<b>时间上重叠</b>, 不是并列切分, 别加总)。'
+            f'怎么操作: {escape(str(sub.get("action") or ""))}</div>')
     return f'''
     <div class="phase-timeline-wrap" style="max-width:100%;overflow-x:auto;">
     <table style="width:100%;border-collapse:collapse;background:rgba(255,255,255,0.02);border-radius:8px;overflow:hidden;font-size:13px;">
@@ -1014,13 +1151,13 @@ def _phase_timeline(res):
       </tr>
       {rows}
     </table>
-    </div>'''
+    </div>{sub_note}'''
 
 
 def _rank_cards(res):
     """每阶段领涨 TOP8 横向卡片 (看清各阶段是不是同一批人)。"""
     cards = ''
-    for p in res['phase_names']:
+    for p in (res.get('timeline_names') or res['phase_names']):
         if p == '底部至今' or p not in res['ranks']:
             continue
         items = ''
@@ -1112,6 +1249,35 @@ def _verdict(res):
     return f'<div style="color:#e6edf3;font-size:13px;line-height:1.75;">{nature}{hi}{div}</div>'
 
 
+def _sub_phase_html(sub):
+    """小阶段一行 + 它的"怎么操作" (大段是回溯口径, 这行才贴当下)。"""
+    if not sub or not sub.get('name'):
+        return ''
+    name = escape(str(sub['name']))
+    hi = sub.get('high_close')
+    hi_txt = f'{hi:.0f}' if isinstance(hi, (int, float)) else '—'
+    bits = [f'阶段高 {escape(str(sub.get("high_date") or "—"))} {hi_txt}']
+    rt = sub.get('retrace')
+    if isinstance(rt, (int, float)):
+        bits.append(f'距高 {rt:+.2f}%')
+    if sub.get('bars'):
+        bits.append(f'已走 {int(sub["bars"])} 个交易日')
+    deep = sub.get('deepest')
+    if isinstance(deep, (int, float)) and sub.get('low_date'):
+        bits.append(f'最深 {deep:+.2f}% ({escape(str(sub["low_date"]))})')
+    low = sub.get('ref_low')
+    if isinstance(low, (int, float)):
+        bits.append(f'破位线 {low:.0f}')
+    return (
+        f'<div style="color:#e6edf3;font-size:13px;margin:-6px 0 12px;min-width:0;'
+        f'overflow-wrap:anywhere;">'
+        f'<b>小阶段 (最新一刀):</b> <span style="color:#d29922;font-weight:bold;">{name}</span>'
+        f'<span style="color:#8b949e;font-size:12px;"> — {escape(", ".join(bits))}</span>'
+        f'<div style="color:#8b949e;font-size:12px;margin-top:2px;">怎么操作: '
+        f'{escape(str(sub.get("action") or ""))}</div></div>'
+    )
+
+
 def render_phase_resonance_html(res):
     """渲染完整 section。res 为 None 时返回空串 (调用方无需判空)。"""
     if not res:
@@ -1134,6 +1300,7 @@ def render_phase_resonance_html(res):
         f'</div>'
         f'<div style="color:#e6edf3;font-size:13px;margin-bottom:12px;">'
         f'<b>见底后形态:</b> <span style="color:{clr};font-weight:bold;">{det["shape"]}</span></div>'
+        + _sub_phase_html(det.get('sub_phase'))
     )
 
     return f'''

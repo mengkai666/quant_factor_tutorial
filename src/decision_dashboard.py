@@ -2869,12 +2869,21 @@ def generate_dashboard_html(ctx: dict) -> str:
         _lh = _leader.get('headline') or ''
         leader_tag = (f'<div class="sub2">🏔️ 高标 · {_esc(_leader.get("signal"))}'
                       f'{(" — " + _esc(_lh)) if _lh else ""}</div>')
+    # 长期趋势层: 趋势定仓位上限, 情绪定进攻节奏 (优先级写死, 不让两条结论并列打脸)
+    _trend = ctx.get('trend') or {}
+    trend_tag = ''
+    if _trend.get('label') and not policy['facts_only']:
+        _tn = f' · 贴近{_trend["near"]}档阈值' if _trend.get('near') else ''
+        _tc = _trend.get('cap') or ''
+        trend_tag = (f'<div class="sub2">🧭 长期趋势 · {_esc(_trend.get("label"))}档'
+                     f'{_esc(_tn)} · 仓位上限 {_esc(_tc)}</div>')
     headline_html = f'''
     <div class="headline">
       <div class="box primary">
         <div class="lbl">{headline_label}</div>
         <div class="big">{headline_value}{pick_html}</div>
         <div class="sub2">{headline_sub}</div>
+        {trend_tag}
         {leader_tag}
       </div>
       <div class="box gauge-wrap">
@@ -3496,12 +3505,21 @@ def generate_dashboard_section(ctx: dict) -> str:
         _lh = _leader.get('headline') or ''
         leader_tag = (f'<div class="dbd-hsub">🏔️ 高标 · {_esc(_leader.get("signal"))}'
                       f'{(" — " + _esc(_lh)) if _lh else ""}</div>')
+    # 长期趋势层: 趋势定仓位上限, 情绪定进攻节奏 (优先级写死, 不让两条结论并列打脸)
+    _trend = ctx.get('trend') or {}
+    trend_tag = ''
+    if _trend.get('label') and not policy['facts_only']:
+        _tn = f' · 贴近{_trend["near"]}档阈值' if _trend.get('near') else ''
+        _tc = _trend.get('cap') or ''
+        trend_tag = (f'<div class="dbd-hsub">🧭 长期趋势 · {_esc(_trend.get("label"))}档'
+                     f'{_esc(_tn)} · 仓位上限 {_esc(_tc)}</div>')
     headline_html = f'''
     <div class="dbd-headline">
       <div class="dbd-hbox dbd-hbox-primary">
         <div class="dbd-hlbl">{headline_label}</div>
         <div class="dbd-hbig">{headline_value}{pick_html}</div>
         <div class="dbd-hsub">{headline_sub}</div>
+        {trend_tag}
         {leader_tag}
       </div>
       <div class="dbd-hbox dbd-gauge-wrap">

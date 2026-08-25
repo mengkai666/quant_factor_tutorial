@@ -192,7 +192,25 @@ def _render_dashboard_entry(dashboard_date):
   </a>'''
 
 
-def _render_index(reports, updated_at, summary=None, dashboard_date=None):
+def _render_dragon_entry(dragon_date):
+    """在决策看板入口卡下方插入的"龙头接替·监管周期"入口卡. dragon_date 为空则返回空.
+
+    首页在 site/ 根目录, 子页在 site/dragon/latest.html, 相对链接 dragon/latest.html 成立.
+    """
+    if not dragon_date:
+        return ''
+    return f'''
+  <a class="dragon-entry" href="dragon/latest.html">
+    <div class="de-left">
+      <div class="de-label">龙头接替 · 监管周期</div>
+      <div class="de-title">接替谱系 + 监管阶梯 + 情绪崩溃指标</div>
+      <div class="de-sub">当前周期谱系 · {dragon_date} · 停牌孵化链全景</div>
+    </div>
+    <div class="de-right">查看谱系 →</div>
+  </a>'''
+
+
+def _render_index(reports, updated_at, summary=None, dashboard_date=None, dragon_date=None):
     """生成首页 HTML。reports: [(date_str, filename)] 已按日期倒序。
 
     dashboard_date: 提供后在首页顶部插入"当日决策看板"卡片入口。
@@ -308,6 +326,18 @@ def _render_index(reports, updated_at, summary=None, dashboard_date=None):
   .de-title {{ color: #e6edf3; font-size: 16px; font-weight: 700; margin-top: 3px; }}
   .de-sub {{ color: #8b949e; font-size: 12px; margin-top: 4px; }}
   .de-right {{ color: #58a6ff; font-size: 14px; font-weight: 600; white-space: nowrap; }}
+  .dragon-entry {{
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 20px; text-decoration: none;
+    background: linear-gradient(135deg, #241c14, #2a1d13);
+    border: 1px solid #30363d; border-left: 4px solid #d29922;
+    border-radius: 12px; padding: 18px 24px; margin-bottom: 20px;
+    transition: border-color .15s, transform .15s, box-shadow .15s;
+  }}
+  .dragon-entry:hover {{ border-color: #d29922; transform: translateX(2px);
+    box-shadow: 0 4px 16px rgba(210,153,34,.18); }}
+  .dragon-entry .de-label {{ color: #d29922; }}
+  .dragon-entry .de-right {{ color: #d29922; }}
   footer {{ margin-top: 48px; color: #6e7681; font-size: 12px; text-align: center; }}
 </style>
 </head>
@@ -321,6 +351,8 @@ def _render_index(reports, updated_at, summary=None, dashboard_date=None):
   {verdict_html}
 
   {_render_dashboard_entry(dashboard_date)}
+
+  {_render_dragon_entry(dragon_date)}
 
   <div class="hero">
     <div class="hero-info">
@@ -340,7 +372,8 @@ def _render_index(reports, updated_at, summary=None, dashboard_date=None):
 </html>'''
 
 
-def publish(output_html, site_dir, report_date=None, summary=None, dashboard_html=None):
+def publish(output_html, site_dir, report_date=None, summary=None, dashboard_html=None,
+            dragon_html=None):
     """把 output_html 归档进 site_dir 并重建首页。
 
     Args:
@@ -350,6 +383,8 @@ def publish(output_html, site_dir, report_date=None, summary=None, dashboard_htm
         summary:        可选结论 dict (择时档位 + 数据可信度), 渲染到首页首屏; 缺失则首页为纯归档索引。
         dashboard_html: 可选决策看板 HTML 字符串; 提供后归档到 dashboards/YYYY-MM-DD.html
                         并生成 dashboards/latest.html, 首页顶部加入口。
+        dragon_html:    可选龙头接替·监管周期子页 HTML 字符串; 提供后归档到 dragon/YYYY-MM-DD.html
+                        并生成 dragon/latest.html, 首页看板卡下加入口。为空 (无周期) 则不归档、不挂入口。
 
     Returns:
         (archived_path, index_path) 或 None (源文件不存在时)。
@@ -398,13 +433,28 @@ def publish(output_html, site_dir, report_date=None, summary=None, dashboard_htm
         dashboard_date = date_str
         print(f"  [publish] 已归档决策看板 {date_str} → {dash_archived}")
 
+    # === 龙头接替·监管周期子页归档 (镜像看板归档) ===
+    dragon_date = None
+    if dragon_html:
+        dragon_dir = os.path.join(site_dir, 'dragon')
+        os.makedirs(dragon_dir, exist_ok=True)
+        dragon_archived = os.path.join(dragon_dir, f'{date_str}.html')
+        with open(dragon_archived, 'w', encoding='utf-8') as f:
+            f.write(dragon_html)
+        # dragon/latest.html: 固定链接, 始终等于最新一期谱系页
+        with open(os.path.join(dragon_dir, 'latest.html'), 'w', encoding='utf-8') as f:
+            f.write(dragon_html)
+        dragon_date = date_str
+        print(f"  [publish] 已归档龙头接替谱系 {date_str} → {dragon_archived}")
+
     reports = _scan_reports(reports_dir, max_date=date_str)
     generated_now = datetime.now()
     updated_at = (generated_now.strftime('%Y-%m-%d %H:%M') if _fmt_date(generated_now) <= date_str
                   else f'{date_str}（报告口径）')
     index_path = os.path.join(site_dir, 'index.html')
     with open(index_path, 'w', encoding='utf-8') as f:
-        f.write(_render_index(reports, updated_at, summary, dashboard_date=dashboard_date))
+        f.write(_render_index(reports, updated_at, summary, dashboard_date=dashboard_date,
+                              dragon_date=dragon_date))
 
     print(f"  [publish] 已归档 {date_str} → {archived}")
     print(f"  [publish] 首页已重建 ({len(reports)} 期) → {index_path}")
