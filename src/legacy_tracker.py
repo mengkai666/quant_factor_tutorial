@@ -46,7 +46,7 @@ from paths import (
     DATA_DIR,
     ZT_CACHE_FILE, PRICE_CACHE, INDUSTRY_CACHE,
     SENTIMENT_CACHE, CLS_PLATE_CACHE, OUTPUT_HTML,
-    SITE_DIR, SITE_URL, UNIVERSE_CACHE, QUALITY_REPORT, FETCH_STATUS_CACHE, CALENDAR_CACHE,
+    SITE_DIR, SITE_URL, SECURITY_MASTER_CACHE, UNIVERSE_CACHE, QUALITY_REPORT, FETCH_STATUS_CACHE, CALENDAR_CACHE,
 )
 from market_data import load_analysis_price_view
 from pipeline.data_pipeline import run_preflight_gate
@@ -75,6 +75,7 @@ def _load_name_resolution(classified=None, latest_limit=None) -> NameResolution:
 
     return resolve_names(
         universe=read_csv(UNIVERSE_CACHE),
+        security_master=read_csv(SECURITY_MASTER_CACHE),
         classified=classified,
         latest_limit=latest_limit,
         industry=read_csv(INDUSTRY_CACHE),

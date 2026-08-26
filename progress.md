@@ -45,3 +45,18 @@
 - 修正主流程在 security master 不完整或证券池为空时的覆盖率计算，避免虚高覆盖率绕过质量闸门。
 - 独立看板和内嵌看板首屏提前展示数据质量；连板卡片展示样本可信度和状态原因。
 - 验证：`pytest -q` 通过，230 passed。
+
+## 2026-08-17（端到端数据完整性修复）
+
+- 在 `codex/fix-github-chinese-stock-names` 隔离分支继续工作，主工作区未提交修改保持不动。
+- 已确认两个参考项目为 `tickflow-stock-panel` 与 `ai_quant_trade`，开始提取可复用的数据契约和失败处理模式。
+- 已完成第一批中文名称与历史/前复权价格兼容修复，提交为 `48bd804`；本阶段继续审计全链路旁路与发布门禁。
+- 完成名称主数据统一：主报告、legacy 报告和个股代表均接入 `security_master`，并保留 limit pool 的当日名称最高优先级。
+- 完成四象限结构化代表股透传及 `report-integrity/v1` HTML 元数据，发布前检查日期、板块、代表股、中文名称、价格覆盖率、核心阻断和降级披露。
+- `publish_site.publish()` 已改为任何站点写入前强制验证；无效报告不会创建归档、latest、index 或 dashboard。
+- GitHub Actions 发布失败会终止任务，Pages 部署前再次验证主报告与归档报告；邮件只在发布成功后发送。
+- 修复旧测试受真实证券主表污染的问题，改为显式注入测试名称解析；修复 `legacy_tracker.py` 漏导入 `SECURITY_MASTER_CACHE`。
+- 最终审查进一步修正个股代表的 `security_master` 来源标签，并将降级披露门禁收紧为逐模块校验；新增回归测试先失败后通过。
+- 报告相关回归验证：128 passed；随后全量验证：358 passed，4 个既有警告（2 个 pandas FutureWarning、2 个 BeautifulSoup/lxml DeprecationWarning）。
+- 编译验证：`python -m compileall -q src tools tests` 退出码 0。
+- 真实缓存冷环境验证：`industry_cache.csv` 缺失，四象限代表股 24 条（每象限 6 条），中文名称覆盖率 100%，代码兜底 0，价格覆盖率 100%，最终 HTML `validate_rendered_report()` 返回 `ok=True`。

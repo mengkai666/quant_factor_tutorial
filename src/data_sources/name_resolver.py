@@ -16,7 +16,7 @@ class NameResolution:
     conflicts: list[dict[str, object]]
 
 
-_SOURCE_PRIORITY = ("industry", "classified", "universe", "limit_pool")
+_SOURCE_PRIORITY = ("industry", "classified", "universe", "security_master", "limit_pool")
 
 
 def _column(frame: pd.DataFrame, candidates: Iterable[str]) -> str | None:
@@ -52,13 +52,14 @@ def _rows(frame, source: str):
     return result
 
 
-def resolve_names(*, universe=None, classified=None, latest_limit=None,
+def resolve_names(*, universe=None, security_master=None, classified=None, latest_limit=None,
                   industry=None) -> NameResolution:
     """Return names using current data first and preserve source conflicts."""
     candidates: dict[str, list[tuple[str, str]]] = {}
     frames = (
         (industry, "industry"),
         (universe, "universe"),
+        (security_master, "security_master"),
         (classified, "classified"),
         (latest_limit, "limit_pool"),
     )

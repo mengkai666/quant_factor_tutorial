@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """报表层纯逻辑契约测试。"""
 import json
+import pytest
 import os
 import sys
 
@@ -894,7 +895,10 @@ def test_mainline_ladder_excludes_non_tradeable_security_names():
         {"代码": "sz000002", "名称": "*ST传智", "细分板块": "AI应用", "大主线": "AI应用"},
     ])
 
-    ladder = report.build_mainline_ladder(price_df, classified)
+    name_resolution = report.resolve_names(classified=classified)
+    ladder = report.build_mainline_ladder(
+        price_df, classified, name_resolution=name_resolution
+    )
     names = [row["name"] for rows in ladder.values() for row in rows]
 
     assert "正常股份" in names
@@ -1435,7 +1439,88 @@ def test_turning_name_resolution_prefers_security_master_over_stale_industry(tmp
     names = stock_representatives._load_name_resolution()
 
     assert names.names["sz003032"] == "传智教育"
-    assert names.sources["sz003032"] == "universe"
+    assert names.sources["sz003032"] == "security_master"
+
+
+def test_stock_representative_returns_stitch_legacy_qfq_history(tmp_path, monkeypatch):
+    import pandas as pd
+    import stock_representatives
+
+    price_cache = tmp_path / "price.csv"
+    pd.DataFrame([
+        {"date": "2026-07-17", "code": "sh600001", "close_legacy": 10.0, "close_qfq": None},
+        {"date": "2026-08-07", "code": "sh600001", "close_legacy": 20.0, "close_qfq": 40.0},
+    ]).to_csv(price_cache, index=False)
+    monkeypatch.setattr(stock_representatives, "PRICE_CACHE", str(price_cache))
+
+    returns = stock_representatives._phase_returns({"底部至今": ("2026-07-17", "2026-08-07")})
+
+    assert round(float(returns.loc["sh600001", "底部至今"]), 2) == 100.0
+
+
+def test_stock_representatives_keep_chinese_names_without_reliable_industry_cache(tmp_path, monkeypatch):
+    import pandas as pd
+    import stock_representatives
+    from data_sources.name_resolver import NameResolution
+
+    returns = pd.DataFrame({
+        "下跌段": {
+            "sh600001": -5.0,
+            "sh600002": -20.0,
+            "sh600003": -4.0,
+            "sh600004": -3.0,
+            "sh600005": -25.0,
+        },
+        "底部至今": {
+            "sh600001": 50.0,
+            "sh600002": 45.0,
+            "sh600003": 0.0,
+            "sh600004": -20.0,
+            "sh600005": -30.0,
+        },
+    })
+    monkeypatch.setattr(stock_representatives, "_phase_returns", lambda _phases: returns)
+    monkeypatch.setattr(
+        stock_representatives,
+        "_zt_stats",
+        lambda _since: pd.DataFrame(columns=["code6", "涨停次数", "最高连板"]),
+    )
+    monkeypatch.setattr(
+        stock_representatives,
+        "_load_name_resolution",
+        lambda: NameResolution(
+            names={"sh600001": "百花医药", "sh600002": "蓝盾光电"},
+            sources={"sh600001": "universe", "sh600002": "universe"},
+            conflicts=[],
+        ),
+    )
+
+    scenarios = {
+        "stale": pd.DataFrame([
+            {"code": "sh600001", "name": "sh600001", "industry": "C39计算机、通信和其他电子设备制造业"},
+            {"code": "sh600002", "name": "sh600002", "industry": "C36汽车制造业"},
+        ]),
+        "missing": None,
+    }
+    for scenario, industry_frame in scenarios.items():
+        industry_cache = tmp_path / f"industry-{scenario}.csv"
+        if industry_frame is not None:
+            industry_frame.to_csv(industry_cache, index=False)
+        monkeypatch.setattr(stock_representatives, "INDUSTRY_CACHE", str(industry_cache))
+
+        reps = stock_representatives.build_representatives(
+            {"下跌段": ("2026-06-22", "2026-07-17"), "底部至今": ("2026-07-17", "2026-08-07")},
+            -9.58,
+            fetch_cap=False,
+        )
+        rows = {
+            row["code"]: row
+            for group in reps["groups"].values()
+            for row in group
+        }
+
+        assert rows["sh600001"]["name"] == "百花医药", scenario
+        assert rows["sh600002"]["name"] == "蓝盾光电", scenario
 
 
 
@@ -1575,3 +1660,83 @@ def test_phase_micro_cycle_failure_does_not_remove_major_phase(monkeypatch):
     assert result["micro_cycle"] == {}
     assert result["micro_chain"] == {}
     assert result["micro_resonance"] == {}
+
+
+def test_main_name_resolution_prefers_security_master_over_universe(tmp_path, monkeypatch):
+    import pandas as pd
+    import 主线强度追踪 as report
+
+    master = tmp_path / "security_master.csv"
+    universe = tmp_path / "stock_universe.csv"
+    industry = tmp_path / "industry_cache.csv"
+    pd.DataFrame([{"code": "sz003032", "name": "传智教育"}]).to_csv(master, index=False)
+    pd.DataFrame([{"code": "sz003032", "name": "旧证券池名称"}]).to_csv(universe, index=False)
+    pd.DataFrame([{"code": "sz003032", "name": "*ST传智"}]).to_csv(industry, index=False)
+
+    monkeypatch.setattr(report, "SECURITY_MASTER_CACHE", str(master))
+    monkeypatch.setattr(report, "UNIVERSE_CACHE", str(universe))
+    monkeypatch.setattr(report, "INDUSTRY_CACHE", str(industry))
+
+    names = report._load_name_resolution()
+
+    assert names.names["sz003032"] == "传智教育"
+    assert names.sources["sz003032"] == "security_master"
+
+
+
+def test_phase_build_returns_structured_representatives(monkeypatch):
+    import pandas as pd
+    import phase_resonance
+    import stock_representatives
+
+    det = {
+        "latest": {"date": "2026-08-07", "close": 3600.0},
+        "phases": {"下跌段": ("2026-07-01", "2026-07-15"), "底部至今": ("2026-07-15", "2026-08-07")},
+        "drawdown": -12.0,
+        "index_series": [],
+    }
+    table = pd.DataFrame([
+        {"板块": "教育", "下跌段": -2.0, "底部至今": 12.0, "量比": 1.2, "距顶": -1.0}
+    ])
+    representatives = {
+        "groups": {"独立主线": [{"code": "sz003032", "name": "传智教育"}]}
+    }
+
+    monkeypatch.setattr(phase_resonance, "fetch_index", lambda: object())
+    monkeypatch.setattr(phase_resonance, "detect_phases", lambda _idx: det)
+    monkeypatch.setattr(phase_resonance, "fetch_sectors", lambda *_args, **_kwargs: {"教育": table})
+    monkeypatch.setattr(phase_resonance, "sector_table", lambda *_args: table)
+    monkeypatch.setattr(phase_resonance, "quadrants", lambda *_args: {"独立主线": table})
+    monkeypatch.setattr(phase_resonance, "market_breadth", lambda _det, *_a, **_kw: {})
+    monkeypatch.setattr(phase_resonance, "build_turning_summary", lambda *_args: {})
+    monkeypatch.setattr(phase_resonance, "_attach_micro_cycle", lambda result, *_args: result)
+    monkeypatch.setattr(stock_representatives, "build_representatives", lambda *_args: representatives)
+    monkeypatch.setattr(stock_representatives, "render_representatives_html", lambda payload: "<div>传智教育</div>")
+    monkeypatch.setattr(
+        stock_representatives,
+        "build_turning_stock_leaders",
+        lambda *_args: {"usable": False, "coverage": 0.0, "rows": []},
+    )
+
+    result = phase_resonance._build()
+
+    assert result["representatives"] == representatives
+    assert result["reps_html"] == "<div>传智教育</div>"
+
+
+def test_publish_failure_is_fatal_in_github_actions(monkeypatch):
+    import 主线强度追踪 as report
+
+    monkeypatch.setattr(report, "IS_GITHUB_ACTIONS", True)
+
+    with pytest.raises(RuntimeError, match="integrity failed"):
+        report._handle_publish_failure(RuntimeError("integrity failed"))
+
+
+def test_email_is_blocked_when_site_publish_failed(monkeypatch):
+    import 主线强度追踪 as report
+
+    monkeypatch.setattr(report, "EMAIL_ENABLE", True)
+
+    assert report._should_send_report_email(publish_succeeded=False) is False
+    assert report._should_send_report_email(publish_succeeded=True) is True

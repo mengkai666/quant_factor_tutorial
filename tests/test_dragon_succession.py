@@ -375,9 +375,23 @@ def test_neg_systemic_failure_guardrail(ds):
 
 # ─────────────────────────── ⑪ 集成: publish 归档子页 + 入口卡 ───────────────────────────
 def _make_report(tmp_path, date='2026-08-20'):
+    # publish() 会做发布前完整性门禁, 夹具必须带 report-integrity 元数据, 否则被拦。
+    from report_integrity import build_report_integrity, render_report_integrity_metadata
+    payload = build_report_integrity(
+        report_date=date, market_date=date,
+        phase_result={
+            'quadrants': {'独立主线': pd.DataFrame([{'板块': '教育'}])},
+            'representatives': {'groups': {'独立主线': [{'code': 'sz003032', 'name': '传智教育'}]}},
+        },
+        quality={
+            'status': 'ok', 'critical_blocked': [],
+            'modules': {'price_raw': {'status': 'ok', 'coverage_pct': 99.0, 'source': 'price_cache'}},
+        },
+    )
     p = tmp_path / '主线强度追踪.html'
     p.write_text(f'<html><head><meta name="report-date" content="{date}">'
-                 f'</head><body>x</body></html>', encoding='utf-8')
+                 + render_report_integrity_metadata(payload)
+                 + '</head><body>x</body></html>', encoding='utf-8')
     return str(p)
 
 

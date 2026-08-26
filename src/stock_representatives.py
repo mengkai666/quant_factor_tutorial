@@ -77,10 +77,11 @@ def _load_name_resolution() -> NameResolution:
         industry = pd.read_csv(INDUSTRY_CACHE, dtype=str)
     except Exception:
         pass
-    current = security_master
-    if current is None or current.empty:
-        current = universe
-    return resolve_names(universe=current, industry=industry)
+    return resolve_names(
+        universe=universe,
+        security_master=security_master,
+        industry=industry,
+    )
 
 
 def build_turning_stock_leaders(

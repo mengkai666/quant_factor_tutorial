@@ -196,7 +196,9 @@ jobs:
         import sys
         sys.path.insert(0, "src")
         from publish_site import extract_report_date
+        from report_integrity import validate_rendered_report
 
+        validate_rendered_report("output/主线强度追踪.html")
         report_date = extract_report_date("output/主线强度追踪.html")
         if not report_date:
             raise SystemExit("报告缺少有效 report-date 元数据")
@@ -227,7 +229,9 @@ jobs:
         import sys
         sys.path.insert(0, "src")
         from publish_site import extract_report_date
+        from report_integrity import validate_rendered_report
 
+        validate_rendered_report(sys.argv[1])
         report_date = extract_report_date(sys.argv[1])
         if not report_date:
             raise SystemExit("日期归档缺少有效 report-date 元数据")

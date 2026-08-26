@@ -18,6 +18,7 @@ import os
 import re
 import shutil
 from datetime import datetime
+from report_integrity import validate_rendered_report
 
 
 def _fmt_date(d):
@@ -392,6 +393,8 @@ def publish(output_html, site_dir, report_date=None, summary=None, dashboard_htm
     if not os.path.exists(output_html):
         print(f"  [publish] 源报告不存在, 跳过发布: {output_html}")
         return None
+
+    validate_rendered_report(output_html)
 
     embedded_date = extract_report_date(output_html)
     explicit_date = _fmt_date(report_date) if report_date is not None else None

@@ -645,14 +645,15 @@ def _build(force_fetch=False):
         if p in t.columns and t[p].notna().any():
             ranks[p] = t.nlargest(8, p)[['板块', p, '量比']].to_dict('records')
 
-    # 四象限个股代表 (全市场无偏, 独立模块; 失败静默留空)
+    # 四象限个股代表 (全市场无偏, 独立模块; 失败时保留空结构供发布门禁识别)
+    representatives = {}
     reps_html = ''
     stock_leaders = {"usable": False, "coverage": 0.0, "rows": []}
     try:
         from stock_representatives import (build_representatives,
                                            render_representatives_html)
-        reps_html = render_representatives_html(
-            build_representatives(det['phases'], det['drawdown']))
+        representatives = build_representatives(det['phases'], det['drawdown'])
+        reps_html = render_representatives_html(representatives)
     except Exception as e:
         print(f'  ⚠️ 个股代表计算失败 (不影响板块部分): {e}')
 
@@ -670,6 +671,7 @@ def _build(force_fetch=False):
         'timeline_segments': segments,
         'timeline_names': list(segments.keys()),
         'table': t, 'ranks': ranks, 'quadrants': quadrants(t, det),
+        'representatives': representatives,
         'reps_html': reps_html,
         'corr': corr, 'breadth': market_breadth(det, sub_seg),
         'top_overall': t.nlargest(12, '底部至今').to_dict('records'),
