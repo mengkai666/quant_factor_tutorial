@@ -77,6 +77,25 @@ def test_reconcile_refuses_thin_price_cache_ad():
     assert m.should_adopt_reconciled_ad(615, 4495) is True
     assert m.should_adopt_reconciled_ad(513, 4580) is True
 
+def test_tencent_snapshot_refuses_intraday_close():
+    """盘中的腾讯"当前价"不得当收盘价落库 (2026-08-24 该日 81% 股票被钉成盘中价)。"""
+    import importlib.util
+    from datetime import datetime, timedelta, timezone
+    spec = importlib.util.spec_from_file_location(
+        'mztrack_intraday', os.path.join(_ROOT, 'src', '主线强度追踪.py'))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    bj = timezone(timedelta(hours=8))
+    # 当天盘中: 弃收
+    assert m.is_intraday_snapshot('2026-08-24', datetime(2026, 8, 24, 10, 30, tzinfo=bj)) is True
+    assert m.is_intraday_snapshot('2026-08-24', datetime(2026, 8, 24, 15, 0, tzinfo=bj)) is True
+    # 当天收盘后: 放行
+    assert m.is_intraday_snapshot('2026-08-24', datetime(2026, 8, 24, 15, 5, tzinfo=bj)) is False
+    assert m.is_intraday_snapshot('2026-08-24', datetime(2026, 8, 24, 16, 30, tzinfo=bj)) is False
+    # 补往日 (那天早已收盘) / 空日期: 放行
+    assert m.is_intraday_snapshot('2026-08-21', datetime(2026, 8, 24, 10, 30, tzinfo=bj)) is False
+    assert m.is_intraday_snapshot('', datetime(2026, 8, 24, 10, 30, tzinfo=bj)) is False
+
 
 def test_raw_coverage_guard_handles_empty_filtered_price_cache():
     """CI cold start must not index date on an empty, columnless frame."""

@@ -81,7 +81,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fupan_report import FuPanZhangTingYuanYin
 from time_utils import filter_completed_rows, get_latest_date, get_report_cutoff
 
@@ -2318,6 +2318,34 @@ def _probe_bs_max_date(args):
         sys.stdout = old_stdout
     return max_date
 
+# 收盘护栏阈值: 北京时间 15:05 之前, 腾讯"当前价"还不是收盘价 (14:57~15:00 集合竞价,
+# 留 5 分钟给源端结算)。
+MARKET_CLOSE_GUARD_MINUTE = 15 * 60 + 5
+
+
+def is_intraday_snapshot(trade_date_str, now_bj=None):
+    """腾讯"当前价"此刻能否当 trade_date_str 的收盘价落库。
+
+    背景 (2026-08-24 事故): qt.gtimg.cn 的 parts[3] 是"当前价" —— 收盘后等于收盘价,
+    交易时段内等于实时价。`_fetch_tencent_close` 里的"陈旧快照"判据只拦得住未开盘
+    (报价与缓存最新一日逐股相同) 的场景, 拦不住盘中: 盘中报价与前一日不同, 一路绿灯
+    写进价格缓存。而价格缓存合并保留已有行, 该日一旦落库就再也不会被收盘价覆盖 ——
+    一次盘中运行永久把这一天钉成盘中价。实测 2026-08-24 有 81% 的股票与真实收盘差
+    >0.5% (最大 16.7%), 导致该日 A/D 与阶段收益全错, 邻近各日 0 偏差。
+
+    另一层理由: 下游"当天 advance_decline 校准"以"价格缓存尚无当天数据"为盘中判据
+    (见 sentiment-ad-reconcile 点 4), 盘中就落库会让它误判成已收盘。
+
+    返回 True = 现在还不能落库 (整批弃收, 等收盘后的运行来填)。
+    """
+    if not trade_date_str:
+        return False
+    now = now_bj or datetime.now(timezone(timedelta(hours=8)))
+    if str(trade_date_str) != now.strftime('%Y-%m-%d'):
+        return False  # 补的是往日, 那天早已收盘
+    return now.hour * 60 + now.minute < MARKET_CLOSE_GUARD_MINUTE
+
+
 def _fetch_tencent_close(all_codes, trade_date_str, retry=3, prev_close_map=None):
     """用腾讯行情接口 (qt.gtimg.cn) 批量获取全市场最新收盘价。
     一次请求可取数百只, 全市场 5000+ 只约 2 秒, 且不走系统代理 (直连)。
@@ -2339,6 +2367,11 @@ def _fetch_tencent_close(all_codes, trade_date_str, retry=3, prev_close_map=None
       涨跌幅 (parts[32]) 判据不可靠: 周日的"涨跌幅"实际是周四→周五那笔,
       并非全 0, 会误漏; 身份比对才是能拦住 pre-market 场景的判据。
     """
+    if is_intraday_snapshot(trade_date_str):
+        print(f"      ⏸️ 腾讯快照弃收: {trade_date_str} 尚未收盘, 盘中价不能当收盘价落库 "
+              f"(该日等收盘后的运行来填)")
+        return []
+
     rows = []
     session = requests.Session()
     session.trust_env = False
