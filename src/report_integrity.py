@@ -70,6 +70,26 @@ def _module_disclosure(name: str, item: dict[str, Any]) -> str:
     return f"{name}: {' / '.join(details)}" if details else ""
 
 
+_SECTION_DEGRADATIONS = (
+    ("phase_quadrants", "quadrant_rows", "四象限板块结果为空, 报告不展示该模块"),
+    ("phase_representatives", "representative_rows", "四象限个股代表为空, 报告不展示该模块"),
+)
+
+
+def _section_degradations(quadrant_rows: Any, representative_rows: Any) -> list[tuple[str, str]]:
+    """可选的阶段共振/四象限模块缺段清单(模块名, 披露文案)。"""
+    counts = {"quadrant_rows": quadrant_rows, "representative_rows": representative_rows}
+    items: list[tuple[str, str]] = []
+    for module, key, reason in _SECTION_DEGRADATIONS:
+        try:
+            value = int(counts.get(key) or 0)
+        except (TypeError, ValueError):
+            value = 0
+        if value <= 0:
+            items.append((module, reason))
+    return items
+
+
 def _quality_metrics(quality: Any) -> tuple[float, list[str], list[str], list[str]]:
     quality = quality if isinstance(quality, dict) else {}
     modules = quality.get("modules") if isinstance(quality.get("modules"), dict) else {}
@@ -121,6 +141,14 @@ def build_report_integrity(*, report_date: Any, market_date: Any,
             chinese_count += 1
     coverage = round(chinese_count * 100.0 / len(rows), 2) if rows else 0.0
     price_coverage, critical_blocked, degraded_modules, disclosures = _quality_metrics(quality)
+    # 阶段共振/四象限是可选模块: 数据不足时报告本就整段不渲染。缺段按“已披露降级”处理,
+    # 不再阻断发布 —— 否则一个可选模块哑掉会连带整站与邮件断更(2026-08 实测近半数交易日会中招);
+    # 但必须在元数据里显式声明, 由下游 undisclosed 检查兜底, 不允许静默省略。
+    for module, reason in _section_degradations(quadrant_rows, len(rows)):
+        degraded_modules.append(module)
+        disclosures.append(f"{module}: {reason}")
+    degraded_modules = sorted(set(degraded_modules))
+    disclosures = list(dict.fromkeys(disclosures))
     return {
         "schema": "report-integrity/v1",
         "report_date": _date(report_date),
@@ -152,15 +180,12 @@ def validate_report_integrity(payload: Any, *, minimum_chinese_name_coverage: fl
         errors.append(
             f"报告日期 {payload.get('report_date')} 与行情日期 {payload.get('market_date')} 不一致"
         )
-    if int(metrics.get("quadrant_rows") or 0) <= 0:
-        errors.append("四象限板块结果为空")
-    if int(metrics.get("representative_rows") or 0) <= 0:
-        errors.append("四象限个股代表为空")
+    representative_rows = int(metrics.get("representative_rows") or 0)
     fallback_count = int(metrics.get("code_fallback_count") or 0)
     if fallback_count:
         errors.append(f"发现 {fallback_count} 条证券代码代替中文名称")
     chinese_coverage = float(metrics.get("chinese_name_coverage") or 0.0)
-    if chinese_coverage < float(minimum_chinese_name_coverage):
+    if representative_rows > 0 and chinese_coverage < float(minimum_chinese_name_coverage):
         errors.append(
             f"中文名称覆盖率 {chinese_coverage:.2f}% 低于 {float(minimum_chinese_name_coverage):.2f}%"
         )
@@ -188,6 +213,9 @@ def validate_report_integrity(payload: Any, *, minimum_chinese_name_coverage: fl
     ]
     if undisclosed:
         errors.append("降级来源未披露: " + ", ".join(undisclosed))
+    for module, reason in _section_degradations(metrics.get("quadrant_rows"), representative_rows):
+        if module not in degraded:
+            errors.append(f"{reason}, 但未在完整性元数据中披露")
 
     if errors:
         raise ReportIntegrityError("报告完整性校验失败: " + "；".join(errors))

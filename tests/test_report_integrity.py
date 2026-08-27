@@ -45,7 +45,7 @@ def test_report_integrity_accepts_complete_structured_report():
     assert checked["metrics"]["chinese_name_coverage"] == 100.0
 
 
-def test_report_integrity_rejects_code_fallback_and_empty_quadrants():
+def test_report_integrity_rejects_code_fallback():
     from report_integrity import (
         ReportIntegrityError,
         build_report_integrity,
@@ -68,8 +68,55 @@ def test_report_integrity_rejects_code_fallback_and_empty_quadrants():
         validate_report_integrity(payload)
 
     message = str(exc.value)
-    assert "四象限" in message
     assert "证券代码代替中文名称" in message
+
+
+def test_report_integrity_treats_missing_phase_section_as_disclosed_degradation():
+    """阶段共振缺段(可选模块)只降级披露, 不能连带阻断整站发布与邮件。"""
+    from report_integrity import build_report_integrity, validate_report_integrity
+
+    payload = build_report_integrity(
+        report_date="2026-08-24",
+        market_date="2026-08-24",
+        phase_result={},
+        quality=_quality(),
+    )
+
+    metrics = payload["metrics"]
+    assert metrics["quadrant_rows"] == 0
+    assert metrics["representative_rows"] == 0
+    assert metrics["chinese_name_coverage"] == 0.0
+    assert "phase_quadrants" in metrics["degraded_modules"]
+    assert "phase_representatives" in metrics["degraded_modules"]
+    assert any(item.startswith("phase_quadrants:") for item in metrics["quality_disclosures"])
+
+    assert validate_report_integrity(payload)["ok"] is True
+
+
+def test_report_integrity_rejects_undisclosed_missing_phase_section():
+    """缺段可以发, 但不许瞒 —— 元数据里没披露就必须拦。"""
+    from report_integrity import ReportIntegrityError, validate_report_integrity
+
+    payload = {
+        "schema": "report-integrity/v1",
+        "report_date": "2026-08-24",
+        "market_date": "2026-08-24",
+        "metrics": {
+            "quadrant_rows": 0,
+            "representative_rows": 0,
+            "code_fallback_count": 0,
+            "chinese_name_coverage": 0.0,
+            "price_coverage_pct": 99.0,
+            "critical_blocked": [],
+            "degraded_modules": [],
+            "quality_disclosures": [],
+        },
+    }
+
+    with pytest.raises(ReportIntegrityError) as exc:
+        validate_report_integrity(payload)
+
+    assert "未在完整性元数据中披露" in str(exc.value)
 
 
 def test_report_integrity_rejects_market_date_mismatch_and_low_price_coverage():
