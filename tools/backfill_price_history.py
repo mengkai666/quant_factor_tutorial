@@ -319,10 +319,17 @@ def _fetch_sina(codes: list[str], dates: list[str], workers: int) -> pd.DataFram
     session = requests.Session()
     session.trust_env = False  # 腾讯/东财要走代理, 新浪直连即可, 别被代理拖慢
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        for got in pool.map(
+        # 逐 500 只报一次进度且 flush: 限速跑全市场要 ~12 分钟, 被 nohup 重定向时
+        # python 会把 stdout 全缓冲到进程结束, 中途 log 是 0 字节, 看不出还活着。
+        for i, got in enumerate(pool.map(
                 lambda c: _fetch_sina_one(session, c, datalen, keep, limiter, stats),
-                codes):
+                codes), start=1):
             rows.extend(got)
+            if i % 500 == 0 or i == len(codes):
+                el = max(time.time() - t0, 0.1)
+                print(f'     {i}/{len(codes)} 只, {len(rows)} 行, {el:.0f}s '
+                      f'({i / el:.1f} 股/s, 456×{stats.get("throttled", 0)})',
+                      flush=True)
     elapsed = max(time.time() - t0, 0.1)
     out = pd.DataFrame(rows, columns=CANONICAL)
     days = out['date'].nunique() if len(out) else 0
