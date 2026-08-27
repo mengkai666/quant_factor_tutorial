@@ -3187,9 +3187,15 @@ def update_price_cache(classified_df, return_meta=False, universe_codes=None):
     _raw_now = _count_raw_codes_on_date(
         _price_df_refreshed, latest_zt_str, all_codes
     )
-    _skip_baostock = _only_latest_missing and _raw_now >= len(all_codes) * 0.95
+    # 没有任何缺失交易日 (缓存已含报告日, 只是 qfq 有空格) 与"只缺最新一天且 raw 已补全"
+    # 同样不需要 baostock: 前者根本没有要抓的日子, 后者 raw 已到手, qfq 由锚点恒等式补
+    # (见 src/anchor_qfq.py)。baostock 已被黑名单, 每轮白等登录探测 2s + 数据预检 5s。
+    _nothing_missing = (not price_df.empty) and not _missing_trading
+    _skip_baostock = ((_only_latest_missing or _nothing_missing)
+                      and _raw_now >= len(all_codes) * 0.95)
     if _skip_baostock:
-        print("    ⏭️ 腾讯快照已补全今日 raw，跳过 baostock，直接进入 qfq 补缺")
+        _why = '缓存已含报告日, 无缺失交易日' if _nothing_missing else '腾讯快照已补全今日 raw'
+        print(f"    ⏭️ {_why}, 跳过 baostock, 直接进入 qfq 补缺")
     if not _skip_baostock:
         try:
             import multiprocessing
@@ -3264,8 +3270,9 @@ def update_price_cache(classified_df, return_meta=False, universe_codes=None):
     else:
         new_df = normalize_price_frame(None)
 
-    combined_df, _anchor_filled = fill_anchor_day_qfq(
+    combined_df, _anchor_qfq_filled = fill_anchor_day_qfq(
         combined_df, target_report_date_str, codes=all_codes)
+    _anchor_filled = _anchor_qfq_filled
     if _anchor_filled:
         print(f"    ⚡ 报告日 qfq 由 raw 恒等补齐 {_anchor_filled} 只 (前复权锚点=当日, 零网络)")
 
@@ -3289,12 +3296,15 @@ def update_price_cache(classified_df, return_meta=False, universe_codes=None):
             "保持 missing 并交由质量门禁降级"
         )
 
-    if new_rows or fallback_meta.get('fallback_covered'):
+    # 锚定日 qfq 补齐也要落库: 值与网络返回逐股相同 (见 src/anchor_qfq.py), 不落的话
+    # 磁盘上今日 qfq 一直缺, 每轮都要重算, 下游查 qfq 覆盖率的体检也一直报缺。
+    if new_rows or fallback_meta.get('fallback_covered') or _anchor_qfq_filled:
         combined_df.to_csv(PRICE_CACHE, index=False)
         trim_cache_file(PRICE_CACHE, date_col='date', encoding='utf-8')
         print(
             f"  ✅ 价格缓存已更新, baostock 新增 {len(new_df)} 条, "
-            f"备用源补齐 {fallback_meta.get('fallback_covered', 0)} 只 "
+            f"备用源补齐 {fallback_meta.get('fallback_covered', 0)} 只, "
+            f"锚定日 qfq 恒等补齐 {_anchor_qfq_filled} 只 "
             f"(耗时 {elapsed:.1f}s)"
         )
     else:
