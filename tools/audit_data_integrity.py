@@ -243,6 +243,41 @@ def audit_zt(price_dates_compact: set, quiet: bool) -> list:
     else:
         print('  ✅ 无非交易日污染 (每个涨停日在价格缓存均有数据)')
 
+    # 陈旧快照 / 残缺名单 (2026-08-27 加)。涨停池接口只对当日有效, 盘前跑或失败重试
+    # 会把前一交易日的名单写到当日名下。这一判据不需要价格真源, 所以能覆盖价格缓存
+    # 区间之外的老日子 (实测 20260317 就是靠它现形的)。两条指标, 均只在两日名单都
+    # >= 20 只时才判:
+    #   ① Jaccard >= 0.95  => 与前一日逐条相同, 就是陈旧快照 (正常相邻日中位 0.12,
+    #      99 分位 0.47);
+    #   ② 当日名单 100% 落在前一日名单内 => 该日只剩连板股、首板全无, 是修复后的
+    #      残缺名单或被截断的抓取 (正常相邻日该比例中位 0.21, 90 分位 0.36)。
+    zt_only = zt[zt.get('类型', 'ZT').astype(str).str.strip() == 'ZT'] if '类型' in zt.columns else zt
+    lists = {d: set(g['代码'].astype(str).str.strip())
+             for d, g in zt_only.groupby('日期')}
+    dup_days, residual_days = [], []
+    for index in range(1, len(zt_dates)):
+        today, prev = zt_dates[index], zt_dates[index - 1]
+        cur, before = lists.get(today, set()), lists.get(prev, set())
+        if len(cur) < 20 or len(before) < 20:
+            continue
+        union = cur | before
+        if union and len(cur & before) / len(union) >= 0.95:
+            dup_days.append(f'{today}(=前一日 {prev})')
+        elif cur and cur <= before:
+            residual_days.append(f'{today}({len(cur)} 只全在 {prev} 名单内)')
+    if dup_days:
+        defects.append(f'涨停缓存陈旧快照 {len(dup_days)} 天')
+        print(f'  ❌ 名单与前一交易日逐条相同 {len(dup_days)} 天 (陈旧快照, '
+              f'真名单已丢失): {", ".join(dup_days)}')
+    else:
+        print('  ✅ 无陈旧快照 (无一天名单与前一交易日逐条相同)')
+    if residual_days:
+        head = residual_days if not quiet else residual_days[:6]
+        print(f'  ℹ️ 名单全部落在前一日名单内 {len(residual_days)} 天 (只剩连板股、'
+              f'首板缺失, 修复留下的残缺名单): {", ".join(head)}'
+              + (' ...' if quiet and len(residual_days) > 6 else ''))
+
+
     missing = sorted(price_dates_compact - set(zt_dates))
     if missing:
         # 不算缺陷: 涨停池接口只对当日有效, 历史日无法回补 (见 memory)

@@ -379,6 +379,31 @@ def _trim_future_cache(zt_data, dt_data, latest_closed_date):
     )
 
 
+STALE_POOL_MIN_CODES = 20    # 名单太短(如跌停只有 1-2 只)不足以判重, 直接放过
+STALE_POOL_JACCARD = 0.95    # 与前一交易日名单重合到这个程度, 判为陈旧快照
+
+
+def is_stale_pool_snapshot(new_codes, prev_codes) -> bool:
+    """新抓到的涨停名单是不是其实是**前一交易日**的陈旧快照。
+
+    涨停池接口只对当日有效 (见 zt-pool-api-no-history)。盘前跑或失败重试时它会返回
+    上一交易日的名单, 被原样写到当日名下 —— 2026-08-27 用价格全量体检查出 12 天
+    中招 (真名单从此丢失, 接口无历史也补不回来), 修复工具 tools/repair_limit_cache.py。
+
+    判据是相邻两日名单的重合度。连板股天然让相邻日有交集, 但真实的两日名单不可能
+    逐条相同: 修复后 192 对相邻日 Jaccard 中位数 0.12, 90 分位 0.18, 99 分位 0.47;
+    中招的那几天则是 1.00。0.95 离正常分布极远, 不会误伤连板潮。
+    """
+    new_set = {str(code).strip() for code in new_codes if str(code).strip()}
+    prev_set = {str(code).strip() for code in prev_codes if str(code).strip()}
+    if len(new_set) < STALE_POOL_MIN_CODES or len(prev_set) < STALE_POOL_MIN_CODES:
+        return False
+    union = new_set | prev_set
+    if not union:
+        return False
+    return len(new_set & prev_set) / len(union) >= STALE_POOL_JACCARD
+
+
 def fetch_zt_pool_data(n_trading_days=120, provider=None, calendar_provider=None):
     """Fetch historical ZT/DT pools through the canonical LimitPoolProvider."""
     from data_sources.fetch_status import FetchStatusStore
@@ -405,6 +430,14 @@ def fetch_zt_pool_data(n_trading_days=120, provider=None, calendar_provider=None
     new_dates_fetched = 0
     fetched_results = []
 
+    # 逐日的"上一交易日", 供陈旧快照闸门比对 (candidate_dates 由近到远)
+    prev_trading_day = {
+        day: candidate_dates[index + 1]
+        for index, day in enumerate(candidate_dates)
+        if index + 1 < len(candidate_dates)
+    }
+    stale_skipped = []
+
     print(f"\n📥 正在获取最近 {n_trading_days} 个交易日的涨停/跌停数据...")
     if dates_to_fetch:
         results = provider.fetch_history([f"{d[:4]}-{d[4:6]}-{d[6:8]}" for d in dates_to_fetch])
@@ -418,6 +451,22 @@ def fetch_zt_pool_data(n_trading_days=120, provider=None, calendar_provider=None
             data = data.copy()
             zt_part = data[data["pool_type"] == "ZT"] if "pool_type" in data.columns else pd.DataFrame()
             dt_part = data[data["pool_type"] == "DT"] if "pool_type" in data.columns else pd.DataFrame()
+
+            # 陈旧快照闸门: 抓到的名单与前一交易日逐条相同 => 接口给的是昨天的数据,
+            # 不入库 (下次运行该日仍在 dates_to_fetch 里, 会自动重试)。宁可这天空着,
+            # 也不让错标的名单污染连板数/天梯/龙头接替。
+            fetched_codes = (zt_part["code"].astype(str).str[2:].tolist()
+                             if not zt_part.empty else [])
+            previous_day = prev_trading_day.get(canonical)
+            previous_frame = zt_data.get(previous_day) if previous_day else None
+            previous_codes = (previous_frame["代码"].astype(str).tolist()
+                              if previous_frame is not None and not previous_frame.empty
+                              else [])
+            if is_stale_pool_snapshot(fetched_codes, previous_codes):
+                stale_skipped.append(canonical)
+                print(f"  ⛔ {canonical} | 名单与前一日 {previous_day} 逐条相同, "
+                      f"判为陈旧快照, 不入库 (下次运行重试)")
+                continue
             if result.status in {FetchStatus.SUCCESS, FetchStatus.ZERO} or not zt_part.empty:
                 zt_data[canonical] = pd.DataFrame({
                     "代码": zt_part["code"].astype(str).str[2:].tolist(),
@@ -436,6 +485,9 @@ def fetch_zt_pool_data(n_trading_days=120, provider=None, calendar_provider=None
                 print(f"  ⚠️ {canonical} | {result.status.value}: {result.message}")
 
         _save_limit_pool_metadata(fetched_results)
+        if stale_skipped:
+            print(f"  ⚠️ {len(stale_skipped)} 天因陈旧快照被拒: "
+                  + " ".join(stale_skipped))
 
     if new_dates_fetched > 0 or cache_changed:
         _save_cache(zt_data, dt_data)
