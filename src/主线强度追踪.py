@@ -77,6 +77,7 @@ from ai_rebound import run_guarded_ai
 from market_stance import classify_market_stance, render_stance_html
 from screener import generate_focus_pool
 import price_gap_memo
+from anchor_qfq import fill_anchor_day_qfq
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -3133,6 +3134,13 @@ def update_price_cache(classified_df, return_meta=False, universe_codes=None):
                 source_events.append('tencent')
                 tx_df = pd.DataFrame(tx_rows)
                 price_cache_all_df = merge_price_frames(price_cache_all_df, tx_df)
+                # 报告日的前复权恒等于不复权 (锚点就在这一根 K 线上), 零网络补齐。
+                # 不补的话下面 qfq 覆盖判定不过, 会为 5000+ 只股票逐股去抓 qfq,
+                # 抓回来的值与 raw 逐股相同 —— 纯白跑十几分钟。见 src/anchor_qfq.py。
+                price_cache_all_df, _anchor_filled = fill_anchor_day_qfq(
+                    price_cache_all_df, latest_zt_str, codes=all_codes)
+                if _anchor_filled:
+                    print(f"    ⚡ 报告日 qfq 由 raw 恒等补齐 {_anchor_filled} 只 (前复权锚点=当日, 零网络)")
                 price_df = filter_completed_rows(
                     price_cache_all_df,
                     'date',
@@ -3255,6 +3263,11 @@ def update_price_cache(classified_df, return_meta=False, universe_codes=None):
         combined_df = merge_price_frames(combined_df, new_df)
     else:
         new_df = normalize_price_frame(None)
+
+    combined_df, _anchor_filled = fill_anchor_day_qfq(
+        combined_df, target_report_date_str, codes=all_codes)
+    if _anchor_filled:
+        print(f"    ⚡ 报告日 qfq 由 raw 恒等补齐 {_anchor_filled} 只 (前复权锚点=当日, 零网络)")
 
     combined_df, fallback_meta = _fill_price_gaps_with_provider(
         combined_df,
