@@ -1464,7 +1464,10 @@ def is_ad_incomplete(up, down):
         return True
 
 
-def should_adopt_reconciled_ad(new_up, new_dn):
+AD_NARROWER_TOLERANCE = 0.98
+
+
+def should_adopt_reconciled_ad(new_up, new_dn, cur_up=None, cur_dn=None):
     """历史 A/D 对账是否可采用价格缓存这一天的家数。
 
     价格缓存是 up/down 的唯一真源, 但"真源存在"不等于"真源可信":
@@ -1475,7 +1478,25 @@ def should_adopt_reconciled_ad(new_up, new_dn):
     """
     if new_up is None or new_dn is None:
         return False
-    return not is_ad_incomplete(new_up, new_dn)
+    if is_ad_incomplete(new_up, new_dn):
+        return False
+    # 第二道 (2026-08-27 加): 真源过了 4000 门槛, 仍可能比已有值窄一截。
+    # 4000 只是"绝对残缺"的下限, 拦不住"相对变窄": 本机回补的价格缓存只抓到
+    # 4588 只 (北交所 333 只 baostock 不收录 + 限流漏抓 617 只), 对账出的 A/D
+    # 合计 ~4450, 而这些日子原本存着当日线上跑的全市场值 (合计 ~4870, universe
+    # ~4900)。两者方向一致, 只是口径窄了 ~400 只 —— 无条件覆盖等于用窄口径
+    # 替换宽口径, 一路把历史磨薄。故已有值本身完整时, 真源明显更窄就不采用。
+    # 阈值 0.98: 实测这批变窄日落在 90.7%~97.4%, 全部拦下; 而同口径的真纠错
+    # (20260824 盘中价 → 收盘价) 合计只动 2 只 (99.96%), 20260825 也有 99.3%, 照旧放行。
+    if cur_up is not None and cur_dn is not None and not is_ad_incomplete(cur_up, cur_dn):
+        try:
+            new_total = float(new_up) + float(new_dn)
+            cur_total = float(cur_up) + float(cur_dn)
+        except (ValueError, TypeError):
+            return True
+        if cur_total > 0 and new_total < cur_total * AD_NARROWER_TOLERANCE:
+            return False
+    return True
 
 
 def generate_rebound_analysis(advance_decline, sentiment_df, echelon, market_state=None):
@@ -5921,8 +5942,9 @@ def _main_impl():
             cur_dn = float(cur_dn_raw) if pd.notna(cur_dn_raw) else None
             if res and res.get('ad_available') and res.get('up') is not None and res.get('down') is not None:
                 new_up, new_dn = res['up'], res['down']
-                if not should_adopt_reconciled_ad(new_up, new_dn):
-                    # 真源残缺: 已有完整值保持不动, 已有值也残缺/缺失才标未就位。
+                if not should_adopt_reconciled_ad(new_up, new_dn, cur_up, cur_dn):
+                    # 真源残缺或明显窄于已有值: 已有完整值保持不动,
+                    # 已有值也残缺/缺失才标未就位。
                     # 宁可留"未就位"也绝不用 1/6 市场的家数覆盖真实历史。
                     if cur_up is None or cur_dn is None or is_ad_incomplete(cur_up, cur_dn):
                         sentiment_df.at[idx, 'ad_available'] = False
@@ -5942,7 +5964,7 @@ def _main_impl():
 
         print(f"  ✅ 最近 {RECENT_FILL_WINDOW} 交易日 A/D 对账完成: 更新 {reconciled} 天"
               + (f", {uncovered} 天价格缓存尚未覆盖 (待下次运行补齐)" if uncovered else ", 数据完整")
-              + (f", {thin} 天真源宽度不足已拒写 (需先回补价格缓存)" if thin else ""))
+              + (f", {thin} 天真源宽度不足/窄于已有值已拒写 (需先回补价格缓存)" if thin else ""))
 
         # 当日涨停总数以不可变事实池为准。FuPan 汇总、行情宽度和历史缓存
         # 只能补充其他字段，不能让旧的 74 覆盖已校验事实池的 83。

@@ -77,6 +77,25 @@ def test_reconcile_refuses_thin_price_cache_ad():
     assert m.should_adopt_reconciled_ad(615, 4495) is True
     assert m.should_adopt_reconciled_ad(513, 4580) is True
 
+
+def test_reconcile_refuses_narrower_than_existing_ad():
+    """真源过了 4000 门槛但明显窄于已有完整值时, 不得覆盖 (口径变窄, 不是纠错)。"""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        'mztrack_narrower', os.path.join(_ROOT, 'src', '主线强度追踪.py'))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    # 实测 20260327: 已有 3943/929 (合计 4872, 全市场) vs 回补缓存 3649/800
+    # (合计 4449, 只抓到 4588 只) —— 方向一致但窄 400 只, 拒写
+    assert m.should_adopt_reconciled_ad(3649, 800, 3943, 929) is False
+    # 已有值本身残缺时不受此闸约束, 该覆盖照旧覆盖
+    assert m.should_adopt_reconciled_ad(3649, 800, 71, 779) is True
+    # 同口径的纠错 (合计相当, 方向翻转) 必须放行: 20260824 盘中价钉出的错值
+    assert m.should_adopt_reconciled_ad(1554, 3767, 2407, 2916) is True
+    # 不传已有值 = 老调用方, 行为不变
+    assert m.should_adopt_reconciled_ad(3649, 800) is True
+
+
 def test_tencent_snapshot_refuses_intraday_close():
     """盘中的腾讯"当前价"不得当收盘价落库 (2026-08-24 该日 81% 股票被钉成盘中价)。"""
     import importlib.util
@@ -95,6 +114,63 @@ def test_tencent_snapshot_refuses_intraday_close():
     # 补往日 (那天早已收盘) / 空日期: 放行
     assert m.is_intraday_snapshot('2026-08-21', datetime(2026, 8, 24, 10, 30, tzinfo=bj)) is False
     assert m.is_intraday_snapshot('', datetime(2026, 8, 24, 10, 30, tzinfo=bj)) is False
+
+
+def test_ad_requires_same_price_basis_on_both_days(tmp_path, monkeypatch):
+    """跨口径的两天不许相减: 有共同口径就用它, 一个都没有则该日判未覆盖。
+
+    D1 只有 raw, D2 同时有 raw 和 legacy, D3 只有 legacy。
+    D2 应走 raw→raw (与 D1 同口径), D3 应走 legacy→legacy (与 D2 同口径),
+    两天都必须只反映同口径的涨跌; D3 的 legacy 与 D2 的 raw 水平差一个复权
+    因子, 若被混用, 涨跌方向会整片翻掉。
+    """
+    import importlib
+    import pandas as pd
+    import limit_ratio_factor as lrf
+
+    # 甲: 每天 +2% (raw 与 legacy 各自单调涨); 乙: 每天 -2%。
+    # legacy 列整体是 raw 的 0.5 倍水平 —— 混口径会把 D3 的甲算成 -50%。
+    rows = [
+        # D1: 只有 raw
+        ('sh600000', '2026-01-05', 10.00, None),
+        ('sh600001', '2026-01-05', 10.00, None),
+        # D2: raw + legacy 同行
+        ('sh600000', '2026-01-06', 10.20, 5.10),
+        ('sh600001', '2026-01-06', 9.80, 4.90),
+        # D3: 只有 legacy
+        ('sh600000', '2026-01-07', None, 5.202),
+        ('sh600001', '2026-01-07', None, 4.802),
+    ]
+    frame = pd.DataFrame(rows, columns=['code', 'date', 'close_raw', 'close_legacy'])
+    cache = tmp_path / 'price.csv'
+    frame.to_csv(cache, index=False, encoding='utf-8')
+    monkeypatch.setattr(lrf, 'PRICE_CACHE_FILE', str(cache))
+    factor = lrf.MarketSentimentFactor()
+    ad = factor._load_ad_cache()
+
+    assert '20260105' not in ad, '首日无前一日, 不应产出 A/D'
+    assert ad['20260106']['up'] == 1 and ad['20260106']['down'] == 1
+    assert ad['20260106']['price_basis'] == 'raw', '两天共有 raw, 必须走 raw'
+    assert ad['20260107']['up'] == 1 and ad['20260107']['down'] == 1,         'D3 必须与 D2 的 legacy 相比, 混用 raw 会把两只都算成腰斩'
+    assert ad['20260107']['price_basis'] == 'legacy_mixed'
+
+
+def test_ad_drops_day_without_any_shared_basis(tmp_path, monkeypatch):
+    """前一天只有 raw、当天只有 legacy 时, 该日无共同口径, 整天判未覆盖。"""
+    import pandas as pd
+    import limit_ratio_factor as lrf
+
+    frame = pd.DataFrame(
+        [('sh600000', '2026-01-05', 10.00, None),
+         ('sh600001', '2026-01-05', 10.00, None),
+         ('sh600000', '2026-01-06', None, 5.10),
+         ('sh600001', '2026-01-06', None, 4.90)],
+        columns=['code', 'date', 'close_raw', 'close_legacy'])
+    cache = tmp_path / 'price.csv'
+    frame.to_csv(cache, index=False, encoding='utf-8')
+    monkeypatch.setattr(lrf, 'PRICE_CACHE_FILE', str(cache))
+    ad = lrf.MarketSentimentFactor()._load_ad_cache()
+    assert ad == {} or '20260106' not in ad,         '一个共同口径都没有, 不许拿 raw ÷ legacy 冒充权威 A/D'
 
 
 def test_raw_coverage_guard_handles_empty_filtered_price_cache():

@@ -37,6 +37,11 @@ except Exception:
 
 # 全市场宽度下限 (与主程序 MIN_MARKET_BREADTH 同义): up+down 低于此值视为残缺快照
 MIN_MARKET_BREADTH = 4000
+# 已有值本身完整时, 真源比它窄这么多就不采用 (与主程序 AD_NARROWER_TOLERANCE 同义):
+# 4000 只拦"绝对残缺", 拦不住"相对变窄" —— 回补的价格缓存漏了几百只股 (北交所 +
+# 限流漏抓) 时对账值合计会比当日线上跑的全市场值低 ~400, 方向一致但口径窄,
+# 无条件覆盖等于一路把历史磨薄。
+AD_NARROWER_TOLERANCE = 0.98
 
 
 def main():
@@ -57,7 +62,7 @@ def main():
 
     window_dates = set(sorted(df['日期'].astype(str).unique())[-args.window:])
 
-    changes, uncovered, thin = [], [], []
+    changes, uncovered, thin, narrower = [], [], [], []
     for idx, row in df.iterrows():
         d = str(row['日期'])
         if d not in window_dates:
@@ -76,6 +81,11 @@ def main():
         if new_up + new_dn < MIN_MARKET_BREADTH:
             thin.append((d, int(new_up + new_dn), int(new_up), int(new_dn)))
             continue
+        cur_total = float(row['up'] or 0) + float(row['down'] or 0)
+        if (cur_total >= MIN_MARKET_BREADTH
+                and new_up + new_dn < cur_total * AD_NARROWER_TOLERANCE):
+            narrower.append((d, int(cur_total), int(new_up + new_dn)))
+            continue
         if new_up != row['up'] or new_dn != row['down']:
             changes.append((idx, d, row['up'], row['down'], new_up, new_dn))
 
@@ -90,6 +100,11 @@ def main():
         print('  ⚠️ 真源自身宽度不足, 已跳过 (需先回补价格缓存):')
         for d, total, up, down in thin:
             print(f'    {d}: up={up} down={down} (合计 {total}) [thin]')
+    if narrower:
+        print('  ⏸️ 真源窄于已有完整值, 已跳过 (回补价格缓存漏抓了一批股票):')
+        for d, cur_total, new_total in narrower:
+            print(f'    {d}: 已有合计 {cur_total} → 真源合计 {new_total} '
+                  f'({new_total / cur_total:.1%}) [narrower]')
     if uncovered:
         print(f'  ⚠️ 价格缓存尚未覆盖: {uncovered}')
 

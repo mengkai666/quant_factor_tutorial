@@ -217,10 +217,17 @@ def _sample_check(cache: pd.DataFrame, codes: list[str], size: int, workers: int
                   source: str = 'tencent') -> bool:
     """重叠日对账: 新源与缓存现值必须同口径, 否则中止。
 
-    逐日算偏差率, 而不是把所有重叠日混在一起 —— 缓存里个别日期本身就可能是盘中/
+    逐日算偏差, 而不是把所有重叠日混在一起 —— 缓存里个别日期本身就可能是盘中/
     陈旧快照 (实测 2026-08-24 有 81% 的股票与收盘价差 >0.5%, 邻近各日 0%)。混算会
-    让这一天的污染冒充"换源口径不一致", 把好端端的回补拦掉。判据: 单日坏行占比
-    >20% 记为"缓存该日可疑", 只报告不参与判决; 干净日仍有超阈值的坏行才中止。
+    让这一天的污染冒充"换源口径不一致", 把好端端的回补拦掉。
+
+    判据用**逐日中位偏差**, 不用坏行占比 (2026-08-27 改)。原先"单日坏行 >20% 才算
+    该日可疑, 否则坏行计入判决"漏掉了**局限在某个板块的污染**: 2026-08-24 的陈旧行
+    只集中在北交所 (bj9xxxxx, 全市场约 6%), 抽样里占 12.5% —— 够不上 20% 的可疑线,
+    却远超 1% 的口径容忍线, 于是合法回补被判"不同口径"拦死。
+    真正的换源口径不一致会**整市场系统性偏移且每一天都偏**, 缓存污染则只偏某一天/
+    某一段。故: 中位偏差 >0.5% 的天记为"口径偏移", 只有**所有重叠日都偏移**才中止;
+    某天大盘对得上却有零散坏行, 那是该日缓存脏, 报出来让人用 --repair-days 修。
     """
     have = sorted(cache.loc[cache['close_raw'].notna(), 'date'].astype(str).unique())
     if len(have) < 3 or size <= 0:
@@ -241,29 +248,46 @@ def _sample_check(cache: pd.DataFrame, codes: list[str], size: int, workers: int
     if merged.empty:
         print('  ❌ 抽样与缓存无交集, 中止')
         return False
-    base = merged['close_raw'].astype(float).abs()
-    merged['bad'] = (merged['close_raw'].astype(float)
-                     - merged['probe'].astype(float)).abs() > base * 0.005
-    stat = merged.groupby('date')['bad'].agg(n='size', bad='sum')
+    base = merged['close_raw'].astype(float).abs().replace(0, float('nan'))
+    merged['dev'] = ((merged['close_raw'].astype(float)
+                      - merged['probe'].astype(float)).abs() / base)
+    merged = merged[merged['dev'].notna()].copy()
+    if merged.empty:
+        print('  ❌ 抽样无可比价格, 中止')
+        return False
+    merged['bad'] = merged['dev'] > 0.005
+    stat = merged.groupby('date').agg(n=('bad', 'size'), bad=('bad', 'sum'),
+                                      med=('dev', 'median'))
     stat['pct'] = (stat['bad'] / stat['n'] * 100).round(1)
+    shifted, dirty = [], []
     for date, row in stat.iterrows():
-        mark = '⚠️ 缓存该日可疑' if row['pct'] > 20 else 'ok'
-        print(f'     {date}: {int(row["bad"])}/{int(row["n"])} 偏差>0.5% ({row["pct"]}%) {mark}')
-    suspect = stat[stat['pct'] > 20].index.tolist()
-    clean = merged[~merged['date'].isin(suspect)]
-    if suspect:
-        print(f'  ⚠️ {len(suspect)} 天缓存现值与收盘价不符 (盘中/陈旧快照): {suspect}')
-        print('     这些天不参与换源判决; 修它们用 --repair-days')
-    if clean.empty:
-        print('  ❌ 所有重叠日都可疑, 无法证明同口径, 中止')
-        return False
-    bad_rows = int(clean['bad'].sum())
-    print(f'  ✅ 干净重叠日 {clean["date"].nunique()} 天 / {len(clean)} 行, 偏差>0.5% 的 {bad_rows} 行')
-    if bad_rows > max(1, len(clean) // 100):
+        if row['med'] > 0.005:
+            mark = '❌ 整体偏移 (疑换源口径)'
+            shifted.append(date)
+        elif row['pct'] > 1:
+            mark = '⚠️ 大盘对得上, 零散坏行 → 缓存该日脏'
+            dirty.append(date)
+        else:
+            mark = 'ok'
+        print(f'     {date}: {int(row["bad"])}/{int(row["n"])} 偏差>0.5% '
+              f'({row["pct"]}%), 中位偏差 {row["med"] * 100:.3f}% {mark}')
+    if len(shifted) == len(stat):
         cols = ['code', 'date', 'close_raw', 'probe']
-        print(clean[clean['bad']][cols].head(10).to_string(index=False))
-        print('  ❌ 新源与缓存不同口径, 中止 (别把两套价格混进同一列)')
+        print(merged[merged['bad']][cols].head(10).to_string(index=False))
+        print('  ❌ 每个重叠日大盘都整体偏移 = 新源与缓存不同口径, '
+              '中止 (别把两套价格混进同一列)')
         return False
+    if shifted:
+        print(f'  ⚠️ {len(shifted)} 天整体偏移但其余日对得上 → 是这些天的缓存被'
+              f'整片污染, 不是换源: {shifted}')
+    if dirty:
+        print(f'  ⚠️ {len(dirty)} 天缓存有零散坏行 (盘中/陈旧快照, 可局限在某板块): '
+              f'{dirty}')
+    if shifted or dirty:
+        print('     修它们: --repair-days ' + ','.join(str(d) for d in shifted + dirty))
+    ok_days = stat[stat['med'] <= 0.005]
+    print(f'  ✅ 大盘同口径的重叠日 {len(ok_days)}/{len(stat)} 天, '
+          f'中位偏差 {stat["med"].median() * 100:.3f}%')
     return True
 
 

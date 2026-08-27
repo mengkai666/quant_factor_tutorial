@@ -284,13 +284,42 @@ class MarketSentimentFactor:
                 for index in range(1, len(market_dates))
             }
             df['prev_date_clean'] = df.groupby('code')['date_clean'].shift(1)
-            df['prev_close'] = df.groupby('code')['ad_close'].shift(1)
-            df['prev_basis'] = df.groupby('code')['ad_basis'].shift(1)
             df['expected_prev_date'] = df['date_clean'].map(expected_previous)
+            for _column, _ in _priority:
+                df['_prev_' + _column] = df.groupby('code')[_column].shift(1)
             df = df[
                 df['prev_date_clean'].eq(df['expected_prev_date'])
             ].copy()
 
+            # 跨口径的两天不能相减 (2026-08-27 加)。
+            # 缓存里 raw/qfq/legacy 三种口径按日成片: 本机深度回补的 20260326~0703
+            # 只有 raw, 更晚的 0706~0805 只有 legacy(旧单列 close 迁移来的未知口径),
+            # 0806 起又是 raw。口径交界那天会拿"今天的 raw ÷ 昨天的 legacy", 而同一只
+            # 股票两个口径的价位差着复权因子 —— 实测 20260806 raw 与 legacy 中位差
+            # 0.83%, 已是日均波动量级, 足以把大批股票推过 ±0.1% 判据。该日因此得出
+            # 2397/2542, 而同口径(legacy→legacy)算出的是 1778/3237, 差 620 只。
+            # 岛内同口径的日对日比值本身是可信的 (与当年线上 FuPan 值 10/10 同向,
+            # 且逐日"涨幅≥9.8%只数 ≥ 涨停缓存只数"的超集关系在 21/24 天成立),
+            # 坏的只有交界那一天的口径混用。故要求前后两天口径一致, 否则弃用该行:
+            # 交界日若两天共有某个口径 (0806 两天都有 legacy) 就走那个口径,
+            # 一个共同口径都没有 (0706 的前一天 0703 只有 raw) 则该日整天判为未覆盖,
+            # 交给"真源未覆盖"分支, 绝不用混口径的数冒充权威 A/D。
+            # 逐股票重挑口径: 只认"当天和前一天都有值"的那一列, 仍按 raw → qfq →
+            # legacy → close 优先级 (np.select 天然首个命中优先, 同上不要退回 apply)。
+            _paired = [
+                ((df[_column] > 0) & (df['_prev_' + _column] > 0)).to_numpy()
+                for _column, _ in _priority
+            ]
+            df['ad_close'] = np.select(
+                _paired, [df[_column].to_numpy(dtype=float) for _column, _ in _priority],
+                default=np.nan)
+            df['prev_close'] = np.select(
+                _paired,
+                [df['_prev_' + _column].to_numpy(dtype=float) for _column, _ in _priority],
+                default=np.nan)
+            df['ad_basis'] = np.select(
+                _paired, [_basis for _, _basis in _priority], default='unavailable')
+            df['prev_basis'] = df['ad_basis']
             df['chg_pct'] = (df['ad_close'] / df['prev_close'] - 1) * 100
             df = df.dropna(subset=['ad_close', 'prev_close', 'chg_pct'])
 
