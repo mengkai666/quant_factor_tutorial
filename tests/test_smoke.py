@@ -62,6 +62,22 @@ def test_ad_breadth_guard_blocks_partial_snapshot():
     assert m.is_ad_incomplete(513, 4580) is False
 
 
+def test_reconcile_refuses_thin_price_cache_ad():
+    """CI 浅价格缓存(~850只)算出的残缺 A/D 不得覆盖已对齐的历史家数。"""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        'mztrack_reconcile', os.path.join(_ROOT, 'src', '主线强度追踪.py'))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    # 实测 CI 20260707 写出的 71/779 (合计 850, 全市场 1/6) 必须拒写
+    assert m.should_adopt_reconciled_ad(71, 779) is False
+    assert m.should_adopt_reconciled_ad(429, 689) is False
+    assert m.should_adopt_reconciled_ad(None, None) is False
+    # 本地完整缓存的真值放行 (含极端普跌日)
+    assert m.should_adopt_reconciled_ad(615, 4495) is True
+    assert m.should_adopt_reconciled_ad(513, 4580) is True
+
+
 def test_raw_coverage_guard_handles_empty_filtered_price_cache():
     """CI cold start must not index date on an empty, columnless frame."""
     import importlib.util

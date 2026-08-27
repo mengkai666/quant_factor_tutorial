@@ -1464,6 +1464,20 @@ def is_ad_incomplete(up, down):
         return True
 
 
+def should_adopt_reconciled_ad(new_up, new_dn):
+    """历史 A/D 对账是否可采用价格缓存这一天的家数。
+
+    价格缓存是 up/down 的唯一真源, 但"真源存在"不等于"真源可信":
+    CI 用 actions/cache 恢复的价格缓存对历史日往往只覆盖 ~850 只 (全市场 1/6),
+    `_load_ad_cache()` 照样返回 ad_available=True 的残缺 A/D (实测 20260707 得 71/779,
+    真值 615/4495)。若无条件覆盖, 每天的 CI 都会把已对齐的历史家数重新写坏一遍。
+    因此真源本身也要过市场宽度体检 —— 与 tools/reconcile_sentiment_ad.py 判据同源。
+    """
+    if new_up is None or new_dn is None:
+        return False
+    return not is_ad_incomplete(new_up, new_dn)
+
+
 def generate_rebound_analysis(advance_decline, sentiment_df, echelon, market_state=None):
     """数据驱动的反弹分类复盘: 市场定性 + 主动/跟随主线 + 高度断层预警。
 
@@ -5849,6 +5863,7 @@ def _main_impl():
 
         reconciled = 0   # 用真源覆盖 (含纠正污染)
         uncovered = 0    # 价格缓存尚未覆盖该交易日
+        thin = 0         # 真源自身宽度不足, 拒绝覆盖 (见 should_adopt_reconciled_ad)
         # 最新一天的处理: 价格缓存一旦覆盖该交易日 = 当天已收盘、有权威 A/D,
         # 就用 A/D 覆盖 (advance_decline 底层同为 LongHu, 收盘后仍可能是陈旧快照);
         # 仅当价格缓存尚未覆盖最新日 (盘中/当天数据未出) 时, 才保留 advance_decline 的实时值。
@@ -5873,6 +5888,14 @@ def _main_impl():
             cur_dn = float(cur_dn_raw) if pd.notna(cur_dn_raw) else None
             if res and res.get('ad_available') and res.get('up') is not None and res.get('down') is not None:
                 new_up, new_dn = res['up'], res['down']
+                if not should_adopt_reconciled_ad(new_up, new_dn):
+                    # 真源残缺: 已有完整值保持不动, 已有值也残缺/缺失才标未就位。
+                    # 宁可留"未就位"也绝不用 1/6 市场的家数覆盖真实历史。
+                    if cur_up is None or cur_dn is None or is_ad_incomplete(cur_up, cur_dn):
+                        sentiment_df.at[idx, 'ad_available'] = False
+                        sentiment_df.at[idx, 'ad_status'] = 'price_cache_thin'
+                    thin += 1
+                    continue
                 if new_up != cur_up or new_dn != cur_dn:
                     sentiment_df.at[idx, 'up'] = new_up
                     sentiment_df.at[idx, 'down'] = new_dn
@@ -5885,7 +5908,8 @@ def _main_impl():
                 uncovered += 1
 
         print(f"  ✅ 最近 {RECENT_FILL_WINDOW} 交易日 A/D 对账完成: 更新 {reconciled} 天"
-              + (f", {uncovered} 天价格缓存尚未覆盖 (待下次运行补齐)" if uncovered else ", 数据完整"))
+              + (f", {uncovered} 天价格缓存尚未覆盖 (待下次运行补齐)" if uncovered else ", 数据完整")
+              + (f", {thin} 天真源宽度不足已拒写 (需先回补价格缓存)" if thin else ""))
 
         # 当日涨停总数以不可变事实池为准。FuPan 汇总、行情宽度和历史缓存
         # 只能补充其他字段，不能让旧的 74 覆盖已校验事实池的 83。
