@@ -299,7 +299,12 @@ def audit_sentiment(price_dates_compact: set, quiet: bool) -> list:
     else:
         print('  ✅ 无非交易日污染 (价格缓存区间内每天都是真交易日)')
 
-    # 区间内的宽度残缺都是"可修"的: 根因是价格缓存该日覆盖不足 → 先回补价格再对账。
+    # 区间内的宽度残缺都是"可修"的, 但根因有两种, 修法不同:
+    #   (a) 该日价格缓存行数不足 → 补覆盖;
+    #   (b) 该日有行, 但与前一交易日**没有共同的价格口径** (raw/qfq/legacy 按日成片,
+    #       交界日无法同口径相减, 见 _compute_ad_cache) → 要补的是那一列收盘价本身,
+    #       补 qfq 也行, 只要与前一交易日同列都有值。
+    # 提示语按实际情形分开给, 别一律指向"补覆盖" —— (b) 类日子覆盖是满的。
     breadth = in_range['up'] + in_range['down']
     thin = in_range.loc[breadth < MIN_MARKET_BREADTH, ['日期', 'up', 'down']]
     if thin.empty:
@@ -314,8 +319,16 @@ def audit_sentiment(price_dates_compact: set, quiet: bool) -> list:
               f'(合计 {int(r["up"] + r["down"])})')
     if quiet and len(thin) > 10:
         print(f'       ... 另 {len(thin) - 10} 天')
-    print('     ➡️ 修复: 先 tools/backfill_price_gap.py 补价格缓存该日覆盖, '
-          '再 tools/reconcile_sentiment_ad.py --window <N> --apply')
+    no_shared_basis = [str(r['日期']) for _, r in thin.iterrows()
+                       if str(r['日期']) in price_dates_compact]
+    if no_shared_basis:
+        print(f'     ℹ️ 其中 {len(no_shared_basis)} 天价格缓存**有覆盖**, 残缺来自'
+              f'"与前一交易日无共同价格口径": {", ".join(no_shared_basis[:10])}')
+        print('     ➡️ 修复: tools/backfill_price_history.py --repair-days <这些天> '
+              '--apply 把该段补出与前一交易日同列的收盘价, 再 reconcile')
+    if len(no_shared_basis) < len(thin):
+        print('     ➡️ 修复(覆盖不足那几天): 先 tools/backfill_price_gap.py 补价格缓存'
+              '该日覆盖, 再 tools/reconcile_sentiment_ad.py --window <N> --apply')
 
     return defects
 
