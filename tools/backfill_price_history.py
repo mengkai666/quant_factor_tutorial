@@ -20,14 +20,17 @@
        —— 残缺日进了缓存, A/D 对账就会拿它算涨跌家数 (见 sentiment-ad-reconcile 点 10)。
     3. 默认干跑, --apply 才落库, 落库前备份原文件。
 
-两条源 (--source):
+三条源 (--source):
     tencent  —— 默认, 最快 (55 股/s), 但 `fqkline/get` 有 WAF: 高并发跑一阵后整个
                 出口 IP 被拉黑, 返回 501 + 跳 waf.tencent.com/501page.html。此时
                 qt.gtimg.cn 行情接口仍通, 别误判成"全网断了"。
     baostock —— WAF 期间的备用源, 多进程逐股抓 (实测 6 进程 12 股/s, 全市场 68 天
                 ~7 分钟)。raw/qfq 要分两次查 (adjustflag 3 / 2), 带串号护栏。
                 东财 push2his 直连被 RemoteDisconnected、akshare 走代理不可用,
-                都试过, 只有 baostock 稳。
+                都试过。抓多了会被判"黑名单用户"(10001011), 冷却几小时才恢复。
+    sina     —— 腾讯 WAF + baostock 黑名单同时封死时的第三条源, 只给不复权收盘
+                (raw, 与缓存 close_raw 中位偏差 0.0000%), 覆盖北交所/科创/B 股。
+                自带 8 股/s 限速: 快了会 HTTP 456 (返 HTML 不返 JSON), 全市场 ~12 分钟。
 
 用法:
     python tools/backfill_price_history.py                  # 干跑, 看要补哪些天
@@ -40,12 +43,17 @@ from __future__ import annotations
 
 import argparse
 import os
+import json
+import re
 import shutil
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 import pandas as pd
+import requests
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(_ROOT, 'src'))
@@ -207,7 +215,130 @@ def _fetch_baostock(codes, dates, workers):
     return out[CANONICAL]
 
 
+# ---------------- 新浪深度回补路径 ----------------
+# 腾讯 WAF (501) 与 baostock 黑名单 (10001011) 同时封死时的第三条源。实测:
+#   * `close_raw` 与缓存现值中位偏差 0.0000% —— 同口径, 可直接混进 raw 列;
+#   * 覆盖北交所/科创/创业/B 股 (东财 push2his 直连 RemoteDisconnected, 走代理
+#     ProxyError, akshare 同源同废, 都试过);
+#   * 只给不复权收盘, 没有 qfq —— 而 A/D 真源基准正是 raw (见 sentiment-ad-reconcile
+#     点 9), 所以够用; 要 qfq 仍得等腾讯。
+# 接口只支持"要最近 N 根", 不支持起止日期, 故 datalen 要从目标最早日反推。
+SINA_UA = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+           '(KHTML, like Gecko) Chrome/124.0 Safari/537.36')
+SINA_URL = ('https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/'
+            'CN_MarketData.getKLineData?symbol={code}&scale=240&ma=no&datalen={n}')
+# 返回的是 JS 字面量 (键不带引号), 不是标准 JSON, 补上引号再 json.loads。
+_SINA_BARE_KEY = re.compile(r'(\w+):')
+# 新浪按出口 IP 限流, 超了返回 **HTTP 456 + 一段 HTML** (不是 JSON, 也不是常见的
+# 429/403)。实测 12 线程 ~77 股/s 跑到第 ~440 只就被切, 之后连 datalen=45 的单发
+# 都 456; 降到 8 股/s 全市场跑通。限流只给 HTML 不报错, 不识别就会静默变成"大半个
+# 市场没数据" → 被 --min-breadth 整天丢弃; 兜得住是好事, 但真因必须打出来。
+SINA_MAX_RPS = 8.0
+SINA_RETRY = 3
+
+
+class _RateLimiter:
+    """跨线程最小请求间隔 (只保证平均速率不超, 不做突发额度)。"""
+
+    def __init__(self, rps: float):
+        self._gap = 1.0 / max(rps, 0.1)
+        self._lock = threading.Lock()
+        self._next = 0.0
+
+    def wait(self) -> None:
+        with self._lock:
+            due = max(time.time(), self._next)
+            self._next = due + self._gap
+        delay = due - time.time()
+        if delay > 0:
+            time.sleep(delay)
+
+
+def _fetch_sina_one(session, code: str, datalen: int, keep: set,
+                    limiter=None, stats=None) -> list[dict]:
+    payload = None
+    for attempt in range(SINA_RETRY):
+        if limiter is not None:
+            limiter.wait()
+        try:
+            resp = session.get(SINA_URL.format(code=code, n=datalen),
+                               headers={'User-Agent': SINA_UA}, timeout=20)
+        except Exception:
+            time.sleep(0.5 * (attempt + 1))
+            continue
+        if resp.status_code == 456:  # 限流, 退避重试
+            if stats is not None:
+                stats['throttled'] = stats.get('throttled', 0) + 1
+            time.sleep(1.5 * (attempt + 1))
+            continue
+        text = (resp.text or '').strip()
+        if not text or text == 'null':
+            return []  # 该代码新浪没数据 (退市/未上市), 不是限流, 别重试
+        try:
+            payload = json.loads(_SINA_BARE_KEY.sub(r'"\1":', text))
+            break
+        except Exception:
+            if stats is not None:
+                stats['unparsed'] = stats.get('unparsed', 0) + 1
+            time.sleep(0.8 * (attempt + 1))
+    if not isinstance(payload, list):
+        return []
+    rows = []
+    for bar in payload:
+        try:
+            date = str(bar['day'])[:10]
+            close = float(bar['close'])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if date not in keep or close <= 0:
+            continue
+        rows.append({'code': code, 'date': date, 'close_raw': close,
+                     'close_qfq': pd.NA, 'close_legacy': pd.NA,
+                     'price_basis': 'raw', 'source': 'sina',
+                     'source_timestamp': date.replace('-', '')})
+    return rows
+
+
+def _fetch_sina(codes: list[str], dates: list[str], workers: int) -> pd.DataFrame:
+    keep = {str(d)[:10] for d in dates}
+    # 接口只能"要最近 N 根", N 得盖住目标最早日 → 今天; 多要 5 根留余量。
+    earliest = min(keep)
+    try:
+        calendar = CalendarProvider().trading_days(
+            earliest, datetime.now().strftime('%Y-%m-%d'))
+        datalen = len(calendar) + 5
+    except Exception:
+        datalen = 260
+    datalen = max(5, min(datalen, 1023))
+    limiter = _RateLimiter(SINA_MAX_RPS)
+    stats: dict = {}
+    print(f'  🌐 新浪 getKLineData: {len(codes)} 只 × datalen={datalen} '
+          f'(盖住 {earliest} 起), {workers} 线程, 限速 {SINA_MAX_RPS:.0f} 股/s')
+    t0 = time.time()
+    rows = []
+    session = requests.Session()
+    session.trust_env = False  # 腾讯/东财要走代理, 新浪直连即可, 别被代理拖慢
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for got in pool.map(
+                lambda c: _fetch_sina_one(session, c, datalen, keep, limiter, stats),
+                codes):
+            rows.extend(got)
+    elapsed = max(time.time() - t0, 0.1)
+    out = pd.DataFrame(rows, columns=CANONICAL)
+    days = out['date'].nunique() if len(out) else 0
+    covered = out['code'].nunique() if len(out) else 0
+    print(f'  ⏱️ 新浪完成 {len(out)} 行 / {days} 天 / {covered} 只, '
+          f'{elapsed:.0f}s ({len(codes) / elapsed:.1f} 股/s)')
+    if stats.get('throttled') or stats.get('unparsed'):
+        print(f'  ⚠️ 被限流 (HTTP 456) {stats.get("throttled", 0)} 次, 响应无法解析 '
+              f'{stats.get("unparsed", 0)} 次 —— 覆盖 {covered}/{len(codes)} 只。缺口大'
+              f'就等几分钟 --only-missing 续抓, 或把 SINA_MAX_RPS 调低。')
+    return out
+
+
 def _dispatch(source, codes, dates, workers):
+    if source == 'sina':
+        return _fetch_sina(codes, dates, workers)
     if source == 'baostock':
         return _fetch_baostock(codes, dates, workers)
     return _fetch(codes, dates, workers)
@@ -297,7 +428,8 @@ def main() -> int:
     ap.add_argument('--start', help='起始交易日 YYYY-MM-DD (给了就忽略 --depth)')
     ap.add_argument('--workers', type=int, default=16,
                     help='腾讯路径=线程数(默认16); baostock 路径=进程数(建议 4~6)')
-    ap.add_argument('--source', choices=['tencent', 'baostock'], default='tencent',
+    ap.add_argument('--source', choices=['tencent', 'baostock', 'sina'],
+                    default='tencent',
                     help='数据源。腾讯被 WAF 拦 (501) 时用 baostock')
     ap.add_argument('--sample-check', type=int, default=200, help='重叠日对账抽样股数, 0=跳过')
     ap.add_argument('--min-breadth', type=int, default=4000, help='单日 close_raw 非空数下限')
