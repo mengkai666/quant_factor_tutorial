@@ -19,6 +19,20 @@ import os
 import re
 import sys
 
+# 控制台编码: 本模块是全项目 (src/ 模块 + tools/ 脚本) 的公共 import 入口, 在这里代调
+# 一次, 凡是 `from paths import ...` 的进程都自动免疫 Windows GBK 重定向崩溃。
+# 详见 console_io 模块头部注释; 入口脚本不再需要各自复制 reconfigure 那四行。
+try:
+    from console_io import enable_utf8_console as _enable_utf8_console
+except ImportError:  # 被当作包导入 (from src.paths import ...) 时 src/ 不在 sys.path
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    try:
+        from console_io import enable_utf8_console as _enable_utf8_console
+    except Exception:  # pragma: no cover - 单文件打包漏了模块也不能拖垮 paths
+        def _enable_utf8_console(*_args, **_kwargs) -> bool:
+            return False
+_enable_utf8_console()
+
 # === 基准目录 ===
 if getattr(sys, 'frozen', False):
     BASE_DIR = os.path.dirname(sys.executable)
@@ -35,6 +49,11 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 ZT_CACHE_FILE = os.path.join(DATA_DIR, '涨停历史缓存.csv')
 LIMIT_POOL_META_CACHE = os.path.join(DATA_DIR, 'limit_pool_cache_meta.csv')
 PRICE_CACHE = os.path.join(DATA_DIR, 'price_history_cache.csv')
+# 价格缓存的逐日 gzip 切片 (进 git; 大 CSV 本身在 .gitignore 里)。
+# 存在的理由: 本地和 CI 各有一份大 CSV 且从不对账, CI 那份还被 10MB 上限裁到只剩
+# 一个月 —— 切片是这份数据在仓库里唯一可回溯的副本, 也是两侧互补空洞的通道。
+# 详见 src/price_slices.py 模块头部。
+PRICE_SLICE_DIR = os.path.join(DATA_DIR, 'price_slices')
 INDUSTRY_CACHE = os.path.join(DATA_DIR, 'industry_cache.csv')
 UNIVERSE_CACHE = os.path.join(DATA_DIR, 'stock_universe.csv')
 SECURITY_MASTER_CACHE = os.path.join(DATA_DIR, 'security_master.csv')
@@ -60,6 +79,7 @@ OUTPUT_HTML = os.path.join(OUTPUT_DIR, '主线强度追踪.html')
 AUDIT_DIR = os.path.join(OUTPUT_DIR, 'audit')
 os.makedirs(DAILY_SNAPSHOT_DIR, exist_ok=True)
 os.makedirs(AUDIT_DIR, exist_ok=True)
+os.makedirs(PRICE_SLICE_DIR, exist_ok=True)
 
 # === 站点发布 (归档历史报告 + 首页; 本地累积在 output/site/, CI 部署到 gh-pages) ===
 SITE_DIR = os.path.join(OUTPUT_DIR, 'site')

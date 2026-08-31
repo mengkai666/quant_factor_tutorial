@@ -17,6 +17,10 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(_ROOT, 'src'))
+
+from console_io import enable_utf8_console  # noqa: E402
+
+enable_utf8_console()  # 输出被重定向到文件/管道时, emoji print 不再撞 Windows GBK
 from plot_utils import safe_savefig
 
 OUT = os.path.join(_ROOT, 'output', 'dragon_imgs')

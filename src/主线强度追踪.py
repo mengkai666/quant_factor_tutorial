@@ -2756,6 +2756,29 @@ def _price_fetch_start_for_breadth(
         return default
     return min(default, previous) if default else previous
 
+def _probe_price_source(provider, codes, target_dates, sample=12):
+    """小样本探针: 判断"大面积缺口"是真缺数据还是数据源/代理挂了。
+
+    区间升级前必须先问这一句 —— 源是活的就值得为整天缺口跑全市场 (一股一请求),
+    源是死的就别拿 5000 次注定失败的请求换十几分钟。取样从头尾各抓一半, 避开
+    "前缀全是某个板块"造成的偏差。
+    """
+    if not codes or not target_dates:
+        return False, '无候选'
+    half = max(1, min(len(codes), int(sample)) // 2)
+    picked = list(dict.fromkeys(codes[:half] + codes[-half:]))
+    try:
+        result = provider.fetch_range(pd.DataFrame({'code': picked}), target_dates)
+    except Exception as exc:
+        return False, f'探针异常 {type(exc).__name__}: {exc}'
+    data = getattr(result, 'data', None)
+    if data is None or data.empty:
+        return False, '探针零行'
+    alive = data.loc[data['close_raw'].notna(), 'code'].nunique() if 'close_raw' in data.columns else 0
+    ok = alive * 2 >= len(picked)
+    return ok, f'探针 {alive}/{len(picked)} 只有价'
+
+
 def _record_price_gap_outcome(frame, requested, target_dates):
     """把本轮 (code, date) 的成败记进负缓存, 供下轮跳过。纯优化件, 失败静默。"""
     if not requested or not target_dates:
@@ -2820,9 +2843,34 @@ def _fill_price_gaps_with_provider(
     raw_non_bj_missing = [code for code in raw_missing if not code.startswith('bj')]
     raw_requested = list(raw_bj_missing)
     deferred = list(raw_non_bj_missing)
+    escalated = False
+    escalate_note = ''
     if len(raw_missing) <= max(0, int(max_non_bj_gaps)):
         raw_requested.extend(raw_non_bj_missing)
         deferred = []
+    elif deferred and os.getenv('PRICE_GAP_NO_ESCALATE', '').strip() not in ('1', 'true', 'True'):
+        # 缺口越大越该补, 不是越该放弃。PriceProvider.fetch_range 是**一股一请求、
+        # 请求覆盖整个日期区间** (price_provider.py fetch_one -> fetcher(code, dates[0], dates[-1])),
+        # 成本只与股票数有关、与缺几天无关 —— 所以"缺一整天"和"缺一只"的单价一样,
+        # 逐股阈值卡在这里等于把最该救的情形关掉。
+        # 2026-08-28 事故: 本地漏跑一天, raw_missing=5538 > 1000, 沪深 5205 只全被
+        # deferred, 只补了北交所 333 只, A/D 配对覆盖 6% → breadth 门禁 blocked、
+        # 报告降级 facts_only、AI 研判被禁。
+        # 先探针再升级: 源死了 (代理故障/WAF) 就维持延后, 别拿 5000 次白请求换十几分钟。
+        probe_provider = provider or PriceProvider(
+            max_workers=8, retry=2, retry_delay=0.25,
+        )
+        alive, escalate_note = _probe_price_source(probe_provider, deferred, target_dates)
+        if alive:
+            print(f'  ⬆️ 价格缺口 {len(raw_missing)} 只 > 逐股阈值 {max_non_bj_gaps}, '
+                  f'升级为区间整天重抓 ({escalate_note}; 区间请求成本与天数无关)')
+            raw_requested.extend(deferred)
+            deferred = []
+            escalated = True
+        else:
+            print(f'  ⏸️ 价格缺口 {len(raw_missing)} 只, 但数据源不可用 ({escalate_note}), '
+                  f'维持延后 —— 网络恢复后跑 '
+                  f'tools/backfill_price_history.py --repair-days <缺的天> --apply')
 
     # 原始价已完整时，不应因为 qfq 缺口规模大而延后。该路径只抓前复权，
     # 腾讯优先、AkShare 兜底，并在合并时保留已有 close_raw。
@@ -2858,6 +2906,8 @@ def _fill_price_gaps_with_provider(
         'fallback_covered': 0,
         'fallback_deferred': len(deferred),
         'fallback_deferred_codes': deferred[:50],
+        'fallback_escalated': escalated,
+        'fallback_escalate_note': escalate_note,
         'fallback_target_dates': target_dates,
         'fallback_memo_skipped': len(_memo_skip),
         'fallback_chronic_skipped': len(_chronic_skip),
@@ -2921,6 +2971,11 @@ def _fill_price_gaps_with_provider(
         meta['fallback_status'] = 'partial'
     else:
         meta['fallback_status'] = statuses[-1] if statuses else 'unknown'
+    # status 量的是"缺口补上了吗", 不是"我请求的那批成功了吗"。延后的股票一只都没抓,
+    # 却让 status=success 顶在审计里 (2026-08-31: success + covered=333 + missing_after=5205),
+    # 看日志的人会被它骗过去。有延后就不许叫 success。
+    if deferred and meta['fallback_status'] not in ('failed', 'partial'):
+        meta['fallback_status'] = 'deferred'
     meta['fallback_message'] = '; '.join(messages)
     raw_after = _complete_codes('raw')
     qfq_after = _complete_codes('qfq')
@@ -6515,12 +6570,22 @@ def _main_impl():
     # 旧 A/B/C/D 仅保留在兼容渲染函数中；日报主流程只发布 ScenarioPlan。
     _scenarios = []
 
-    # 只有最终门禁允许 decision 时，才生成个股策略池和催化归因。
+    # 候选池与首屏“明日执行计划”统一使用梯队事实源；旧 screener 只保留兼容 API，
+    # 不再直接写 focus_pool.csv，避免 CSV 与报告候选、板块归因互相打架。
     if _policy.allow_focus_pool:
-        focus_df = generate_focus_pool(
-            ml_strength, echelon, top30_data, sentiment_df, focus_pool_path,
-            security_master=market_meta.get('security_master', {}),
-        )
+        from decision_dashboard import build_today_focus_rows
+        _focus_seed_ctx = {
+            'date_str': _report_date,
+            'publication_mode': _effective_mode,
+            'market_state': _report_market_state,
+            'market_thesis': _market_thesis_dict,
+            'echelon': list(echelon or []),
+            'progression_chain': _progression_chain,
+            'breadth_ratio': _current_snapshot.get('breadth_ratio'),
+            'dt': _current_snapshot.get('limit_down'),
+            'ladder': (_report_timing or {}).get('ladder_score'),
+        }
+        focus_df = pd.DataFrame(build_today_focus_rows(_focus_seed_ctx))
         try:
             from catalyst_attribution import attribute_focus_pool
             if focus_df is not None and not focus_df.empty:
@@ -6661,6 +6726,21 @@ def _main_impl():
         context=_report_context,
         lineage=_lineage,
     )
+
+    # focus_pool.csv 是面向执行的唯一出口：最终场景后验、仓位与候选全部确定后再原子写出。
+    # 即使没有候选也会覆盖旧文件表头，杜绝沿用前一交易日的陈旧股票池。
+    try:
+        from decision_dashboard import build_dashboard_ctx, write_today_focus_pool
+        _focus_export_ctx = build_dashboard_ctx(
+            timing=_report_timing, advance_decline=advance_decline,
+            sentiment_df=sentiment_df, echelon=echelon, previous_echelon=previous_echelon,
+            report_date=_report_date, focus_df=focus_df, focus_catalysts=focus_catalysts,
+            report_context=_report_context,
+        )
+        _focus_written = write_today_focus_pool(_focus_export_ctx, focus_pool_path)
+        print(f"  [今日决策] 已写出统一股票池 {_focus_written} 只: {focus_pool_path}")
+    except Exception as e:
+        print(f"  [警告] 统一股票池写出失败: {e}")
 
     print("\n[6/6] 生成可视化...")
     generate_html(
@@ -6874,10 +6954,43 @@ def _main_impl():
 
 
 def main():
-    """运行一次日报，并让所有抓取状态继承同一个批次 ID。"""
+    """运行一次日报，并让所有抓取状态继承同一个批次 ID。返回进程退出码。
+
+    跑批前后各挂一件事, 都是为了"漏跑一天"这类事故不再靠人眼发现:
+      · 开跑前用 git 里的逐日切片补本地价格缓存 —— 另一侧 (CI/本地) 跑出来的数据
+        直接搬过来, 零网络请求 (见 src/price_slices.py);
+      · 跑完导出切片 + 过一遍完整性体检, 有缺陷就染红退出码。体检刻意放在报告
+        产出**之后**: 它只负责喊人, 不许拦住当天的报告 (报告自己有
+        report-integrity 门禁负责降级披露)。
+    """
+    try:
+        from price_slices import sync_cache_from_slices
+        sync_cache_from_slices(quiet=False)
+    except Exception as exc:
+        print(f"  ⚠️ 切片补齐未执行 ({type(exc).__name__}: {exc}), 继续跑批")
+
     with run_context(generate_run_id()):
-        return _main_impl()
+        _main_impl()
+
+    try:
+        from price_slices import export_slices
+        export_slices()
+    except Exception as exc:
+        print(f"  ⚠️ 切片归档未执行 ({type(exc).__name__}: {exc})")
+
+    if IS_GITHUB_ACTIONS:
+        # CI 里体检由 deploy 之后的独立步骤负责: 若在这一步就非零退出, 后面的
+        # 提交缓存/部署站点全部被跳过, 一个历史日的空洞会换来当天断更。
+        print('  ℹ️ CI 环境: 收尾自检交由部署后的独立步骤执行')
+        return 0
+    try:
+        from data_selfcheck import run_selfcheck
+        defects = run_selfcheck()
+    except Exception as exc:  # 体检本身出问题绝不能反过来把日报判失败
+        print(f"  ⚠️ 收尾自检未执行 ({type(exc).__name__}: {exc})")
+        return 0
+    return 1 if defects > 0 else 0
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

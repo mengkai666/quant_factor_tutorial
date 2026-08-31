@@ -8,6 +8,10 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "src"))
 
+from console_io import enable_utf8_console  # noqa: E402
+
+enable_utf8_console()  # 输出被重定向到文件/管道时, emoji print 不再撞 Windows GBK
+
 from data_sources.calendar_provider import CalendarProvider  # noqa: E402
 from data_sources.fetch_status import FetchStatusStore  # noqa: E402
 from data_sources.price_provider import PriceProvider  # noqa: E402

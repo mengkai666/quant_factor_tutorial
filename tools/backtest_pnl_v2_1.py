@@ -30,6 +30,10 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(_ROOT, 'src'))
 sys.path.insert(0, os.path.join(_ROOT, 'tools'))
 
+from console_io import enable_utf8_console  # noqa: E402
+
+enable_utf8_console()  # 输出被重定向到文件/管道时, emoji print 不再撞 Windows GBK
+
 from backtest_timing_v2_1 import (  # noqa: E402
     classify_v2_1, classify_v2_original, load_daily_facts,
 )

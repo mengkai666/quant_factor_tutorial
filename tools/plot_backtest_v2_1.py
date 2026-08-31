@@ -15,6 +15,10 @@ from matplotlib import font_manager
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(_ROOT, 'tools'))
 sys.path.insert(0, os.path.join(_ROOT, 'src'))
+
+from console_io import enable_utf8_console  # noqa: E402
+
+enable_utf8_console()  # 输出被重定向到文件/管道时, emoji print 不再撞 Windows GBK
 from plot_utils import safe_savefig  # 出图超 2000px 上限时自动压 dpi (单一真源)
 
 # 中文字体 (强制覆盖 monospace, 防止 tick_label 回落到 DejaVu Sans Mono 掉字)

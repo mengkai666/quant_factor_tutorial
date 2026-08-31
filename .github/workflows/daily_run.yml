@@ -172,6 +172,12 @@ jobs:
         # 只 add 小体积缓存文件 (data/ 下), 不 add 大体积 CSV 和 HTML
         git add data/涨停历史缓存.csv data/cls_plate_cache.csv data/sentiment_history_cache.csv data/ths_sector_hist.json 2>/dev/null || true
         git add data/report_prediction_history.jsonl data/report_daily_snapshots/*.json data/market_phase_snapshots.jsonl 2>/dev/null || true
+        # 价格缓存的逐日 gzip 切片 (一天 ≈ 90KB): 大 CSV 在 .gitignore 里, 本地和 CI
+        # 各存一份且从不对账 —— 切片是这份数据在仓库里唯一可回溯的副本, 也是两侧
+        # 互补空洞的通道 (2026-08-28: CI 有数据、本地整天是空的, 谁也看不出来)。
+        # 用 -A 而不是 glob: 切片有保留上限 (超过 250 天会删最老的), shell glob 展开
+        # 不到已删除的文件, 那些删除就永远推不上去。
+        git add -A data/price_slices 2>/dev/null || true
         # 空暂存区是正常情况，不能让后续 Pages 部署被跳过。
         if git diff --staged --quiet; then
           echo "缓存无变化，跳过提交"
@@ -259,3 +265,14 @@ jobs:
         # (force_orphan 保持 gh-pages 干净, 只留站点内容不留历史 commit)
         force_orphan: true
         commit_message: "Deploy report site [skip ci]"
+
+    - name: 收尾自检 (数据完整性, 有空洞则染红本次跑批)
+      if: steps.idempotency.outputs.skip != 'true'
+      # 刻意放在部署之后: 体检失败只染红跑批, 不许拦住当天报告发布
+      # (报告自身有 report-integrity 门禁负责降级披露)。
+      # 与开头那道"核心数据质量闸门"的区别: 开头是 continue-on-error 的预检,
+      # 这里是唯一会让 workflow 变红的一道 —— 空洞必须有人看见, 不能过夜。
+      # 走 src/data_selfcheck.py 而不是直接调 audit: 窗口要按证券口径台阶自适应,
+      # 本地跑批和 CI 共用同一套策略 (写死天数会在下次口径扩容后天天误报)。
+      run: |
+        python src/data_selfcheck.py
