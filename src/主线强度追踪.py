@@ -858,6 +858,7 @@ LADDER_GRADES = [
     ('E级', 5),
 ]
 LADDER_MIN_SCORE = 5  # 低于此分不入梯队
+LADDER_DISPLAY_GRADES = ('S级', 'B级')  # 报告只展示最高关注级别，底层仍保留完整分级
 
 # 涨停记录定义板块归属的有效窗口 (交易日)。涨停是"某天因某题材涨停"的一次性
 # 快照, 超过此窗口的旧涨停不再定义个股当前所属板块, 避免旧涨停把无关票钉进主线池。
@@ -1052,7 +1053,8 @@ ACTIVE_ML_RECENT = 5       # 观察窗口 (交易日)
 # 强制重算; 重算后仍不达标则标"数据未就位", 绝不把残缺家数发布出去。
 # 阈值取 4000: 既能拦住 ~1688 这类只覆盖 1/3 市场的残缺值,
 # 又不会误伤 513涨/4580跌 (合计5093) 这类合法的极端普跌日。
-MIN_MARKET_BREADTH = 4000
+# 定义在 src/ad_breadth.py (单一真源), 这里只是转出模块级名字给老引用。
+from ad_breadth import MIN_MARKET_BREADTH  # noqa: E402
 
 def _is_non_tradeable_security_name(name):
     """交易观察层排除 ST、退市等不可交易证券名称。"""
@@ -1459,48 +1461,15 @@ def _synchronize_current_limit_up_count(
     return resolved
 
 
-def is_ad_incomplete(up, down):
-    """市场宽度体检: up+down 低于全市场规模阈值 = 残缺快照, 不可作权威值发布。
-    三道来源 (FuPan/腾讯重算/价格缓存) 与显示层共用此判据, 单一真源避免口径漂移。"""
-    try:
-        return (float(up or 0) + float(down or 0)) < MIN_MARKET_BREADTH
-    except (ValueError, TypeError):
-        return True
-
-
-AD_NARROWER_TOLERANCE = 0.98
-
-
-def should_adopt_reconciled_ad(new_up, new_dn, cur_up=None, cur_dn=None):
-    """历史 A/D 对账是否可采用价格缓存这一天的家数。
-
-    价格缓存是 up/down 的唯一真源, 但"真源存在"不等于"真源可信":
-    CI 用 actions/cache 恢复的价格缓存对历史日往往只覆盖 ~850 只 (全市场 1/6),
-    `_load_ad_cache()` 照样返回 ad_available=True 的残缺 A/D (实测 20260707 得 71/779,
-    真值 615/4495)。若无条件覆盖, 每天的 CI 都会把已对齐的历史家数重新写坏一遍。
-    因此真源本身也要过市场宽度体检 —— 与 tools/reconcile_sentiment_ad.py 判据同源。
-    """
-    if new_up is None or new_dn is None:
-        return False
-    if is_ad_incomplete(new_up, new_dn):
-        return False
-    # 第二道 (2026-08-27 加): 真源过了 4000 门槛, 仍可能比已有值窄一截。
-    # 4000 只是"绝对残缺"的下限, 拦不住"相对变窄": 本机回补的价格缓存只抓到
-    # 4588 只 (北交所 333 只 baostock 不收录 + 限流漏抓 617 只), 对账出的 A/D
-    # 合计 ~4450, 而这些日子原本存着当日线上跑的全市场值 (合计 ~4870, universe
-    # ~4900)。两者方向一致, 只是口径窄了 ~400 只 —— 无条件覆盖等于用窄口径
-    # 替换宽口径, 一路把历史磨薄。故已有值本身完整时, 真源明显更窄就不采用。
-    # 阈值 0.98: 实测这批变窄日落在 90.7%~97.4%, 全部拦下; 而同口径的真纠错
-    # (20260824 盘中价 → 收盘价) 合计只动 2 只 (99.96%), 20260825 也有 99.3%, 照旧放行。
-    if cur_up is not None and cur_dn is not None and not is_ad_incomplete(cur_up, cur_dn):
-        try:
-            new_total = float(new_up) + float(new_dn)
-            cur_total = float(cur_up) + float(cur_dn)
-        except (ValueError, TypeError):
-            return True
-        if cur_total > 0 and new_total < cur_total * AD_NARROWER_TOLERANCE:
-            return False
-    return True
+# A/D 市场宽度判据的实现在 src/ad_breadth.py —— 写入路径 (合并边界/对账/展示层)
+# 必须共用同一份, 判据漂移的代价是静默改写历史 (见该模块头部注释)。
+from ad_breadth import (  # noqa: E402
+    AD_NARROWER_TOLERANCE,
+    is_ad_incomplete,
+    protect_ad_with_cache,
+    resolve_ad_pair,
+    should_adopt_reconciled_ad,
+)
 
 
 def generate_rebound_analysis(advance_decline, sentiment_df, echelon, market_state=None):
@@ -3953,10 +3922,10 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
 
         echelon_html += render_matrix_table("分支", heights_order, ech_provider)
 
-    # ===== 主线天梯: 全市场强势股 × 强度分级 (S/B/C/D/E) =====
+    # ===== 主线天梯: 全市场强势股 × 最高关注级别 (仅 S/B) =====
     ladder_html = ''
-    if mainline_ladder and any(mainline_ladder.get(g) for g in mainline_ladder):
-        grade_order = ['S级', 'B级', 'C级', 'D级', 'E级']
+    grade_order = list(LADDER_DISPLAY_GRADES)
+    if mainline_ladder and any(mainline_ladder.get(g) for g in grade_order):
         # code->连板/涨停原因 tooltip (best-effort, 复用 plates 里的 reason)
         ladder_reason_map = {}
         if plates:
@@ -3992,10 +3961,10 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
                             matched.append(f'<div{title_attr}{style_attr}><b>{d_name}</b></div>')
             return matched
 
-        ladder_html = '<h2 class="section-title">🪜 主线天梯 (全市场强势股 × 强度分级)</h2>'
-        ladder_html += ('<div class="echelon-desc">全市场个股按强度 score = 20日涨幅% + 连板数×20 分级：'
-                        'S级≥80 / B级≥50 / C级≥25 / D级≥12 / E级≥5，落入 (大主线×细分板块) 矩阵。'
-                        '悬停个股可见涨停原因（若有）。</div>')
+        ladder_html = '<h2 class="section-title">🪜 主线天梯 (全市场强势股 × S/B级)</h2>'
+        ladder_html += ('<div class="echelon-desc">全市场个股按强度 score = 20日涨幅% + 连板数×20 分级，'
+                        '仅展示S级和B级：S级≥80 / B级≥50。'
+                        '个股落入 (大主线×细分板块) 矩阵，悬停可见涨停原因（若有）。</div>')
         ladder_html += render_matrix_table("级别", grade_order, ladder_provider)
 
     # 趋势 (增量): 与份额评级 (存量) 组合, 避免"份额小就误标退潮"。基于完整 ml_strength 时间序列算。
@@ -5927,8 +5896,14 @@ def _main_impl():
     if sentiment_df is None or sentiment_df.empty:
         sentiment_df = sent_cache_df.copy()
     elif not sent_cache_df.empty:
-        # 合并策略: sentiment_df (来自 analyze_lianban) 为主,
-        # 仅当主数据 up=0 且 down=0 时, 才用缓存中的有效值替代
+        # 合并策略: up/down 走市场宽度判据 (resolve_ad_pair) 成对二选一, zt/dt 仍是"缺失才回填"。
+        #
+        # ⚠️ 这里曾经是"sentiment_df (来自 analyze_lianban) 为主, 仅当主数据为 0 才用缓存"。
+        # 2026-09-01 事故: 价格缓存回补了 2025-11 ~ 2026-03 的 legacy 段 (每天只 ~3000~3900 只),
+        # 于是 calculate_factor 对那些历史日不再返回 None, 而是返回**窄而非零**的 A/D。
+        # 老规则只拦 NaN/0, 窄值一路畅通, 12 个历史日的全市场真值被静默覆盖 ——
+        # 20260319 由 4096/1347 (普涨) 翻成 335/3095 (下跌)。
+        # 30 天对账块 (RECENT_FILL_WINDOW) 虽有同样的判据, 但窗口够不到 3 月, 判据是被**绕过**的。
         needed = [c for c in ['日期', 'up', 'down', 'zt', 'dt'] if c in sent_cache_df.columns]
         # 过滤掉缓存中本身就是0的行, 只保留有有效数据的缓存行
         valid_cache = sent_cache_df[needed].copy()
@@ -5943,10 +5918,18 @@ def _main_impl():
                 if c_cache in sentiment_df.columns:
                     sentiment_df[col] = pd.to_numeric(sentiment_df[col], errors='coerce')
                     sentiment_df[c_cache] = pd.to_numeric(sentiment_df[c_cache], errors='coerce')
+            kept = protect_ad_with_cache(sentiment_df)
+            if kept:
+                print(f'  🛡️ 情绪缓存保护: {len(kept)} 天本次重算残缺/更窄, 保留缓存原值 '
+                      f'({", ".join(kept[:6])}{" ..." if len(kept) > 6 else ""})')
+            for col in ['zt', 'dt']:
+                c_cache = f'{col}_cache'
+                if c_cache in sentiment_df.columns:
                     # 缺失或明确的占位 0 才允许用有效缓存填充；缓存缺失不再伪造为 0。
                     fill_mask = sentiment_df[col].isna() | (sentiment_df[col] == 0)
                     sentiment_df.loc[fill_mask, col] = sentiment_df.loc[fill_mask, c_cache]
-                    sentiment_df.drop(columns=[c_cache], inplace=True)
+            sentiment_df.drop(columns=[c for c in ('up_cache', 'down_cache', 'zt_cache', 'dt_cache')
+                                       if c in sentiment_df.columns], inplace=True)
 
     # 补全缺失数据。A/D 缺失保留为空，展示层据此输出“数据不足”。
     if sentiment_df is not None and not sentiment_df.empty:
@@ -6966,9 +6949,10 @@ def main():
     跑批前后各挂一件事, 都是为了"漏跑一天"这类事故不再靠人眼发现:
       · 开跑前用 git 里的逐日切片补本地价格缓存 —— 另一侧 (CI/本地) 跑出来的数据
         直接搬过来, 零网络请求 (见 src/price_slices.py);
-      · 跑完导出切片 + 过一遍完整性体检, 有缺陷就染红退出码。体检刻意放在报告
-        产出**之后**: 它只负责喊人, 不许拦住当天的报告 (报告自己有
-        report-integrity 门禁负责降级披露)。
+      · 跑完导出切片 + 把进 git 的缓存裁进保留窗口 (见 src/cache_budget.py) +
+        过一遍完整性体检, 有缺陷就染红退出码。体检刻意放在报告产出**之后**:
+        它只负责喊人, 不许拦住当天的报告 (报告自己有 report-integrity 门禁
+        负责降级披露)。
     """
     try:
         from price_slices import sync_cache_from_slices
@@ -6984,6 +6968,14 @@ def main():
         export_slices()
     except Exception as exc:
         print(f"  ⚠️ 切片归档未执行 ({type(exc).__name__}: {exc})")
+
+    # 瘦身放在**提交之前的最后一刻**: 前面每一步都还在往这些缓存里追加,
+    # 裁完再有人写就白裁了 (见 src/cache_budget.py 的窗口/上限取值)。
+    try:
+        from cache_budget import enforce_cache_budget
+        enforce_cache_budget()
+    except Exception as exc:
+        print(f"  ⚠️ 缓存预算未执行 ({type(exc).__name__}: {exc})")
 
     if IS_GITHUB_ACTIONS:
         # CI 里体检由 deploy 之后的独立步骤负责: 若在这一步就非零退出, 后面的

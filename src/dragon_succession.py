@@ -27,6 +27,8 @@
 """
 from __future__ import annotations
 
+import bisect
+import copy
 import os
 import sys
 import time
@@ -508,17 +510,43 @@ def identify_cycle(by_day, real_dates, as_of):
     }
 
 
+# 价格帧按 code6 的一次性索引。改前 _cum_gain/infer_halt_intervals 每次都做
+# price_df[price_df['c6'] == code6] —— 在几十万行的 object 列上全表字符串比较,
+# 一轮报告调 4700+ 次, profile 里 pandas comp_method_OBJECT_ARRAY self 101.3s。
+# 分组一次后查表, 语义完全不变 (组内仍按 d 升序, 稳定排序保留同日原顺序)。
+_PRICE_IDX_CACHE = {'frame': None, 'index': None}
+
+
+def _price_index(price_df) -> dict:
+    """{code6: (升序日期 list, 对应收盘 list)}; 空表/缺列返回 {}。
+
+    单槽缓存按帧对象身份 (`is`) 命中, 并持有强引用, 因此不存在 id 复用误命中。
+    """
+    if price_df is None or getattr(price_df, 'empty', True):
+        return {}
+    if not {'c6', 'd', 'close'}.issubset(price_df.columns):
+        return {}
+    if _PRICE_IDX_CACHE['frame'] is price_df and _PRICE_IDX_CACHE['index'] is not None:
+        return _PRICE_IDX_CACHE['index']
+    index = {}
+    for c6, g in price_df.sort_values('d', kind='stable').groupby('c6', sort=False):
+        index[c6] = (g['d'].tolist(), g['close'].tolist())
+    _PRICE_IDX_CACHE['frame'] = price_df
+    _PRICE_IDX_CACHE['index'] = index
+    return index
+
+
 def _cum_gain(price_df, code6, d_end, lookback_days):
     """code6 截至 d_end 的近 lookback_days 交易日累计涨幅% (缺价返回 None)。"""
-    if price_df is None or price_df.empty:
+    entry = _price_index(price_df).get(code6)
+    if not entry:
         return None
-    sub = price_df[price_df['c6'] == code6].sort_values('d')
-    sub = sub[sub['d'] <= d_end]
-    if len(sub) < 2:
+    dates, closes = entry
+    cut = bisect.bisect_right(dates, d_end)   # <= d_end 的行数, 等价于原来的 len(sub)
+    if cut < 2:
         return None
-    closes = sub['close'].tolist()
-    p1 = closes[-1]
-    idx = max(0, len(closes) - 1 - lookback_days)
+    p1 = closes[cut - 1]
+    idx = max(0, cut - 1 - lookback_days)
     p0 = closes[idx]
     if not p0 or p0 <= 0:
         return None
@@ -565,7 +593,8 @@ def infer_halt_intervals(price_df, code6, market_days, anns):
     if price_df is None or price_df.empty or not market_days:
         return []
     mdays = sorted(set(market_days))
-    have = set(price_df[price_df['c6'] == code6]['d'].tolist()) & set(mdays)
+    _entry = _price_index(price_df).get(code6)
+    have = (set(_entry[0]) if _entry else set()) & set(mdays)
     if len(have) < 2:
         return []
     first_have, last_have = min(have), max(have)
@@ -830,8 +859,27 @@ def _make_stage(cycle, collapse) -> str:
 # ─────────────────────────────────────────────────────────────
 # 主入口
 # ─────────────────────────────────────────────────────────────
+# 进程内结果记忆: 主报告一轮里 build_dragon_succession 被调两次 (主报告 teaser +
+# 独立子页), 同 report_date/mode 下两次算的是同一份纯本地数据, 第二次纯属重算
+# (实测 53.7s/次)。返回 deepcopy, 两个调用方就地改也互不污染。
+# 强制重算: DRAGON_NO_MEMO=1; _build_context 被替换(测试 monkeypatch)时也自动绕过,
+# 否则两个用不同上下文的测试会互相吃到对方的缓存结果。
+_RESULT_MEMO: dict = {}
+_BUILD_CONTEXT_ORIG = _build_context
+
+
 def build_dragon_succession(report_date=None, mode='observation') -> dict:
-    """主入口。任何子步骤失败静默兜底, 保证返回可渲染 dict (不抛异常)。
+    """主入口 (带进程内记忆)。语义与 _build_dragon_succession_uncached 完全一致。"""
+    if os.environ.get('DRAGON_NO_MEMO') == '1' or _build_context is not _BUILD_CONTEXT_ORIG:
+        return _build_dragon_succession_uncached(report_date, mode=mode)
+    key = (_norm_date(report_date) if report_date else '', str(mode or 'observation').lower())
+    if key not in _RESULT_MEMO:
+        _RESULT_MEMO[key] = _build_dragon_succession_uncached(report_date, mode=mode)
+    return copy.deepcopy(_RESULT_MEMO[key])
+
+
+def _build_dragon_succession_uncached(report_date=None, mode='observation') -> dict:
+    """真正的构建流程。任何子步骤失败静默兜底, 保证返回可渲染 dict (不抛异常)。
 
     深度冰点(无任何周期) → has_cycle=False, degraded=True (teaser 返''、子页不归档)。
     """

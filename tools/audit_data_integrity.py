@@ -36,8 +36,9 @@ try:
 except Exception:
     pass
 
-# 全市场宽度下限: up+down 低于此值视为残缺快照 (与主程序 MIN_MARKET_BREADTH 同义)
-MIN_MARKET_BREADTH = 4000
+# 全市场宽度下限: up+down 低于此值视为残缺快照。判据单一真源在 src/ad_breadth.py ——
+# 体检的阈值必须和写入方一致, 否则闸门与写入方各判一套 (写进去的值体检报错, 或反之)。
+from ad_breadth import MIN_MARKET_BREADTH  # noqa: E402
 # 覆盖率下限: 某交易日行数 / 基准行数 低于此值视为覆盖缺口
 MIN_COVERAGE_RATIO = 0.90
 # 陈旧副本阈值: 与前一交易日 close 逐股完全相同的占比上限 (留 10% 停牌余量)

@@ -33,8 +33,8 @@ from timing_signal import _classify_scene  # noqa: E402
 # ============================================================
 #  数据加载
 # ============================================================
-# 全市场宽度下限 (与 tools/reconcile_sentiment_ad.py / 主程序 MIN_MARKET_BREADTH 同义)
-MIN_MARKET_BREADTH = 4000
+# 全市场宽度下限: 单一真源在 src/ad_breadth.py
+from ad_breadth import MIN_MARKET_BREADTH  # noqa: E402
 
 
 def _trim_uninformative_prefix(facts):

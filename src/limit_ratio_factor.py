@@ -28,9 +28,7 @@ from paths import (
     PRICE_CACHE as PRICE_CACHE_FILE,
 )
 from report_logic import normalize_stock_code
-
-
-MIN_MARKET_BREADTH = 4000
+from ad_breadth import MIN_MARKET_BREADTH  # 单一真源, 别在本文件另写一份
 
 
 # ─────────────────────────────────────────────────────────────

@@ -412,3 +412,105 @@ def test_publish_without_dragon_html_unchanged(tmp_path):
     assert not os.path.isdir(os.path.join(site, 'dragon'))
     idx = open(os.path.join(site, 'index.html'), encoding='utf-8').read()
     assert 'href="dragon/latest.html"' not in idx     # 入口卡锚点不出现 (CSS 规则仍在)
+
+
+# ─────────────────────────── ⑫ 提速重构不变量 (价格索引 / 结果记忆) ───────────────────────────
+def _naive_cum_gain(price_df, code6, d_end, lookback_days):
+    """重构前的原实现 (全表 mask + sort), 作为对测基准。"""
+    if price_df is None or price_df.empty:
+        return None
+    sub = price_df[price_df['c6'] == code6].sort_values('d')
+    sub = sub[sub['d'] <= d_end]
+    if len(sub) < 2:
+        return None
+    closes = sub['close'].tolist()
+    p1 = closes[-1]
+    p0 = closes[max(0, len(closes) - 1 - lookback_days)]
+    if not p0 or p0 <= 0:
+        return None
+    return (p1 / p0 - 1) * 100
+
+
+_IDX_ROWS = [('A', '20260105', 12.0), ('B', '20260102', 5.0), ('A', '20260102', 10.0),
+             ('A', '20260106', 13.0), ('B', '20260106', 4.0), ('A', '20260103', 11.0),
+             ('C', '20260103', 9.0)]
+
+
+def test_price_index_matches_mask_and_sort():
+    # 索引的每一组必须与原来的 price_df[price_df['c6']==c].sort_values('d') 逐元素相同
+    price = _price_df(_IDX_ROWS)
+    idx = D._price_index(price)
+    assert set(idx) == {'A', 'B', 'C'}
+    for c in idx:
+        sub = price[price['c6'] == c].sort_values('d')
+        assert idx[c] == (sub['d'].tolist(), sub['close'].tolist())
+
+
+def test_price_index_cache_keyed_on_frame_identity():
+    p1, p2 = _price_df(_IDX_ROWS), _price_df(_IDX_ROWS[:3])
+    i1 = D._price_index(p1)
+    assert D._price_index(p1) is i1                      # 同一帧 → 命中同一对象
+    assert set(D._price_index(p2)) == {'A', 'B'}          # 换帧 → 重建, 不吃旧缓存
+    assert set(D._price_index(p1)) == {'A', 'B', 'C'}     # 再换回来仍正确
+
+
+@pytest.mark.parametrize('empty', [None, _price_df([]),
+                                   pd.DataFrame({'x': [1]})])   # 空/缺列一律 {}
+def test_price_index_degrades_to_empty(empty):
+    assert D._price_index(empty) == {}
+
+
+@pytest.mark.parametrize('lookback', [0, 1, 2, 3, 10, 30])
+@pytest.mark.parametrize('d_end', ['20251231', '20260102', '20260103', '20260105',
+                                   '20260106', '20260930'])
+def test_cum_gain_equivalent_to_naive(lookback, d_end):
+    price = _price_df(_IDX_ROWS)
+    for c in ('A', 'B', 'C', 'ZZZ', ''):
+        assert D._cum_gain(price, c, d_end, lookback) ==                _naive_cum_gain(price, c, d_end, lookback)
+
+
+def test_cum_gain_edge_cases():
+    price = _price_df(_IDX_ROWS + [('D', '20260102', 0.0), ('D', '20260103', 8.0)])
+    assert D._cum_gain(price, 'ZZZ', '20260106', 10) is None      # 无此代码
+    assert D._cum_gain(price, 'C', '20260106', 10) is None        # 只有 1 行
+    assert D._cum_gain(price, 'A', '20251231', 10) is None        # d_end 早于首个交易日
+    assert D._cum_gain(price, 'D', '20260103', 10) is None        # 基期价 <= 0
+    assert D._cum_gain(None, 'A', '20260106', 10) is None
+    assert abs(D._cum_gain(price, 'A', '20260106', 1) - (13.0 / 12.0 - 1) * 100) < 1e-9
+
+
+def test_build_memo_reuses_result_and_isolates_mutation(monkeypatch):
+    # 同 (report_date, mode) 只真算一次; 但返回深拷贝, 调用方就地改不污染下一次
+    calls = []
+
+    def fake(report_date=None, mode='observation'):
+        calls.append((report_date, mode))
+        return {'as_of': '20260106', 'board': [{'name': '真'}], 'nested': {'k': [1]}}
+
+    monkeypatch.setattr(D, '_build_dragon_succession_uncached', fake)
+    monkeypatch.setattr(D, '_RESULT_MEMO', {})
+    monkeypatch.delenv('DRAGON_NO_MEMO', raising=False)
+    a = D.build_dragon_succession(report_date='20260106')
+    a['board'][0]['name'] = '污染'
+    a['nested']['k'].append(2)
+    b = D.build_dragon_succession(report_date='2026-01-06')     # 归一化后同键
+    assert len(calls) == 1                                     # 第二次没有重算
+    assert b['board'][0]['name'] == '真' and b['nested']['k'] == [1]
+    D.build_dragon_succession(report_date='20260106', mode='review')
+    assert len(calls) == 2                                     # 换 mode 是另一份
+
+
+def test_build_memo_bypassed_by_env_and_patched_context(monkeypatch):
+    calls = []
+    monkeypatch.setattr(D, '_build_dragon_succession_uncached',
+                        lambda report_date=None, mode='observation': calls.append(1) or {})
+    monkeypatch.setattr(D, '_RESULT_MEMO', {})
+    monkeypatch.setenv('DRAGON_NO_MEMO', '1')
+    D.build_dragon_succession(report_date='20260106')
+    D.build_dragon_succession(report_date='20260106')
+    assert len(calls) == 2 and D._RESULT_MEMO == {}             # 环境变量强制重算
+    monkeypatch.delenv('DRAGON_NO_MEMO')
+    monkeypatch.setattr(D, '_build_context', lambda *a, **k: {})
+    D.build_dragon_succession(report_date='20260106')
+    D.build_dragon_succession(report_date='20260106')
+    assert len(calls) == 4 and D._RESULT_MEMO == {}             # 上下文被替换也不吃缓存

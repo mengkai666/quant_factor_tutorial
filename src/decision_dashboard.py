@@ -32,6 +32,7 @@ ctx 字段约定 (缺失字段自动降级为 '—'):
 """
 from __future__ import annotations
 
+import csv
 import os
 import re
 from datetime import datetime
@@ -454,6 +455,8 @@ def _build_action_plan(ctx: dict, judgement: dict | None = None) -> dict[str, An
             'position': '空仓',
             'posture': '事实阻断',
             'core_action': '不开新仓',
+            'execution_allowed': False,
+            'publication_mode': mode,
             'groups': [],
         }
 
@@ -463,6 +466,8 @@ def _build_action_plan(ctx: dict, judgement: dict | None = None) -> dict[str, An
             'position': '0 成',
             'posture': '无合格标的',
             'core_action': '今日无合格标的，不开新仓',
+            'execution_allowed': False,
+            'publication_mode': mode,
             'groups': [],
         }
 
@@ -577,22 +582,34 @@ def _build_action_plan(ctx: dict, judgement: dict | None = None) -> dict[str, An
             'limit': 4,
         },
     }
+    zero_position = bool(
+        str(position or '').strip() in {'空仓', '0成', '0 成'}
+        or re.fullmatch(r'0(?:\.0+)?\s*成', str(position or '').strip())
+    )
+    execution_allowed = mode == 'decision' and not zero_position and posture != '场景失效'
+
     groups_out = []
     for role in ('attack', 'confirm', 'risk'):
         spec = group_specs[role]
         role_rows = []
         for row in [item for item in rows if item['role'] == role][:spec['limit']]:
+            action = spec['action']
+            trigger = spec['trigger']
+            if role in {'attack', 'confirm'} and not execution_allowed:
+                action = '仅观察，不下单'
+                trigger = f'满足观察条件后进入确认名单：{trigger}'
             role_rows.append({
                 **row,
-                'action': spec['action'],
-                'trigger': spec['trigger'],
+                'action': action,
+                'trigger': trigger,
                 'invalid': spec['invalid'],
+                'execution_allowed': bool(execution_allowed and role != 'risk'),
             })
         if role_rows:
             groups_out.append({
                 'code': role,
-                'label': spec['label'],
-                'position': spec['position'],
+                'label': spec['label'] if execution_allowed or role == 'risk' else '观察组',
+                'position': spec['position'] if execution_allowed or role == 'risk' else '不新增仓位',
                 'rows': role_rows,
             })
     return {
@@ -601,8 +618,182 @@ def _build_action_plan(ctx: dict, judgement: dict | None = None) -> dict[str, An
         'core_action': core_action,
         'position_source': position_source,
         'active_scenario_id': top_scenario_id or None,
+        'execution_allowed': execution_allowed,
+        'publication_mode': mode,
         'groups': groups_out,
     }
+
+
+def _flatten_action_plan_rows(plan: dict) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for group in list(plan.get('groups') or []):
+        if not isinstance(group, dict):
+            continue
+        for row in list(group.get('rows') or []):
+            if isinstance(row, dict):
+                rows.append({**row, 'group_code': str(group.get('code') or '')})
+    return rows
+
+
+def build_today_decision(
+    ctx: dict, action_plan: dict | None = None, judgement: dict | None = None,
+) -> dict[str, Any]:
+    '''将完整看板压缩为盘前可执行的三项检查清单。'''
+    plan = action_plan or _build_action_plan(ctx, judgement)
+    rows = _flatten_action_plan_rows(plan)
+    actionable = [row for row in rows if row.get('role') in {'attack', 'confirm'}]
+    risk_rows = [row for row in rows if row.get('role') == 'risk']
+
+    mainline = ctx.get('mainline_review') if isinstance(ctx.get('mainline_review'), dict) else {}
+    concentration = (
+        ctx.get('mainline_concentration')
+        if isinstance(ctx.get('mainline_concentration'), dict) else {}
+    )
+    top1 = str(mainline.get('top1') or concentration.get('top_mainline') or '方向待确认').strip()
+    top_share = mainline.get('concentration', concentration.get('top_share'))
+    mainline_label = top1
+    if isinstance(top_share, (int, float)):
+        mainline_label += f' · {float(top_share):.0%}'
+
+    same_line = [
+        row for row in actionable
+        if top1 and top1 != '方向待确认' and top1 in str(row.get('sector') or '')
+    ]
+    mainline_rows = (same_line or actionable)[:3]
+    mainline_names = '、'.join(
+        str(row.get('name') or '') for row in mainline_rows if row.get('name')
+    ) or '等待梯队确认'
+    risk_names = '、'.join(
+        str(row.get('name') or '') for row in risk_rows[:3] if row.get('name')
+    ) or '高标与跌停反馈'
+
+    execution_allowed = bool(plan.get('execution_allowed'))
+    default_action = str(plan.get('core_action') or '不开新仓')
+    if not execution_allowed:
+        default_action = '不开新仓，只观察条件是否成立'
+
+    watch_items = [
+        {
+            'code': 'market_gate',
+            'title': '市场开关',
+            'headline': f'建议仓位 {plan.get("position") or "0 成"}',
+            'detail': f'默认动作：{default_action}',
+            'check': '9:35 前观察上涨家数、跌停反馈和中位梯队承接；恶化则取消全部新仓。',
+        },
+        {
+            'code': 'mainline',
+            'title': '唯一主线',
+            'headline': mainline_label,
+            'detail': f'条件候选：{mainline_names}',
+            'check': '至少出现同题材联动和梯队晋级；单一高开或孤立涨停不算确认。',
+        },
+        {
+            'code': 'risk_gate',
+            'title': '风险开关',
+            'headline': risk_names,
+            'detail': '高标只作情绪锚，不作为追高理由。',
+            'check': '放量断板、批量负反馈或跌停扩张时，立即维持或恢复空仓。',
+        },
+    ]
+    return {
+        'report_date': str(ctx.get('date_str') or ''),
+        'execution_allowed': execution_allowed,
+        'default_action': default_action,
+        'position': str(plan.get('position') or '0 成'),
+        'mainline': top1,
+        'watch_items': watch_items,
+        'candidates': rows,
+        'action_plan': plan,
+    }
+
+
+def _today_three_html(ctx: dict, action_plan: dict, prefix: str = '') -> str:
+    decision = build_today_decision(ctx, action_plan=action_plan)
+    cards = []
+    accents = {'market_gate': '#f0b429', 'mainline': '#58a6ff', 'risk_gate': '#f85149'}
+    for item in decision['watch_items']:
+        color = accents.get(str(item.get('code') or ''), '#8b949e')
+        cards.append(
+            f'<article class="{prefix}today-watch" style="min-width:0;padding:14px 15px;'
+            f'border-top:3px solid {color};background:rgba(22,27,34,.66);border-radius:8px">'
+            f'<div style="color:{color};font-size:12px;font-weight:800;margin-bottom:6px">{_esc(item.get("title"))}</div>'
+            f'<div style="color:#f0f6fc;font-size:15px;font-weight:800;line-height:1.4">{_esc(item.get("headline"))}</div>'
+            f'<div style="color:#c9d1d9;font-size:12px;line-height:1.55;margin-top:6px">{_esc(item.get("detail"))}</div>'
+            f'<div style="color:#8b949e;font-size:11px;line-height:1.55;margin-top:6px">{_esc(item.get("check"))}</div>'
+            '</article>'
+        )
+    status = '条件成立后才允许试错' if decision['execution_allowed'] else '当前默认不开新仓'
+    return f'''
+    <section class="{prefix}today-three" style="margin:14px 0 18px">
+      <div style="display:flex;align-items:end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:9px">
+        <div style="color:#ffcc00;font-size:16px;font-weight:850;border-left:3px solid #ffcc00;padding-left:9px">今日只看三件事</div>
+        <div style="color:#8b949e;font-size:11px">{_esc(status)} · 数据日期 {_esc(decision.get('report_date') or '—')}</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:9px">{''.join(cards)}</div>
+    </section>'''
+
+
+def build_today_focus_rows(ctx: dict, action_plan: dict | None = None) -> list[dict[str, Any]]:
+    '''返回与今日执行计划同源、兼容旧表头的候选行。'''
+    decision = build_today_decision(ctx, action_plan=action_plan)
+    plan = decision['action_plan']
+    role_labels = {'attack': '进攻观察', 'confirm': '确认观察', 'risk': '风险锚'}
+    rows: list[dict[str, Any]] = []
+    for row in decision['candidates']:
+        code = normalize_stock_code(row.get('code'))
+        if not code:
+            continue
+        role = str(row.get('role') or row.get('group_code') or '')
+        trigger = str(row.get('trigger') or '')
+        invalid = str(row.get('invalid') or '')
+        executable = bool(row.get('execution_allowed') and decision['execution_allowed'])
+        rows.append({
+            '报告日期': decision['report_date'],
+            '股票': str(row.get('name') or ''),
+            '代码': code,
+            '板块': str(row.get('sector') or '题材待确认'),
+            '角色': role_labels.get(role, role or '观察'),
+            '策略池': f'【{role_labels.get(role, role or "观察")}】',
+            '可执行': '是' if executable else '否',
+            '操作': str(row.get('action') or ''),
+            '触发条件': trigger,
+            '失效条件': invalid,
+            '入场条件': trigger,
+            '防守位': invalid,
+            '建议仓位': str(plan.get('position') or '0 成'),
+            '默认动作': decision['default_action'],
+            '数据状态': str(plan.get('publication_mode') or ctx.get('publication_mode') or 'observation'),
+            '数据来源': '今日执行计划',
+            'code': code,
+            'name': str(row.get('name') or ''),
+            'market': code[:2],
+            'tradeable': True,
+        })
+    return rows
+
+
+def write_today_focus_pool(ctx: dict, output_path: Any, action_plan: dict | None = None) -> int:
+    '''原子写出与“明日执行计划”同源的股票池，空结果也覆盖旧文件。'''
+    fieldnames = [
+        '报告日期', '股票', '代码', '板块', '角色', '策略池', '可执行', '操作',
+        '触发条件', '失效条件', '入场条件', '防守位', '建议仓位', '默认动作',
+        '数据状态', '数据来源', 'code', 'name', 'market', 'tradeable',
+    ]
+    rows = build_today_focus_rows(ctx, action_plan=action_plan)
+    output = os.fspath(output_path)
+    parent = os.path.dirname(os.path.abspath(output))
+    os.makedirs(parent, exist_ok=True)
+    temp_path = output + '.tmp'
+    try:
+        with open(temp_path, 'w', encoding='utf-8-sig', newline='') as handle:
+            writer = csv.DictWriter(handle, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+        os.replace(temp_path, output)
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+    return len(rows)
 
 
 def _compact_market_facts_html(ctx: dict, prefix: str = '') -> str:
@@ -2804,6 +2995,7 @@ def generate_dashboard_html(ctx: dict) -> str:
     focus_catalysts = ctx.get('focus_catalysts') or {}
     focus_rows_html = _render_focus_table(focus_buckets, catalysts=focus_catalysts, mode=mode)
     action_plan = _build_action_plan(ctx, judgement)
+    today_three_html = '' if blocked else _today_three_html(ctx, action_plan)
     action_plan_html = '' if blocked else _action_plan_html(action_plan)
     compact_market_facts_html = _compact_market_facts_html(ctx)
     quality_html = _quality_html(ctx)
@@ -3226,6 +3418,8 @@ def generate_dashboard_html(ctx: dict) -> str:
 
   {headline_html}
 
+  {today_three_html}
+
   {compact_market_facts_html}
 
   {action_plan_html}
@@ -3444,6 +3638,7 @@ def generate_dashboard_section(ctx: dict) -> str:
         focus_rows_inline = '<div class="dbd-fp-empty" style="color:#6e7681;padding:10px 2px;">暂无核心股票池 · 无近期催化</div>'
 
     action_plan = _build_action_plan(ctx, judgement)
+    today_three_html = '' if blocked else _today_three_html(ctx, action_plan, prefix='dbd-')
     action_plan_html = '' if blocked else _action_plan_html(action_plan, prefix='dbd-')
     compact_market_facts_html = _compact_market_facts_html(ctx, prefix='dbd-')
     quality_html = _quality_html(ctx, prefix='dbd-')
@@ -3769,6 +3964,8 @@ def generate_dashboard_section(ctx: dict) -> str:
   </div>
 
   {headline_html}
+
+  {today_three_html}
 
   {compact_market_facts_html}
 

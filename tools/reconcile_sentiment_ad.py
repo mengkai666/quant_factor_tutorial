@@ -35,13 +35,12 @@ try:
 except Exception:
     pass
 
-# 全市场宽度下限 (与主程序 MIN_MARKET_BREADTH 同义): up+down 低于此值视为残缺快照
-MIN_MARKET_BREADTH = 4000
+# 全市场宽度下限 / 变窄容差: 单一真源在 src/ad_breadth.py (与合并边界、体检共用)
+from ad_breadth import AD_NARROWER_TOLERANCE, MIN_MARKET_BREADTH  # noqa: E402,F401
 # 已有值本身完整时, 真源比它窄这么多就不采用 (与主程序 AD_NARROWER_TOLERANCE 同义):
 # 4000 只拦"绝对残缺", 拦不住"相对变窄" —— 回补的价格缓存漏了几百只股 (北交所 +
 # 限流漏抓) 时对账值合计会比当日线上跑的全市场值低 ~400, 方向一致但口径窄,
 # 无条件覆盖等于一路把历史磨薄。
-AD_NARROWER_TOLERANCE = 0.98
 
 
 def main():

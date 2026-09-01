@@ -30,13 +30,27 @@ import os
 
 import pandas as pd
 
+from ad_breadth import MIN_MARKET_BREADTH
 from paths import PRICE_CACHE, PRICE_SLICE_DIR
 
 # 导出窗口: 每次跑批重写最近这些天的切片 (只写内容真变了的)。
 # 不止写"今天"是因为回补/对账经常改到前几天, 切片必须跟着更新。
 EXPORT_DAYS = 10
-# 保留上限 (天). 一天 ≈ 90KB, 250 天 ≈ 22MB 摊在一年的提交里, 可接受。
-KEEP_SLICES = 250
+# 保留上限 (天). 一天 ≈ 55KB, 150 天 ≈ 8MB 摊在半年多的提交里。
+# 为什么是 150 而不是 250: 下限由**最长分析窗口**定 —— 回测 203 天是 tools/ 里
+# 本地跑的事, 跑批自己最长只要 MA120 (src/trend_regime.py) 的 120 个交易日。
+# 150 留了 30 天余量, 同时把进 git 的总量砍掉四成。
+KEEP_SLICES = 150
+
+# 一天的行数低于这个数就**不许导出成切片**。
+# 2026-09-01 事故: CI 的 baostock 整段抓取撞上 GLOBAL_TIMEOUT=300s 被 break,
+# 已抓到的 ~840 只股票 × 60 个交易日照样落库 —— 每行都是真值, 但每天只有全市场
+# 的 15%。这种"部分覆盖板"当天就把 58 天的 sentiment up/down 覆盖成了 ~840
+# (见 src/ad_breadth.py)。判据挡住了下游消费, 但只要它被导成切片进 git, 另一侧
+# `git pull` 后就会把这 840 行当成"这天我有了"填进缓存 —— 而价格抓取的起点是
+# max(date)+1, 区间中段的薄天**永远不会被重抓**, 于是薄成了永久事实。
+# 切片是仓库里唯一可回溯的副本, 它只准装可信的整天。
+SLICE_MIN_COVERAGE = MIN_MARKET_BREADTH
 
 # 价格缓存自身的体积上限 (MB), **本地和 CI 同值**。
 # 放在这里是因为它必须装得下切片保留窗口: KEEP_SLICES 天 × ~0.33MB/交易日。
@@ -93,10 +107,16 @@ def export_slices(frame: pd.DataFrame | None = None, days: int = EXPORT_DAYS,
         return []
     os.makedirs(PRICE_SLICE_DIR, exist_ok=True)
     dates = sorted(frame['date'].dropna().astype(str).unique())[-max(1, int(days)):]
-    written = []
+    written, skipped = [], []
     for date in dates:
         chunk = frame.loc[frame['date'].astype(str) == date]
         if chunk.empty:
+            continue
+        # 覆盖不足的天一律不导 (见 SLICE_MIN_COVERAGE): 部分覆盖板一旦进了切片,
+        # 另一侧就再也不会重抓这一天。
+        coverage = int(chunk['code'].nunique()) if 'code' in chunk.columns else len(chunk)
+        if coverage < SLICE_MIN_COVERAGE:
+            skipped.append((date, coverage))
             continue
         payload = _to_csv_lf(chunk.sort_values(_KEY))
         path = _slice_path(date)
@@ -115,6 +135,10 @@ def export_slices(frame: pd.DataFrame | None = None, days: int = EXPORT_DAYS,
         if written:
             print(f'  📦 价格切片已归档 {len(written)} 天: {", ".join(written[-5:])}'
                   f'{" ..." if len(written) > 5 else ""}')
+        if skipped:
+            detail = ", ".join(f'{d}({n})' for d, n in skipped[-5:])
+            print(f'  ⏭️ {len(skipped)} 天覆盖不足 {SLICE_MIN_COVERAGE} 只, 未导出切片: '
+                  f'{detail}{" ..." if len(skipped) > 5 else ""}')
         if pruned:
             print(f'  🧹 切片超出保留上限, 删掉最老 {pruned} 天')
     return written

@@ -36,6 +36,9 @@ def sandbox(tmp_path, monkeypatch):
     cache = tmp_path / 'price_history_cache.csv'
     monkeypatch.setattr(PS, 'PRICE_SLICE_DIR', str(slice_dir))
     monkeypatch.setattr(PS, 'PRICE_CACHE', str(cache))
+    # 覆盖门槛在这些用例里放到 1: 它们验的是导出/合并/裁剪的机制, 每天两三行就够。
+    # 门槛本身由 test_export_refuses_a_partially_covered_day 用真值 4000 单独钉。
+    monkeypatch.setattr(PS, 'SLICE_MIN_COVERAGE', 1)
     return slice_dir, cache
 
 
@@ -146,3 +149,41 @@ def test_price_cache_cap_holds_the_slice_window():
         text = io.open(os.path.join(root, 'src', name), encoding='utf-8').read()
         assert 'from price_slices import PRICE_CACHE_MAX_SIZE_MB' in text, name
         assert 'PRICE_CACHE_MAX_SIZE_MB = ' not in text, f'{name} 又自己写死了一份'
+
+
+def test_export_refuses_a_partially_covered_day(tmp_path, monkeypatch):
+    """覆盖不足的天不许进切片 —— 门槛用真值 4000, 不做 monkeypatch。
+
+    2026-09-01 事故链: CI 的 baostock 整段抓取撞上 GLOBAL_TIMEOUT=300s 被 break,
+    已抓到的 ~840 只 × 60 个交易日照样落库。每行都是真值, 但每天只有全市场 15%。
+    这种"部分覆盖板"一旦导成切片进 git, 另一侧 `git pull` 后就把这 840 行当成
+    "这天我有了"填进缓存 —— 而价格抓取的起点是 max(date)+1, 区间中段的薄天
+    **永远不会被重抓**, 薄就成了永久事实。切片只准装可信的整天。
+    """
+    slice_dir = tmp_path / 'price_slices'
+    slice_dir.mkdir()
+    monkeypatch.setattr(PS, 'PRICE_SLICE_DIR', str(slice_dir))
+    monkeypatch.setattr(PS, 'PRICE_CACHE', str(tmp_path / 'price_history_cache.csv'))
+
+    thin = [_row('2026-08-28', f'sh{600000 + i}') for i in range(840)]
+    full = [_row('2026-08-31', f'sh{600000 + i}') for i in range(PS.SLICE_MIN_COVERAGE)]
+    written = PS.export_slices(_frame(thin + full), quiet=True)
+
+    assert written == ['2026-08-31'], '薄天被导出了'
+    assert PS.available_dates() == ['2026-08-31']
+    assert not (slice_dir / '2026-08-28.csv.gz').exists()
+
+
+def test_slice_min_coverage_is_the_same_judge_as_ad_breadth():
+    """门槛不许再写死一份: 它和 A/D 宽度体检判的是同一件事 (这天覆盖全市场了吗)。
+
+    两处各写一个数字, 早晚会分叉成"切片放行、A/D 拦下"或者反过来。
+    """
+    import io
+    import os
+    from ad_breadth import MIN_MARKET_BREADTH
+
+    assert PS.SLICE_MIN_COVERAGE == MIN_MARKET_BREADTH
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    text = io.open(os.path.join(root, 'src', 'price_slices.py'), encoding='utf-8').read()
+    assert 'from ad_breadth import MIN_MARKET_BREADTH' in text

@@ -780,6 +780,7 @@ LADDER_GRADES = [
     ('E级', 5),
 ]
 LADDER_MIN_SCORE = 5  # 低于此分不入梯队
+LADDER_DISPLAY_GRADES = ('S级', 'B级')  # 报告只展示最高关注级别，底层仍保留完整分级
 
 # 涨停记录定义板块归属的有效窗口 (交易日)。涨停是"某天因某题材涨停"的一次性
 # 快照, 超过此窗口的旧涨停不再定义个股当前所属板块, 避免旧涨停把无关票钉进主线池。
@@ -971,16 +972,12 @@ ACTIVE_ML_RECENT = 5       # 观察窗口 (交易日)
 # 强制重算; 重算后仍不达标则标"数据未就位", 绝不把残缺家数发布出去。
 # 阈值取 4000: 既能拦住 ~1688 这类只覆盖 1/3 市场的残缺值,
 # 又不会误伤 513涨/4580跌 (合计5093) 这类合法的极端普跌日。
-MIN_MARKET_BREADTH = 4000
-
-
-def is_ad_incomplete(up, down):
-    """市场宽度体检: up+down 低于全市场规模阈值 = 残缺快照, 不可作权威值发布。
-    三道来源 (FuPan/腾讯重算/价格缓存) 与显示层共用此判据, 单一真源避免口径漂移。"""
-    try:
-        return (float(up or 0) + float(down or 0)) < MIN_MARKET_BREADTH
-    except (ValueError, TypeError):
-        return True
+# 实现在 src/ad_breadth.py (单一真源), 这里只转出模块级名字。
+from ad_breadth import (  # noqa: E402
+    MIN_MARKET_BREADTH,
+    is_ad_incomplete,
+    protect_ad_with_cache,
+)
 
 
 def generate_rebound_analysis(advance_decline, sentiment_df, echelon):
@@ -2526,10 +2523,10 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
             
         echelon_html += render_matrix_table("分支", heights_order, ech_provider)
 
-    # ===== 主线天梯: 全市场强势股 × 强度分级 (S/B/C/D/E) =====
+    # ===== 主线天梯: 全市场强势股 × 最高关注级别 (仅 S/B) =====
     ladder_html = ''
-    if mainline_ladder and any(mainline_ladder.get(g) for g in mainline_ladder):
-        grade_order = ['S级', 'B级', 'C级', 'D级', 'E级']
+    grade_order = list(LADDER_DISPLAY_GRADES)
+    if mainline_ladder and any(mainline_ladder.get(g) for g in grade_order):
         # code->连板/涨停原因 tooltip (best-effort, 复用 plates 里的 reason)
         ladder_reason_map = {}
         if plates:
@@ -2565,10 +2562,10 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
                             matched.append(f'<div{title_attr}{style_attr}><b>{d_name}</b></div>')
             return matched
 
-        ladder_html = '<h2 class="section-title">🪜 主线天梯 (全市场强势股 × 强度分级)</h2>'
-        ladder_html += ('<div class="echelon-desc">全市场个股按强度 score = 20日涨幅% + 连板数×20 分级：'
-                        'S级≥80 / B级≥50 / C级≥25 / D级≥12 / E级≥5，落入 (大主线×细分板块) 矩阵。'
-                        '悬停个股可见涨停原因（若有）。</div>')
+        ladder_html = '<h2 class="section-title">🪜 主线天梯 (全市场强势股 × S/B级)</h2>'
+        ladder_html += ('<div class="echelon-desc">全市场个股按强度 score = 20日涨幅% + 连板数×20 分级，'
+                        '仅展示S级和B级：S级≥80 / B级≥50。'
+                        '个股落入 (大主线×细分板块) 矩阵，悬停可见涨停原因（若有）。</div>')
         ladder_html += render_matrix_table("级别", grade_order, ladder_provider)
 
     # 趋势 (增量): 与份额评级 (存量) 组合, 避免"份额小就误标退潮"。基于完整 ml_strength 时间序列算。
@@ -4211,10 +4208,18 @@ def iter_main(limit_pool_provider=None, plate_provider=None):
                 if c_cache in sentiment_df.columns:
                     sentiment_df[col] = pd.to_numeric(sentiment_df[col], errors='coerce').fillna(0)
                     sentiment_df[c_cache] = pd.to_numeric(sentiment_df[c_cache], errors='coerce').fillna(0)
+            # up/down 成对走市场宽度判据: 本次重算残缺 (或明显窄于完整的缓存值) 就保留缓存。
+            # 老规则按"主数据 == 0"回填, 只拦零值, 拦不住"窄而非零"的残缺快照 ——
+            # 与 src/主线强度追踪.py 的合并边界同一个坑, 详见那里的注释与 ad_breadth 模块头。
+            protect_ad_with_cache(sentiment_df)
+            for col in ['zt', 'dt']:
+                c_cache = f'{col}_cache'
+                if c_cache in sentiment_df.columns:
                     # 仅当主数据为 0 时才用缓存填充
                     fill_mask = sentiment_df[col] == 0
                     sentiment_df.loc[fill_mask, col] = sentiment_df.loc[fill_mask, c_cache]
-                    sentiment_df.drop(columns=[c_cache], inplace=True)
+            sentiment_df.drop(columns=[c for c in ('up_cache', 'down_cache', 'zt_cache', 'dt_cache')
+                                       if c in sentiment_df.columns], inplace=True)
     
     # 补全缺失数据 (up=0 且 down=0 的天 + 最新日期的 intraday 数据)
     if sentiment_df is not None and not sentiment_df.empty:

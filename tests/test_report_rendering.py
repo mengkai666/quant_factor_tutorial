@@ -42,6 +42,8 @@ def test_action_plan_builds_named_attack_confirm_and_risk_groups_from_echelon():
     from decision_dashboard import _build_action_plan
 
     ctx = _context()
+    ctx["publication_mode"] = "decision"
+    ctx["market_state"] = {"publication_mode": "decision"}
     ctx["echelon"] = [
         {
             "height": "2连板",
@@ -123,8 +125,103 @@ def test_action_plan_facts_only_is_empty_and_no_candidate_plan_is_explicit():
     assert empty_plan["core_action"] == "今日无合格标的，不开新仓"
 
 
+def test_zero_position_turns_attack_candidates_into_observation_only_rows():
+    from decision_dashboard import _build_action_plan
+
+    ctx = _context()
+    ctx["publication_mode"] = "decision"
+    ctx["market_state"] = {"publication_mode": "decision"}
+    ctx["echelon"] = [{
+        "height": "2连板",
+        "stock_details": [{"name": "条件候选", "code": "sh600001", "ml": "AI算力"}],
+    }]
+    ctx["scenario_plans"] = [{
+        "scenario_id": "risk_off",
+        "position_adjustment_rules": [
+            {"condition": "any_invalidation", "action": "set_target", "target": 0.0},
+        ],
+    }]
+    ctx["scenario_posterior"] = {"timeline": [{
+        "phase": "close",
+        "top_scenario_id": "risk_off",
+        "scenarios": [{"scenario_id": "risk_off", "state": "invalidated"}],
+    }]}
+
+    plan = _build_action_plan(ctx)
+
+    assert plan["position"] == "0 成"
+    assert plan["execution_allowed"] is False
+    assert "买入" not in str(plan)
+    assert plan["groups"][0]["rows"][0]["action"] == "仅观察，不下单"
+
+
+def test_today_three_things_card_is_rendered_from_the_action_plan():
+    ctx = _context()
+    ctx["publication_mode"] = "decision"
+    ctx["market_state"] = {"publication_mode": "decision"}
+    ctx["mainline_review"] = {"top1": "AI算力", "concentration": 0.41}
+    ctx["echelon"] = [
+        {
+            "height": "2连板",
+            "stock_details": [{"name": "主线候选", "code": "sh600001", "ml": "AI算力"}],
+        },
+        {
+            "height": "6连板",
+            "stock_details": [{"name": "情绪高标", "code": "sz000002", "ml": "周期资源"}],
+        },
+    ]
+
+    for html in (generate_dashboard_html(ctx), generate_dashboard_section(ctx)):
+        assert "今日只看三件事" in html
+        assert "市场开关" in html
+        assert "唯一主线" in html
+        assert "风险开关" in html
+        assert "AI算力" in html
+        assert "主线候选" in html
+        assert "情绪高标" in html
+
+
+def test_today_focus_pool_csv_uses_action_plan_rows_not_legacy_focus_frame(tmp_path):
+    import csv
+    import pandas as pd
+    from decision_dashboard import write_today_focus_pool
+
+    ctx = _context()
+    ctx["date_str"] = "2026-08-27"
+    ctx["publication_mode"] = "decision"
+    ctx["market_state"] = {"publication_mode": "decision"}
+    ctx["focus_df"] = pd.DataFrame([{
+        "股票": "旧池错误标的", "代码": "sh600999", "板块": "错误板块",
+        "策略池": "【旧池】", "入场条件": "旧条件", "防守位": "旧防守位",
+    }])
+    ctx["echelon"] = [
+        {
+            "height": "2连板",
+            "stock_details": [{"name": "统一候选", "code": "sh600001", "ml": "AI算力"}],
+        },
+        {
+            "height": "6连板",
+            "stock_details": [{"name": "统一风险锚", "code": "sz000002", "ml": "周期资源"}],
+        },
+    ]
+    output = tmp_path / "focus_pool.csv"
+
+    written = write_today_focus_pool(ctx, output)
+    with output.open("r", encoding="utf-8-sig", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+
+    assert written == 2
+    assert {row["股票"] for row in rows} == {"统一候选", "统一风险锚"}
+    assert "旧池错误标的" not in str(rows)
+    assert {row["报告日期"] for row in rows} == {"2026-08-27"}
+    assert {row["数据来源"] for row in rows} == {"今日执行计划"}
+    assert next(row for row in rows if row["股票"] == "统一候选")["板块"] == "AI算力"
+
+
 def test_actionable_dashboard_replaces_generic_blocks_with_named_execution_rows():
     ctx = _context()
+    ctx["publication_mode"] = "decision"
+    ctx["market_state"] = {"publication_mode": "decision"}
     ctx["scene"] = "高位承压 · 结构换挡"
     ctx["echelon"] = [
         {
@@ -871,6 +968,48 @@ def test_facts_only_micro_cycle_sanitizes_untrusted_fields_and_preserves_fact_le
     )
     for token in ("买入", "卖出", "加仓", "减仓", "清仓", "锁仓"):
         assert token not in visible_section
+
+
+def test_mainline_ladder_renders_only_s_and_b_grades(monkeypatch, tmp_path):
+    import pandas as pd
+    import phase_resonance
+    import 主线强度追踪 as report
+    from bs4 import BeautifulSoup
+
+    output = tmp_path / "report.html"
+    monkeypatch.setattr(report, "OUTPUT_HTML", str(output))
+    monkeypatch.setenv("AI_ENABLE", "0")
+    monkeypatch.setattr(phase_resonance, "build_phase_resonance", lambda: {})
+    monkeypatch.setattr(phase_resonance, "render_phase_resonance_html", lambda _data: "")
+    empty = pd.DataFrame()
+    ladder = {
+        "S级": [{"name": "S级样本", "code": "sh600001", "ml": "AI算力", "sub": "算力", "score": 88}],
+        "B级": [{"name": "B级样本", "code": "sh600002", "ml": "AI算力", "sub": "算力", "score": 58}],
+        "C级": [{"name": "C级样本", "code": "sh600003", "ml": "AI算力", "sub": "算力", "score": 35}],
+        "D级": [{"name": "D级样本", "code": "sh600004", "ml": "AI算力", "sub": "算力", "score": 18}],
+        "E级": [{"name": "E级样本", "code": "sh600005", "ml": "AI算力", "sub": "算力", "score": 8}],
+    }
+
+    report.generate_html(
+        ml_strength=empty, sub_strength=empty, ml_ma={}, sub_ma={},
+        ml_thresh={}, sub_thresh={}, leaders={}, dates=["20260827"],
+        ratings={}, sub_ratings={}, echelon=[], top30_data={},
+        advance_decline={"up": 2800, "down": 2500, "zt": 83, "dt": 4},
+        sentiment_df=empty, classified_df=empty, price_df=empty,
+        mainline_ladder=ladder,
+    )
+
+    soup = BeautifulSoup(output.read_text(encoding="utf-8"), "html.parser")
+    heading = next(node for node in soup.select("h2.section-title") if "主线天梯" in node.get_text())
+    section_text = heading.find_next("div", class_="echelon-desc").get_text(" ", strip=True)
+    table = heading.find_next("table", class_="matrix-table")
+    table_text = table.get_text(" ", strip=True)
+
+    assert "仅展示S级和B级" in section_text
+    assert "S级" in table_text and "B级" in table_text
+    assert "S级样本" in table_text and "B级样本" in table_text
+    for hidden in ("C级", "D级", "E级", "C级样本", "D级样本", "E级样本"):
+        assert hidden not in table_text
 
 
 def test_full_report_sentiment_chart_can_shrink_on_mobile(monkeypatch, tmp_path):
