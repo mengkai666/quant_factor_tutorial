@@ -403,16 +403,25 @@ def main():
     price_df = filter_completed_rows(price_df, 'date', report_date=cutoff.isoformat())
     if len(price_df) < before_rows:
         print(f'  🕒 截止日: {cutoff.isoformat()} (过滤未来缓存 {before_rows - len(price_df)} 行)')
-    dates = sorted(price_df['date'].unique())
-    if not dates:
+    all_dates = sorted(price_df['date'].unique())
+    if not all_dates:
         sys.exit(f'  ❌ 截止 {cutoff.isoformat()} 前没有可审计的价格缓存')
+    dates, price_window = all_dates, price_df
     if args.recent > 0:
-        dates = dates[-args.recent:]
-        price_df = price_df[price_df['date'].isin(dates)]
-        print(f'  🔎 范围: 最近 {args.recent} 交易日')
+        dates = all_dates[-args.recent:]
+        price_window = price_df[price_df['date'].isin(dates)]
+        print(f'  🔎 价格覆盖体检范围: 最近 {args.recent} 交易日 '
+              f'(ZT / sentiment 的绝对判据仍走全区间 {all_dates[0]} ~ {all_dates[-1]})')
 
-    price_dates_compact = {_to_compact(d) for d in dates}
-    defects = audit_price(price_df, dates, args.quiet)
+    # ⚠️ --recent 只许收窄 audit_price。它存在的唯一理由是**覆盖率基准是窗口内行数中位数**,
+    #    而证券口径是台阶式扩容的 (~4604 → 5199 @2026-07-06 → 5538 @2026-08-06), 窗口一跨
+    #    台阶就把老口径整段判成"覆盖不足", 闸门永远红 = 等于没有闸门。
+    #    audit_zt / audit_sentiment 判的是**绝对**条件 (休市日却有行 / up+down < 4000),
+    #    没有台阶问题, 收窄它们只会把老缺陷藏起来 —— 2026-08-31 实测 origin/master 的
+    #    sentiment 缓存有 64 天 up+down≈800 (CI 拿自己那份 ~840 只宽的价格缓存算的 A/D),
+    #    全部早于自适应窗口 (近 18 天), 收窄后一天都报不出来。
+    price_dates_compact = {_to_compact(d) for d in all_dates}
+    defects = audit_price(price_window, dates, args.quiet)
     defects += audit_zt(price_dates_compact, args.quiet)
     defects += audit_sentiment(price_dates_compact, args.quiet)
 

@@ -47,6 +47,8 @@ AD_NARROWER_TOLERANCE = 0.98
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--window', type=int, default=30, help='对账最近 N 个交易日 (默认 30, 与主程序一致)')
+    ap.add_argument('--only-incomplete', action='store_true',
+                    help='只修已有值本身残缺 (up+down < 门槛) 的天, 不动已经完整的天')
     ap.add_argument('--apply', action='store_true', help='落库 (默认干跑只报告)')
     args = ap.parse_args()
 
@@ -62,7 +64,7 @@ def main():
 
     window_dates = set(sorted(df['日期'].astype(str).unique())[-args.window:])
 
-    changes, uncovered, thin, narrower = [], [], [], []
+    changes, uncovered, thin, narrower, intact = [], [], [], [], []
     for idx, row in df.iterrows():
         d = str(row['日期'])
         if d not in window_dates:
@@ -86,6 +88,17 @@ def main():
                 and new_up + new_dn < cur_total * AD_NARROWER_TOLERANCE):
             narrower.append((d, int(cur_total), int(new_up + new_dn)))
             continue
+        # --only-incomplete: 已经完整的天一律不动。
+        # 为什么需要这个开关: 重算的 A/D 天然**略窄于**当年的原始来源 (缓存少了几十只
+        # 停牌/退市股), 于是开大 --window 会把几乎每个历史日都"更新"掉 ~0.3%
+        #   (实测 2026-09-01 补回 94 天后跑 --window 202: 79 天待更新, 其中 78 天是
+        #    4826→4810 这种噪声, 只有 20260205 是真空洞 0/0 → 1509/3397)。
+        # sentiment 缓存进 git, 这种改写除了制造 diff 噪声没有任何信息增益, 还把本来
+        # 更宽的历史真值换成更窄的重算值。对账的职责是**修坏的**, 不是重新推导一遍。
+        if args.only_incomplete and cur_total >= MIN_MARKET_BREADTH:
+            if new_up != row['up'] or new_dn != row['down']:
+                intact.append((d, int(cur_total), int(new_up + new_dn)))
+            continue
         if new_up != row['up'] or new_dn != row['down']:
             changes.append((idx, d, row['up'], row['down'], new_up, new_dn))
 
@@ -107,6 +120,13 @@ def main():
                   f'({new_total / cur_total:.1%}) [narrower]')
     if uncovered:
         print(f'  ⚠️ 价格缓存尚未覆盖: {uncovered}')
+    if intact:
+        print(f'  ⏭️ --only-incomplete: {len(intact)} 天已有值本身完整, 不动 '
+              f'(重算天然略窄, 改写只是 diff 噪声)')
+        for d, cur_total, new_total in intact[:5]:
+            print(f'    {d}: 保留 {cur_total} (重算 {new_total})')
+        if len(intact) > 5:
+            print(f'    ... 另 {len(intact) - 5} 天')
 
     if not changes:
         return

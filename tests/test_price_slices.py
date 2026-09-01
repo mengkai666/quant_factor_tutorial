@@ -125,3 +125,24 @@ def test_slice_bytes_are_lf_only(sandbox):
         raw = handle.read()
     assert b'\r\n' not in raw
     assert raw.count(b'\n') == 3         # 表头 + 2 行
+
+
+def test_price_cache_cap_holds_the_slice_window():
+    """价格缓存的体积上限必须装得下切片保留窗口, 且**不随 CI/本地变**。
+
+    2026-08 的事故链: CI 把价格缓存裁到 10MB (≈30 交易日) → 历史日没有 A/D 真源 →
+    reconcile 拿 ~840 只宽的残缺数据算出 up+down≈840 写进 git (64 天)。
+    裁到 30 天还会和 sync_cache_from_slices 打架: 每次补回 250 天, 当场又被裁回去。
+    """
+    per_day_mb = 0.33                       # 5538 行 × 8 列 ≈ 0.33MB/交易日 (实测)
+    need = PS.KEEP_SLICES * per_day_mb
+    assert PS.PRICE_CACHE_MAX_SIZE_MB >= need, (
+        f'上限 {PS.PRICE_CACHE_MAX_SIZE_MB}MB 装不下 {PS.KEEP_SLICES} 天切片 (需 {need:.0f}MB)')
+    # 两个主文件都必须引用这一个常量, 不许各自写死 (曾经 CI 10MB / 本地 100MB 分叉)
+    import io
+    import os
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for name in ('主线强度追踪.py', 'legacy_tracker.py'):
+        text = io.open(os.path.join(root, 'src', name), encoding='utf-8').read()
+        assert 'from price_slices import PRICE_CACHE_MAX_SIZE_MB' in text, name
+        assert 'PRICE_CACHE_MAX_SIZE_MB = ' not in text, f'{name} 又自己写死了一份'

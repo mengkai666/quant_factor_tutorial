@@ -55,11 +55,14 @@ from data_sources.name_resolver import NameResolution, resolve_names
 CACHE_DIR = DATA_DIR  # 向后兼容: 旧代码引用 CACHE_DIR 的地方仍指向数据目录
 
 # === 缓存大小限制 ===
-# GitHub Actions 环境下使用更严格的限制，避免仓库/缓存膨胀
+# 这个上限防的是**进 git 的**小缓存膨胀 (涨停历史/sentiment/板块), CI 侧收得更紧。
 if IS_GITHUB_ACTIONS:
     CACHE_MAX_SIZE_MB = 10   # CI 环境: 单个缓存文件最大 10MB
 else:
     CACHE_MAX_SIZE_MB = 100  # 本地环境: 单个缓存文件最大 100MB
+
+# 价格缓存的上限单列一处 (它不进 git, 且必须装得下切片保留窗口), 见 price_slices 里的注释。
+from price_slices import PRICE_CACHE_MAX_SIZE_MB  # noqa: E402
 
 
 def _load_name_resolution(classified=None, latest_limit=None) -> NameResolution:
@@ -1933,7 +1936,8 @@ def update_price_cache(classified_df):
                 combined_df = combined_df.drop_duplicates(subset=['code', 'date'])
                 combined_df = combined_df.sort_values(['code', 'date']).reset_index(drop=True)
                 combined_df.to_csv(PRICE_CACHE, index=False)
-                trim_cache_file(PRICE_CACHE, date_col='date', encoding='utf-8')
+                trim_cache_file(PRICE_CACHE, date_col='date', encoding='utf-8',
+                                max_size_mb=PRICE_CACHE_MAX_SIZE_MB)
                 return combined_df
             else:
                 got = len(tx_rows) if tx_rows else 0
@@ -2016,7 +2020,8 @@ def update_price_cache(classified_df):
             combined_df = new_df.sort_values(['code', 'date']).reset_index(drop=True)
             
         combined_df.to_csv(PRICE_CACHE, index=False)
-        trim_cache_file(PRICE_CACHE, date_col='date', encoding='utf-8')
+        trim_cache_file(PRICE_CACHE, date_col='date', encoding='utf-8',
+                        max_size_mb=PRICE_CACHE_MAX_SIZE_MB)
         print(f"  ✅ 价格缓存已更新, 新增 {len(new_df)} 条记录 (耗时 {elapsed:.1f}s)")
         return combined_df
     else:
@@ -3835,7 +3840,8 @@ def iter_main(limit_pool_provider=None, plate_provider=None):
     # 0. 启动时检查并清理所有缓存文件大小
     print("\n[0/7] 检查缓存文件大小...")
     trim_cache_file(ZT_CACHE_FILE, date_col='日期')
-    trim_cache_file(PRICE_CACHE, date_col='date', encoding='utf-8')
+    trim_cache_file(PRICE_CACHE, date_col='date', encoding='utf-8',
+                    max_size_mb=PRICE_CACHE_MAX_SIZE_MB)
     trim_cache_file(CLS_PLATE_CACHE, date_col='date')
     trim_cache_file(SENTIMENT_CACHE, date_col='日期', encoding='utf-8')
 

@@ -109,11 +109,14 @@ from paths import (
 CACHE_DIR = DATA_DIR  # 向后兼容: 旧代码引用 CACHE_DIR 的地方仍指向数据目录
 
 # === 缓存大小限制 ===
-# GitHub Actions 环境下使用更严格的限制，避免仓库/缓存膨胀
+# 这个上限防的是**进 git 的**小缓存膨胀 (涨停历史/sentiment/板块), CI 侧收得更紧。
 if IS_GITHUB_ACTIONS:
     CACHE_MAX_SIZE_MB = 10   # CI 环境: 单个缓存文件最大 10MB
 else:
     CACHE_MAX_SIZE_MB = 100  # 本地环境: 单个缓存文件最大 100MB
+
+# 价格缓存的上限单列一处 (它不进 git, 且必须装得下切片保留窗口), 见 price_slices 里的注释。
+from price_slices import PRICE_CACHE_MAX_SIZE_MB  # noqa: E402
 
 
 def _load_name_resolution(classified=None, latest_limit=None) -> NameResolution:
@@ -2218,7 +2221,8 @@ def load_price_cache(*, include_future=False, report_date=None):
                 current_columns = list(pd.read_csv(PRICE_CACHE, nrows=0).columns)
                 if current_columns != canonical_columns:
                     df.to_csv(PRICE_CACHE, index=False)
-                    trim_cache_file(PRICE_CACHE, date_col='date', encoding='utf-8')
+                    trim_cache_file(PRICE_CACHE, date_col='date', encoding='utf-8',
+                                    max_size_mb=PRICE_CACHE_MAX_SIZE_MB)
                     print('  🔧 价格缓存已迁移为统一 raw/qfq/legacy 结构')
             except Exception as exc:
                 print(f'  ⚠️ 价格缓存结构迁移失败, 继续使用内存数据: {exc}')
@@ -3210,7 +3214,8 @@ def update_price_cache(classified_df, return_meta=False, universe_codes=None):
                 ) if 'close_qfq' in latest_rows.columns else set()
                 combined_df = price_cache_all_df
                 combined_df.to_csv(PRICE_CACHE, index=False)
-                trim_cache_file(PRICE_CACHE, date_col='date', encoding='utf-8')
+                trim_cache_file(PRICE_CACHE, date_col='date', encoding='utf-8',
+                                max_size_mb=PRICE_CACHE_MAX_SIZE_MB)
                 pair_coverage = _price_pair_coverage(
                     price_df, all_codes, latest_zt_str, previous_trade_date_str)
                 if (
@@ -3355,7 +3360,8 @@ def update_price_cache(classified_df, return_meta=False, universe_codes=None):
     # 磁盘上今日 qfq 一直缺, 每轮都要重算, 下游查 qfq 覆盖率的体检也一直报缺。
     if new_rows or fallback_meta.get('fallback_covered') or _anchor_qfq_filled:
         combined_df.to_csv(PRICE_CACHE, index=False)
-        trim_cache_file(PRICE_CACHE, date_col='date', encoding='utf-8')
+        trim_cache_file(PRICE_CACHE, date_col='date', encoding='utf-8',
+                        max_size_mb=PRICE_CACHE_MAX_SIZE_MB)
         print(
             f"  ✅ 价格缓存已更新, baostock 新增 {len(new_df)} 条, "
             f"备用源补齐 {fallback_meta.get('fallback_covered', 0)} 只, "
@@ -5420,7 +5426,8 @@ def _main_impl():
     # 0. 启动时检查并清理所有缓存文件大小
     print("\n[0/7] 检查缓存文件大小...")
     trim_cache_file(ZT_CACHE_FILE, date_col='日期')
-    trim_cache_file(PRICE_CACHE, date_col='date', encoding='utf-8')
+    trim_cache_file(PRICE_CACHE, date_col='date', encoding='utf-8',
+                    max_size_mb=PRICE_CACHE_MAX_SIZE_MB)
     trim_cache_file(CLS_PLATE_CACHE, date_col='date')
     trim_cache_file(SENTIMENT_CACHE, date_col='日期', encoding='utf-8')
 
