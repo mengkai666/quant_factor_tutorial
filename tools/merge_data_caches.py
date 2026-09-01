@@ -69,12 +69,12 @@ def resolve_sentiment(ref: str, apply: bool) -> int:
         if ref_row is None:
             continue
         now_total, ref_total = _total(row), _total(ref_row)
+        # 规则只有一条: **宽的一侧赢**。up+down 就是"这天有多少只股票算出了涨跌",
+        # 更宽 = 覆盖更全, 不存在"宽得过头"这回事; 窄的一侧一律不采用。
         if ref_total <= now_total:
             continue
-        # ref 更宽。只有"现值残缺"或"ref 明显更宽"才回退, 免得为 ±0.1% 噪声改文件。
-        if now_total < MIN_MARKET_BREADTH or ref_total > now_total:
-            fixes.append((idx, date, now_total, ref_total,
-                          _as_float(ref_row.get('up')), _as_float(ref_row.get('down'))))
+        fixes.append((idx, date, now_total, ref_total,
+                      _as_float(ref_row.get('up')), _as_float(ref_row.get('down'))))
     for date, ref_row in old_by_date.items():
         if date not in set(cur['日期'].astype(str)):
             added.append(ref_row)
