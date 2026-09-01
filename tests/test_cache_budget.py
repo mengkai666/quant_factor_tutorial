@@ -198,3 +198,49 @@ def test_real_date_columns_exist_where_the_cache_exists():
             head = pd.read_csv(path, dtype=str, encoding='utf-8-sig', nrows=1)
             assert date_col in head.columns, f'{rel} 没有列 {date_col}'
     assert checked, '一份缓存都没查到 (data/ 是空的?)'
+
+
+def test_no_file_is_both_in_git_and_in_actions_cache():
+    """actions/cache 的路径清单里不许出现任何 git 跟踪的文件。
+
+    actions/cache 在 checkout **之后**解包, 会盖掉工作区里的同路径文件。于是
+    "既进 git 又进 cache"的文件有一条静默的数据回退通道: git 里是本地+CI 的并集,
+    cache 里只有 CI 自己那份, 解包后本地攒的记录当场消失 —— 而 workflow 紧接着
+    `git add` 同一个文件, 把这个"消失"提交回 master。留痕类文件 (预测历史 / 阶段
+    快照) 不可重算, 丢一行就是永久丢。
+    """
+    import subprocess
+
+    workflow = io.open(os.path.join(ROOT, '.github', 'workflows', 'daily_run.yml'),
+                       encoding='utf-8').read()
+    lines = workflow.splitlines()
+    # 取 actions/cache 那一步的 path: | 块 (可能有多个 cache 步骤, 全都要查)
+    cached_paths = []
+    for i, line in enumerate(lines):
+        if 'uses: actions/cache' not in line:
+            continue
+        for j in range(i, len(lines)):
+            if re.match(r'\s*-\s+name:', lines[j]) and j > i:
+                break                                  # 走到下一步了, 这步没有 path: | 块
+            if re.match(r'\s*path:\s*\|\s*$', lines[j]):
+                indent = len(lines[j]) - len(lines[j].lstrip())
+                for k in range(j + 1, len(lines)):
+                    body = lines[k]
+                    if not body.strip():
+                        continue
+                    if len(body) - len(body.lstrip()) <= indent:
+                        break
+                    if body.strip().startswith('#'):
+                        continue
+                    cached_paths.append(body.strip())
+                break
+    assert cached_paths, 'workflow 里一个 actions/cache 的 path 都没解析到'
+
+    tracked = subprocess.run(['git', 'ls-files'], cwd=ROOT, capture_output=True,
+                             text=True, encoding='utf-8').stdout.splitlines()
+    tracked_set = set(tracked)
+    tracked_dirs = {os.path.dirname(p) for p in tracked}
+
+    clash = [p for p in cached_paths
+             if not p.startswith('~') and (p in tracked_set or p in tracked_dirs)]
+    assert not clash, f'既进 git 又进 actions/cache (解包会盖掉 git 版本): {clash}'
