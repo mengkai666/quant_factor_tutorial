@@ -5,6 +5,14 @@
   2. 覆盖缺口   某交易日只抓到 30%~80% 的股票 (A/D 数值偏小但"看起来正常")
   3. 休市日污染 价格缓存无数据的日子, 涨停缓存却有涨停记录 (如 20260501 劳动节)
   4. 宽度残缺   sentiment 缓存 up+down 远低于全市场 (残缺快照被写进历史)
+  5. 整天空洞   价格缓存自己缺了一个真交易日 (2026-09-01 加, 见下)
+
+⚠️ 第 3 类的判据 2026-09-01 改过一次 (别改回去): 以前是"价格缓存无该日行 ⇒ 休市",
+   而价格缓存**已经不等于交易日全集** —— CI 那份是从 git 里的切片重建的, 切片按覆盖
+   门槛拒收薄天 (src/price_slices.py SLICE_MIN_COVERAGE), 所以它天生缺几个真交易日。
+   实测后果: 10 个真交易日 (每天 29~109 条真涨停) 被判成休市日污染, 还附了"备份后
+   删除这些行"的建议 —— 照做就是永久销毁真实记录。现在判休市**必须有正面证据**
+   (见 CORROBORATING_SOURCES), 而"价格缓存缺整天"改由第 5 类对着正主报。
 
 本脚本把当时手工敲的判据固化成一条命令, 不联网, 只读三份缓存。
 退出码非 0 表示发现缺陷, 可挂 CI / 主程序前置检查。
@@ -21,6 +29,8 @@
   - 宽度下限 MIN_MARKET_BREADTH 与主程序、tools/reconcile_sentiment_ad.py 同义。
 """
 import argparse
+import glob
+import json
 import os
 import sys
 
@@ -53,6 +63,112 @@ def _to_dashed(yyyymmdd: str) -> str:
 
 def _to_compact(dashed: str) -> str:
     return dashed.replace('-', '')
+
+
+def _compact_token(value) -> str:
+    """把任意日期写法收成 YYYYMMDD; 认不出来返回空串。"""
+    token = str(value or '').replace('-', '').replace('/', '').strip()
+    return token if len(token) == 8 and token.isdigit() else ''
+
+
+# 判"这天休市"要用的**正面证据**来源: 与价格缓存彼此独立、按日增长的几份缓存。
+# 为什么需要它: 价格缓存不再等于"交易日全集" (见文件头的 ⚠️), 它自己就可能缺真交易日。
+# 只认正面方向 —— 某份缓存这天有行 ⇒ 这天开过市; 反过来不成立 (它们各有保留窗口,
+# 见 src/cache_budget.py), 所以只有"窗口内所有来源当天都没数据"才敢判休市。
+CORROBORATING_SOURCES = (
+    ('cls_plate_cache.csv', 'csv'),            # 财联社板块 (日期列 date, compact)
+    ('em_stock_plate_cache.csv', 'csv'),       # 东财个股概念 (日期列 date, compact)
+    ('ths_sector_hist.json', 'nested_json'),   # 同花顺板块指数 {板块: [{date, ...}]}
+    ('report_daily_snapshots', 'daily_dir'),   # 一天一个报告快照
+    ('price_slices', 'daily_dir'),             # 进 git 的价格切片 (薄天会缺, 有=铁证)
+)
+
+
+def corroborating_trade_dates() -> tuple[set, dict]:
+    """返回 (有独立证据"开过市"的日期集合 compact, {来源: 天数})。
+
+    任何一份读不出来只是少一个证人, 绝不因此判休市 —— 证据越少, 下面 classify 的
+    "不判"就越多, 方向永远偏安全。
+    """
+    from paths import DATA_DIR
+    dates, detail = set(), {}
+    for rel, kind in CORROBORATING_SOURCES:
+        path = os.path.join(DATA_DIR, rel)
+        found = set()
+        try:
+            if kind == 'csv':
+                frame = pd.read_csv(path, encoding='utf-8-sig', dtype=str, usecols=['date'])
+                found = {_compact_token(v) for v in frame['date'].unique()}
+            elif kind == 'nested_json':
+                with open(path, encoding='utf-8') as handle:
+                    blob = json.load(handle)
+                found = {_compact_token(row.get('date'))
+                         for series in blob.values() if isinstance(series, list)
+                         for row in series if isinstance(row, dict)}
+            else:                                          # 一天一个文件的目录
+                found = {_compact_token(os.path.basename(f).split('.')[0])
+                         for f in glob.glob(os.path.join(path, '*'))}
+        except Exception:
+            continue
+        found.discard('')
+        if found:
+            detail[rel] = len(found)
+            dates |= found
+    return dates, detail
+
+
+def classify_absent_days(days, evidence: set) -> tuple[list, list, list]:
+    """把"价格缓存整天没有行"的日子分三类: (确认休市, 真交易日, 无证据不判)。
+
+    第三类是证据窗口之前的老日子: 那几份对证缓存自己有保留窗口, 窗口之前既证不出
+    开市也证不出休市。宁可不判, 不可误判成休市 —— 误判的代价是"建议删掉真实记录"。
+    """
+    days = sorted(str(d) for d in days)
+    if not evidence:
+        return [], [], days
+    floor = min(evidence)
+    holiday, trading, unknown = [], [], []
+    for day in days:
+        if day in evidence:
+            trading.append(day)
+        elif day >= floor:
+            holiday.append(day)
+        else:
+            unknown.append(day)
+    return holiday, trading, unknown
+
+
+def audit_price_gaps(price_dates_compact: set, evidence: set, quiet: bool) -> list:
+    """价格缓存自己缺的整天: 有独立证据开过市, 而缓存区间内一行都没有。
+
+    这是第 3 类判据反过来找对了正主。2026-09-01 CI 的形状: 薄天 (覆盖 3769~4056 只)
+    被切片门槛拒收 → 从切片重建的那份缓存缺这 10 天 → 涨停/sentiment 里那 10 天的
+    真实记录反被判成"污染"。缺的是价格缓存, 该补的也是它。
+    补法优先级 (memory price-cache-whole-day-recovery): 切片 > .bak 备份 > 联网重抓,
+    且只补整天。
+    """
+    defects = []
+    if not price_dates_compact:
+        return defects
+    if not evidence:
+        print()
+        print('  ⚠️ 没有任何对证缓存可读, 无法判断价格缓存缺哪些交易日, 跳过')
+        return defects
+    lo, hi = min(price_dates_compact), max(price_dates_compact)
+    gaps = sorted(d for d in evidence if lo <= d <= hi and d not in price_dates_compact)
+    print()
+    print(f'  📊 对证交易日: {len(evidence)} 天 ({min(evidence)} ~ {max(evidence)})')
+    if not gaps:
+        print('  ✅ 价格缓存区间内无整天空洞 (每个有独立证据的交易日都有行)')
+        return defects
+    defects.append(f'价格缓存缺 {len(gaps)} 个交易日 (区间内整天无行)')
+    head = gaps if not quiet else gaps[:10]
+    print(f'  ❌ 价格缓存缺 {len(gaps)} 个交易日 (其它缓存证明这几天开过市): '
+          f'{", ".join(head)}{" ..." if quiet and len(gaps) > 10 else ""}')
+    print('     ➡️ 修复: python tools/sync_price_slices.py (切片) → '
+          'tools/import_legacy_price_backup.py --apply (.bak 备份) → '
+          'tools/backfill_price_history.py --repair-days <这些天> --apply (联网重抓)')
+    return defects
 
 
 def _price_value_column(price_df: pd.DataFrame) -> tuple[str | None, bool]:
@@ -132,14 +248,29 @@ def audit_price(price_df: pd.DataFrame, dates: list, quiet: bool) -> list:
     raw_dates = [d for d in dates if int(raw_counts.get(d, 0)) > 0]
     if raw_dates:
         raw_baseline = int(raw_counts.loc[raw_dates].median())
-        raw_thin = [(d, int(raw_counts.get(d, 0))) for d in raw_dates
-                    if int(raw_counts.get(d, 0)) < raw_baseline * MIN_COVERAGE_RATIO]
-        print(f'  ℹ️ raw 收盘覆盖: {len(raw_dates)}/{len(dates)} 天有 raw, 基准 {raw_baseline} 只/日')
+        print(f'  ℹ️ raw 收盘覆盖: {len(raw_dates)}/{len(dates)} 天有 raw, 中位 {raw_baseline} 只/日')
+        # 分母是**当天自己的行数**, 不是窗口中位数。证券口径台阶式扩容
+        # (~4604 → 5199 @2026-07-06 → 5538 @2026-08-06), 拿跨台阶的中位数当分母, 台阶
+        # 下方的老日子会整段被判 raw 不足 —— 2026-09-01 CI 实测把 20260805 (当天 5204 行
+        # 里 4737 只有 raw, 口径内 91%) 报成 86% 不足。"这天比同侪薄"由上面的覆盖缺口
+        # 判据管 (它有 --recent 收窄来避台阶), 这里只问"当天已知的股票有多少拿到 raw"。
+        raw_thin = [(d, int(raw_counts.get(d, 0)), int(counts[d])) for d in raw_dates
+                    if int(raw_counts.get(d, 0)) < int(counts[d]) * MIN_COVERAGE_RATIO]
         if raw_thin:
-            defects.append(f'raw 收盘覆盖不足 {len(raw_thin)} 天 (<{MIN_COVERAGE_RATIO:.0%} raw 基准)')
+            defects.append(f'raw 收盘覆盖不足 {len(raw_thin)} 天 (<当日行数的 {MIN_COVERAGE_RATIO:.0%})')
             print(f'  ❌ raw 覆盖不足 {len(raw_thin)} 天:')
-            for d, n in (raw_thin if not quiet else raw_thin[:10]):
-                print(f'       {d}: {n} 只 ({n / raw_baseline:.0%})')
+            for d, n, total in (raw_thin if not quiet else raw_thin[:10]):
+                print(f'       {d}: {n}/{total} 只有 raw ({n / total:.0%})')
+        else:
+            print(f'  ✅ raw 覆盖: 每天 ≥{MIN_COVERAGE_RATIO:.0%} 的当日行数有 raw 收盘')
+        # raw 段内整天 0 raw: 那天的 raw 抓取全军覆没, 只剩 legacy 兼容值撑着行数,
+        # 覆盖缺口判据看不见 (行数是满的), 上面的比例判据也看不见 (被 >0 过滤掉了)。
+        blind = [d for d in dates if raw_dates[0] <= d <= raw_dates[-1]
+                 and int(raw_counts.get(d, 0)) == 0]
+        if blind:
+            defects.append(f'价格缓存 {len(blind)} 天在 raw 段内却无任何 raw 收盘')
+            print(f'  ❌ raw 段 ({raw_dates[0]} ~ {raw_dates[-1]}) 内 {len(blind)} 天没有一行 raw: '
+                  f'{", ".join(blind if not quiet else blind[:10])}')
     else:
         print('  ⚠️ raw 收盘在当前窗口没有有效行；只能审计 legacy 历史兼容值')
 
@@ -202,8 +333,8 @@ def audit_price(price_df: pd.DataFrame, dates: list, quiet: bool) -> list:
     return defects
 
 
-def audit_zt(price_dates_compact: set, quiet: bool) -> list:
-    """涨停缓存: 休市日污染 (价格缓存无数据的日子却有涨停记录)。"""
+def audit_zt(price_dates_compact: set, evidence: set, quiet: bool) -> list:
+    """涨停缓存: 休市日污染 (对证缓存也证不出这天开过市, 却有涨停记录)。"""
     defects = []
     if not os.path.exists(ZT_CACHE_FILE):
         print('\n  ⚠️ 涨停缓存不存在, 跳过')
@@ -235,14 +366,25 @@ def audit_zt(price_dates_compact: set, quiet: bool) -> list:
               f'无真源可比, 本次不判')
 
     orphan = [d for d in in_range if d not in price_dates_compact]
-    if orphan:
-        rows = {d: int((zt['日期'] == d).sum()) for d in orphan}
-        defects.append(f'涨停缓存非交易日污染 {len(orphan)} 天')
-        print(f'  ❌ 价格缓存无该日数据却有涨停记录 {len(orphan)} 天 (疑休市日污染):')
-        for d in orphan:
+    # 价格缓存没这天 ≠ 这天休市 (见文件头 ⚠️): 先拿对证缓存分类, 只有"谁都证不出
+    # 开过市"才算污染, 也只有那一类才配"删行"的建议。
+    holiday, real_trading, unknown = classify_absent_days(orphan, evidence)
+    if holiday:
+        rows = {d: int((zt['日期'] == d).sum()) for d in holiday}
+        defects.append(f'涨停缓存非交易日污染 {len(holiday)} 天')
+        print(f'  ❌ 休市日却有涨停记录 {len(holiday)} 天 (价格缓存与所有对证缓存当天均无数据):')
+        for d in holiday:
             print(f'       {d}: {rows[d]} 行')
+        print('     ➡️ 修复: 备份后删除这些行 (休市日不该有涨停记录)')
     else:
-        print('  ✅ 无非交易日污染 (每个涨停日在价格缓存均有数据)')
+        print('  ✅ 无休市日污染 (没有一个涨停日被证明是休市日)')
+    if real_trading:
+        head = real_trading if not quiet else real_trading[:10]
+        print(f'  ℹ️ {len(real_trading)} 天价格缓存无行但**是真交易日** (其它缓存当天有数据), '
+              f'涨停记录不是污染, 缺的是价格缓存 (见上面"价格缓存缺整天"): '
+              f'{", ".join(head)}{" ..." if quiet and len(real_trading) > 10 else ""}')
+    if unknown:
+        print(f'  ℹ️ {len(unknown)} 天在对证缓存的保留窗口之前, 既证不出开市也证不出休市, 本次不判')
 
     # 陈旧快照 / 残缺名单 (2026-08-27 加)。涨停池接口只对当日有效, 盘前跑或失败重试
     # 会把前一交易日的名单写到当日名下。这一判据不需要价格真源, 所以能覆盖价格缓存
@@ -289,8 +431,8 @@ def audit_zt(price_dates_compact: set, quiet: bool) -> list:
     return defects
 
 
-def audit_sentiment(price_dates_compact: set, quiet: bool) -> list:
-    """sentiment 缓存: 假交易日 + up/down 宽度残缺 + 编码 BOM。"""
+def audit_sentiment(price_dates_compact: set, evidence: set, quiet: bool) -> list:
+    """sentiment 缓存: 休市日污染 + up/down 宽度残缺 + 编码 BOM。"""
     defects = []
     if not os.path.exists(SENTIMENT_CACHE):
         print('\n  ⚠️ sentiment 缓存不存在, 跳过')
@@ -326,14 +468,22 @@ def audit_sentiment(price_dates_compact: set, quiet: bool) -> list:
 
     # 假交易日 (2026-08-04 发现): 20260501 劳动节休市, sentiment 里却有一行
     # up=1958/down=3139 —— 外部来源写进了非交易日。ZT 缓存同日也曾有 109 行涨停污染。
-    fake = sorted(set(in_range['日期']) - price_dates_compact)
-    if fake:
-        defects.append(f'sentiment 缓存非交易日污染 {len(fake)} 天')
-        print(f'  ❌ 非交易日却有数据 {len(fake)} 天 (价格缓存该日无任何行): '
-              f'{", ".join(fake)}')
+    absent = sorted(set(in_range['日期']) - price_dates_compact)
+    # 同 audit_zt: "价格缓存该日无行"只是**这份副本**没有, 不等于休市 (见文件头 ⚠️)。
+    holiday, real_trading, unknown = classify_absent_days(absent, evidence)
+    if holiday:
+        defects.append(f'sentiment 缓存非交易日污染 {len(holiday)} 天')
+        print(f'  ❌ 休市日却有涨跌家数 {len(holiday)} 天 (价格缓存与所有对证缓存当天均无数据): '
+              f'{", ".join(holiday)}')
         print('     ➡️ 修复: 备份后删除这些行 (休市日不该有涨跌家数)')
     else:
-        print('  ✅ 无非交易日污染 (价格缓存区间内每天都是真交易日)')
+        print('  ✅ 无休市日污染 (没有一天被证明是休市日)')
+    if real_trading:
+        head = real_trading if not quiet else real_trading[:10]
+        print(f'  ℹ️ {len(real_trading)} 天价格缓存无行但**是真交易日**, 这些行不是污染: '
+              f'{", ".join(head)}{" ..." if quiet and len(real_trading) > 10 else ""}')
+    if unknown:
+        print(f'  ℹ️ {len(unknown)} 天在对证缓存的保留窗口之前, 既证不出开市也证不出休市, 本次不判')
 
     # 区间内的宽度残缺都是"可修"的, 但根因有两种, 修法不同:
     #   (a) 该日价格缓存行数不足 → 补覆盖;
@@ -343,6 +493,16 @@ def audit_sentiment(price_dates_compact: set, quiet: bool) -> list:
     # 提示语按实际情形分开给, 别一律指向"补覆盖" —— (b) 类日子覆盖是满的。
     breadth = in_range['up'] + in_range['down']
     thin = in_range.loc[breadth < MIN_MARKET_BREADTH, ['日期', 'up', 'down']]
+    # 价格缓存整天没有行的日子: **这份副本**里没有 A/D 真源, 既判不出宽度对不对, 也
+    # 修不了 (reconcile 无从下手)。根因由 audit_price_gaps 对着价格缓存报, 这里只挂个
+    # 指路牌 —— 否则同一个洞报两次, 且第二次给的药方是错的。
+    blind = [d for d in thin['日期'] if d not in price_dates_compact]
+    if blind:
+        head = blind if not quiet else blind[:10]
+        print(f'  ℹ️ {len(blind)} 天价格缓存整天无行, 宽度无真源可比, 本次不判 '
+              f'(根因见"价格缓存缺整天"): {", ".join(head)}'
+              f'{" ..." if quiet and len(blind) > 10 else ""}')
+        thin = thin.loc[~thin['日期'].isin(blind)]
     if thin.empty:
         print(f'  ✅ 区间内全部交易日 up+down ≥ {MIN_MARKET_BREADTH}')
         return defects
@@ -422,9 +582,13 @@ def main():
     #    sentiment 缓存有 64 天 up+down≈800 (CI 拿自己那份 ~840 只宽的价格缓存算的 A/D),
     #    全部早于自适应窗口 (近 18 天), 收窄后一天都报不出来。
     price_dates_compact = {_to_compact(d) for d in all_dates}
+    evidence, evidence_detail = corroborating_trade_dates()
     defects = audit_price(price_window, dates, args.quiet)
-    defects += audit_zt(price_dates_compact, args.quiet)
-    defects += audit_sentiment(price_dates_compact, args.quiet)
+    defects += audit_price_gaps(price_dates_compact, evidence, args.quiet)
+    if evidence_detail and not args.quiet:
+        print('     证人: ' + ', '.join(f'{k}({v}天)' for k, v in evidence_detail.items()))
+    defects += audit_zt(price_dates_compact, evidence, args.quiet)
+    defects += audit_sentiment(price_dates_compact, evidence, args.quiet)
 
     print('\n' + '=' * 72)
     if defects:

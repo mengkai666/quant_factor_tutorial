@@ -386,10 +386,13 @@ def test_audit_clips_to_price_window(tmp_path, monkeypatch):
                   '代码': ['600000'] * 4, '连板数': [1, 2, 1, 3]}).to_csv(zt, index=False)
     monkeypatch.setattr(adi, 'ZT_CACHE_FILE', str(zt))
 
+    # evidence = 别的日期化缓存证得出的交易日 (判休市要有正面证据, 见
+    # tests/test_audit_judges.py); 这里让它与价格日期一致, 只考 clip 这一件事。
+    full = {'20260623', '20260701', '20260715'}
     # 窗口只含 06-23 起: 20260601 在区间外 → 不判; 区间内每天都有价格 → 无缺陷
-    assert adi.audit_zt({'20260623', '20260701', '20260715'}, quiet=True) == []
-    # 真污染: 20260701 落在区间内却无价格数据 → 必须报出来
-    assert adi.audit_zt({'20260623', '20260715'}, quiet=True) != []
+    assert adi.audit_zt(full, full, quiet=True) == []
+    # 真污染: 20260701 落在区间内, 价格和对证缓存都没有它 → 必须报出来
+    assert adi.audit_zt({'20260623', '20260715'}, {'20260623', '20260715'}, quiet=True) != []
 
     sent = tmp_path / 'sent.csv'
     pd.DataFrame({'日期': ['20250919', '20260623', '20260701'],
@@ -397,7 +400,8 @@ def test_audit_clips_to_price_window(tmp_path, monkeypatch):
     monkeypatch.setattr(adi, 'SENTIMENT_CACHE', str(sent))
 
     # 20250919 宽度为 0 但在区间外 (真源不覆盖) → 只提示不计缺陷
-    assert adi.audit_sentiment({'20260623', '20260701'}, quiet=True) == []
+    win = {'20260623', '20260701'}
+    assert adi.audit_sentiment(win, win, quiet=True) == []
 
 
 def test_ai_legacy_schema_is_normalized_for_guarded_output():
