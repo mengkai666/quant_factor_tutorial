@@ -66,6 +66,21 @@ PRICE_CACHE_MAX_SIZE_MB = 150
 
 _KEY = ['code', 'date']
 
+# 切片的列顺序**必须钉死** (与 LF / mtime=0 同一个理由, 但这条曾经真的咬了一口)。
+# 2026-09-01: 本地导出的表头是 code,date,..., CI 那份是 date,code,... —— 同样的
+# 5538 行、每一列逐行相等, 只是列序不同。于是"内容没变就不写"的比对永远判"变了":
+# 两侧每跑一次就把最近 10 个切片全量重写一遍推进 git, 谁也没错、谁也不收敛。
+# date 放第一列还顺手压得更小 (一个切片里 date 是常量)。
+SLICE_COLS = ['date', 'code', 'close_raw', 'close_qfq', 'close_legacy',
+              'price_basis', 'source', 'source_timestamp']
+
+
+def _canonical_cols(frame: pd.DataFrame) -> pd.DataFrame:
+    """按 SLICE_COLS 排列已有列; 表里多出来的列附在后面 (排序后, 不丢数据)。"""
+    known = [c for c in SLICE_COLS if c in frame.columns]
+    extra = sorted(c for c in frame.columns if c not in SLICE_COLS)
+    return frame[known + extra]
+
 
 def _slice_path(date: str) -> str:
     return os.path.join(PRICE_SLICE_DIR, f'{date}.csv.gz')
@@ -118,7 +133,7 @@ def export_slices(frame: pd.DataFrame | None = None, days: int = EXPORT_DAYS,
         if coverage < SLICE_MIN_COVERAGE:
             skipped.append((date, coverage))
             continue
-        payload = _to_csv_lf(chunk.sort_values(_KEY))
+        payload = _to_csv_lf(_canonical_cols(chunk.sort_values(_KEY)))
         path = _slice_path(date)
         if os.path.exists(path):
             try:

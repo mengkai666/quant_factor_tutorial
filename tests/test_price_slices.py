@@ -130,6 +130,38 @@ def test_slice_bytes_are_lf_only(sandbox):
     assert raw.count(b'\n') == 3         # 表头 + 2 行
 
 
+def test_slice_columns_are_pinned_regardless_of_input_order(sandbox):
+    """列顺序必须钉死, 否则本地和 CI 会永远互相重写全部切片。
+
+    2026-09-01 实测: 本地表头 code,date,..., CI 那份 date,code,... —— 5538 行逐列
+    逐行相等, 只是列序不同。于是"内容没变就不写"的比对两侧都判"变了", 每跑一次
+    就把最近 10 个切片整份推进 git, 且永不收敛 (字节还差 2KB/天, 因为切片里 date
+    是常量, 放第一列压得更小)。
+    """
+    slice_dir, _ = sandbox
+    frame = _frame([_row('2026-08-31', 'sh600000'), _row('2026-08-31', 'sz000001')])
+    assert PS.export_slices(frame, quiet=True) == ['2026-08-31']
+    with gzip.open(slice_dir / '2026-08-31.csv.gz', 'rt', encoding='utf-8') as handle:
+        header = handle.readline().strip()
+    assert header == ','.join(PS.SLICE_COLS)
+
+    # 同样的数据、打乱列序再导一次: 一个字节都不该写
+    shuffled = frame[['code', 'source', 'date', 'close_raw', 'close_qfq',
+                      'close_legacy', 'price_basis', 'source_timestamp']]
+    assert PS.export_slices(shuffled, quiet=True) == [], '列序变化诈出了一次改写'
+
+
+def test_slice_keeps_unknown_columns_instead_of_dropping_them(sandbox):
+    """列白名单只管顺序, 不许当过滤器: 新加一列还没登记就被切片吃掉, 属于静默丢数据。"""
+    slice_dir, _ = sandbox
+    frame = _frame([_row('2026-08-31', 'sh600000')])
+    frame['turnover'] = 1.5
+    PS.export_slices(frame, quiet=True)
+    with gzip.open(slice_dir / '2026-08-31.csv.gz', 'rt', encoding='utf-8') as handle:
+        header = handle.readline().strip()
+    assert header == ','.join(PS.SLICE_COLS) + ',turnover'
+
+
 def test_price_cache_cap_holds_the_slice_window():
     """价格缓存的体积上限必须装得下切片保留窗口, 且**不随 CI/本地变**。
 
