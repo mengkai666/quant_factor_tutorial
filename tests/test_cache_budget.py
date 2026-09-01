@@ -73,6 +73,76 @@ def test_trim_jsonl_drops_old_days_and_keeps_unreadable_lines(tmp_path):
     assert kept == _dates(3, start=6)
 
 
+def test_trim_jsonl_trims_rows_whose_date_lives_in_another_field(tmp_path):
+    """结果行没有 report_date, 只有 recorded_at —— 也必须进保留窗口。
+
+    report_prediction_history.jsonl 里 63% 的行是 reconcile 回填的结果行
+    (event_type / prediction_id / recorded_at, 没有 report_date)。只认
+    report_date 的话它们永远裁不掉, 而体积兜底按"每天多少 MB"折算 ——
+    越删剩下的越是删不掉的那堆, 两道闸门对这份文件同时失效。
+    """
+    path = tmp_path / 'pred.jsonl'
+    lines = []
+    for d in ['2026-08-%02d' % x for x in range(1, 6)]:
+        lines.append(json.dumps({'report_date': d, 'prediction_id': 'p' + d}))
+        lines.append(json.dumps({'event_type': 'outcome', 'prediction_id': 'p' + d,
+                                 'recorded_at': d + 'T23:27:50+08:00'}))
+    path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+
+    days, removed = CB._trim_jsonl(str(path), 'report_date', keep=2, cap_mb=99)
+    assert (days, removed) == (3, 6), '结果行没跟着它那天一起裁'
+    out = [json.loads(l) for l in path.read_text(encoding='utf-8').splitlines() if l.strip()]
+    assert len(out) == 4
+    assert {r.get('report_date') or r['recorded_at'][:10] for r in out} == \
+        {'2026-08-04', '2026-08-05'}
+
+
+def test_trim_jsonl_matches_the_files_own_date_shape(tmp_path):
+    """回退日期要跟这份文件 date_col 的写法对齐: 紧凑 8 位的文件里混进
+    '2026-08-01' 会让排序整体乱掉 (字符串比较下带横线的一律更大), 窗口就选错天。"""
+    path = tmp_path / 'compact.jsonl'
+    lines = [json.dumps({'report_date': d}) for d in _dates(5)]          # 20260801...
+    lines.append(json.dumps({'event_type': 'outcome',
+                             'recorded_at': '2026-08-01T10:00:00+08:00'}))  # 最老那天
+    path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+
+    days, removed = CB._trim_jsonl(str(path), 'report_date', keep=2, cap_mb=99)
+    assert (days, removed) == (3, 4), '回退日期没被归到 20260801 这天'
+    out = [json.loads(l) for l in path.read_text(encoding='utf-8').splitlines() if l.strip()]
+    assert [r['report_date'] for r in out] == _dates(2, start=4)
+
+
+def test_trim_jsonl_keeps_a_row_with_no_date_at_all(tmp_path):
+    """两个字段都没有的行一律保留 —— 与"读不懂的行不猜"同一条原则。"""
+    path = tmp_path / 'mixed.jsonl'
+    lines = [json.dumps({'report_date': d}) for d in _dates(4)]
+    lines.append(json.dumps({'event_type': 'outcome', 'note': '无任何日期'}))
+    path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+
+    CB._trim_jsonl(str(path), 'report_date', keep=1, cap_mb=99)
+    out = [json.loads(l) for l in path.read_text(encoding='utf-8').splitlines() if l.strip()]
+    assert len(out) == 2 and any(r.get('note') == '无任何日期' for r in out)
+
+
+def test_every_row_of_the_real_jsonl_caches_resolves_to_a_date(tmp_path):
+    """真文件里每一行都必须能定出日期 —— 否则它就是一行永远裁不掉的死重量。
+
+    这条测试挡的是"又加了一种没有 report_date 的记录形态": 加的时候没人注意,
+    等发现时这份进 git 的文件里已经有一大半行躲开了保留窗口。
+    """
+    for rel, date_col, _keep, _cap in CB.CACHE_BUDGET:
+        if not rel.endswith('.jsonl'):
+            continue
+        path = os.path.join(CB.DATA_DIR, rel)
+        if not os.path.isfile(path):
+            continue
+        rows = [json.loads(l) for l in io.open(path, encoding='utf-8').read().splitlines()
+                if l.strip()]
+        sample = next((str(r.get(date_col) or '') for r in rows if r.get(date_col)), '')
+        orphan = [i for i, r in enumerate(rows) if not CB._record_date(r, date_col, sample)]
+        assert not orphan, f'{rel}: {len(orphan)} 行定不出日期 (首个在第 {orphan[0] + 1} 行)'
+
+
 def test_trim_nested_json_trims_every_sector(tmp_path):
     path = tmp_path / 'ths.json'
     blob = {name: [{'date': d, 'close': 1.0} for d in

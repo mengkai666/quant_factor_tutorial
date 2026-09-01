@@ -107,6 +107,35 @@ def _uniq_dates(dates) -> list:
     return sorted({str(d) for d in dates if str(d) and str(d).lower() != 'nan'})
 
 
+# 同一份 jsonl 里可以有两种记录形态: 预测行带 report_date, 而 reconcile 回填的
+# 结果行 (event_type / prediction_id / recorded_at) **没有** —— 它们占
+# report_prediction_history.jsonl 的 63% (188 行里 119 行)。只认 date_col 的话
+# 这些行永远躲开保留窗口; 更糟的是体积兜底按"每天多少 MB"折算, 越删剩下的越是
+# 那堆删不掉的, 文件只能单调变胖 —— 窗口和上限两道闸门对它同时失效。
+# 回退字段取**记录时刻**的日期前缀 (ISO 8601 前 10 位与 report_date 同形)。
+# 方向是安全的: recorded_at ≥ 它那条预测的 report_date, 所以结果行只会比预测行
+# 多活几天 (最坏留下几条孤立结果行), 不会出现"预测还在、结果先被裁掉"。
+_FALLBACK_DATE_KEYS = ('recorded_at', 'date', 'timestamp')
+
+
+def _record_date(obj: dict, date_col: str, sample: str = '') -> str:
+    """取一条 jsonl 记录的日期: 先认 date_col, 缺了才用回退字段的日期前缀。
+
+    sample 是这份文件里 date_col 的一个实际取值, 只用来对齐写法 —— 紧凑 8 位的
+    文件里塞进带横线的回退日期会让排序整体乱掉 (窗口就选错了天)。
+    两个字段都没有 (或读不懂) 返回空串, 调用方一律保留该行, 不猜。
+    """
+    value = str(obj.get(date_col, '') or '')
+    if value and value.lower() != 'nan':
+        return value
+    for key in _FALLBACK_DATE_KEYS:
+        raw = str(obj.get(key, '') or '')
+        if len(raw) >= 10 and raw[:2] == '20':
+            got = raw[:10]
+            return got.replace('-', '') if len(sample) == 8 and sample.isdigit() else got
+    return ''
+
+
 def _trim_jsonl(path: str, date_col: str, keep: int, cap_mb: float) -> tuple:
     """JSONL: 按日期字段留最近 keep 天。返回 (删掉的天数, 删掉的行数)。"""
     with open(path, encoding='utf-8') as handle:
@@ -117,16 +146,18 @@ def _trim_jsonl(path: str, date_col: str, keep: int, cap_mb: float) -> tuple:
             records.append((json.loads(line), line))
         except ValueError:
             records.append((None, line))              # 读不懂的行一律保留, 不猜
-    uniq = _uniq_dates(str(obj.get(date_col, '')) for obj, _ in records
-                       if isinstance(obj, dict))
+    sample = next((str(obj.get(date_col, '') or '') for obj, _ in records
+                   if isinstance(obj, dict) and obj.get(date_col)), '')
+    keys = [_record_date(obj, date_col, sample) if isinstance(obj, dict) else ''
+            for obj, _ in records]
+    uniq = _uniq_dates(keys)
     if not uniq:
         return 0, 0
     kept = _keep_newest(uniq, keep, cap_mb, _size_mb(path) / len(uniq))
     dropped = {d for d in uniq if d not in kept}
     if not dropped:
         return 0, 0
-    out = [line for obj, line in records
-           if not (isinstance(obj, dict) and str(obj.get(date_col, '')) in dropped)]
+    out = [line for (obj, line), key in zip(records, keys) if key not in dropped]
     with open(path, 'w', encoding='utf-8', newline='\n') as handle:
         handle.write('\n'.join(out) + ('\n' if out else ''))
     return len(dropped), len(records) - len(out)
