@@ -1,0 +1,516 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "主线强度追踪系统架构",
+    "subtitle": "A 股短线主线追踪：数据获取、质量闸门、分析建模、报告交付",
+    "locale": "zh-CN",
+    "output": "quant_factor_tutorial_architecture.html",
+    "quality_profile": "showcase",
+    "visual_preset": "signal-flow",
+    "repository": {
+      "url": "https://github.com/mengkai666/quant_factor_tutorial.git",
+      "revision": "814c1cb8d4149b403071a969950733ddb8d3bd7f"
+    },
+    "views": [
+      {
+        "id": "daily-run",
+        "label": "每日跑批链路",
+        "focus": [
+          "scheduler",
+          "entrypoint",
+          "app",
+          "preflight",
+          "analysis",
+          "report",
+          "delivery"
+        ],
+        "note": "从 GitHub Actions 或本地脚本触发，到最终报告发布。"
+      },
+      {
+        "id": "data-quality",
+        "label": "数据质量链路",
+        "focus": [
+          "market_apis",
+          "providers",
+          "cache",
+          "preflight",
+          "report"
+        ],
+        "note": "价格、universe、涨跌停池先进入缓存，再由质量闸门决定是否出报。"
+      },
+      {
+        "id": "decision-model",
+        "label": "决策建模链路",
+        "focus": [
+          "analysis",
+          "strategy",
+          "report",
+          "focus_pool"
+        ],
+        "note": "连板、情绪、主线、场景概率共同形成明日核心股票池。"
+      }
+    ],
+    "legend": {
+      "mode": "auto"
+    },
+    "viewBox": [
+      1360,
+      720
+    ]
+  },
+  "components": [
+    {
+      "id": "scheduler",
+      "type": "cloud",
+      "label": "每日调度",
+      "sublabel": "Actions/本地",
+      "tag": "定时",
+      "pos": [
+        35,
+        320
+      ],
+      "size": [
+        120,
+        66
+      ],
+      "sources": [
+        {
+          "path": ".github/workflows/daily_run.yml",
+          "line": 1,
+          "label": "每日工作流"
+        }
+      ]
+    },
+    {
+      "id": "entrypoint",
+      "type": "backend",
+      "label": "兼容入口脚本",
+      "sublabel": "主入口",
+      "tag": "脚本",
+      "pos": [
+        215,
+        320
+      ],
+      "size": [
+        130,
+        66
+      ],
+      "sources": [
+        {
+          "path": "src/主线强度追踪.py",
+          "line": 18,
+          "label": "入口依赖"
+        }
+      ]
+    },
+    {
+      "id": "app",
+      "type": "backend",
+      "label": "应用编排层",
+      "sublabel": "四阶段编排",
+      "tag": "App",
+      "pos": [
+        405,
+        320
+      ],
+      "size": [
+        140,
+        70
+      ],
+      "sources": [
+        {
+          "path": "src/app.py",
+          "line": 15,
+          "label": "App 编排"
+        }
+      ]
+    },
+    {
+      "id": "market_apis",
+      "type": "external",
+      "label": "外部市场数据",
+      "sublabel": "行情/板块",
+      "tag": "数据源",
+      "pos": [
+        405,
+        85
+      ],
+      "size": [
+        140,
+        66
+      ],
+      "sources": [
+        {
+          "path": "README.md",
+          "line": 26,
+          "label": "数据契约"
+        }
+      ]
+    },
+    {
+      "id": "providers",
+      "type": "backend",
+      "label": "数据 Provider 层",
+      "sublabel": "抓取与标准化",
+      "tag": "Provider",
+      "pos": [
+        625,
+        85
+      ],
+      "size": [
+        150,
+        68
+      ],
+      "sources": [
+        {
+          "path": "src/data_sources/universe_provider.py",
+          "line": 516,
+          "label": "UniverseProvider"
+        },
+        {
+          "path": "src/data_sources/price_provider.py",
+          "line": 1,
+          "label": "价格 Provider"
+        }
+      ]
+    },
+    {
+      "id": "cache",
+      "type": "database",
+      "label": "本地数据缓存",
+      "sublabel": "CSV/JSON",
+      "tag": "缓存",
+      "pos": [
+        845,
+        85
+      ],
+      "size": [
+        140,
+        66
+      ],
+      "sources": [
+        {
+          "path": "README.md",
+          "line": 75,
+          "label": "缓存目录"
+        }
+      ]
+    },
+    {
+      "id": "preflight",
+      "type": "security",
+      "label": "质量闸门",
+      "sublabel": "完整性审计",
+      "tag": "闸门",
+      "pos": [
+        625,
+        320
+      ],
+      "size": [
+        140,
+        70
+      ],
+      "sources": [
+        {
+          "path": "src/pipeline/data_pipeline.py",
+          "line": 1,
+          "label": "预检管道"
+        },
+        {
+          "path": "src/data_sources/quality_gate.py",
+          "line": 1,
+          "label": "质量规则"
+        }
+      ]
+    },
+    {
+      "id": "analysis",
+      "type": "backend",
+      "label": "分析引擎",
+      "sublabel": "主线/情绪",
+      "tag": "计算",
+      "pos": [
+        845,
+        320
+      ],
+      "size": [
+        150,
+        72
+      ],
+      "sources": [
+        {
+          "path": "src/lianban_analysis.py",
+          "line": 1,
+          "label": "连板分析"
+        },
+        {
+          "path": "src/report_logic.py",
+          "line": 568,
+          "label": "市场指标"
+        }
+      ]
+    },
+    {
+      "id": "strategy",
+      "type": "backend",
+      "label": "决策模型",
+      "sublabel": "择时/场景",
+      "tag": "建议",
+      "pos": [
+        845,
+        535
+      ],
+      "size": [
+        150,
+        70
+      ],
+      "sources": [
+        {
+          "path": "src/timing_signal.py",
+          "line": 283,
+          "label": "择时信号"
+        },
+        {
+          "path": "src/scenario_plan.py",
+          "line": 273,
+          "label": "场景计划"
+        }
+      ]
+    },
+    {
+      "id": "report",
+      "type": "frontend",
+      "label": "交互式 HTML 报告",
+      "sublabel": "HTML 看板",
+      "tag": "报告",
+      "pos": [
+        1065,
+        320
+      ],
+      "size": [
+        140,
+        70
+      ],
+      "sources": [
+        {
+          "path": "README.md",
+          "line": 1,
+          "label": "产品说明"
+        }
+      ]
+    },
+    {
+      "id": "focus_pool",
+      "type": "database",
+      "label": "明日核心股票池",
+      "sublabel": "focus_pool",
+      "tag": "股票池",
+      "pos": [
+        1065,
+        535
+      ],
+      "size": [
+        140,
+        68
+      ],
+      "sources": [
+        {
+          "path": "src/screener.py",
+          "line": 5,
+          "label": "股票池生成"
+        }
+      ]
+    },
+    {
+      "id": "delivery",
+      "type": "cloud",
+      "label": "交付与发布",
+      "sublabel": "Pages/邮件",
+      "tag": "交付",
+      "pos": [
+        1240,
+        320
+      ],
+      "size": [
+        100,
+        70
+      ],
+      "sources": [
+        {
+          "path": "src/publish_site.py",
+          "line": 376,
+          "label": "发布函数"
+        },
+        {
+          "path": ".github/workflows/daily_run.yml",
+          "line": 249,
+          "label": "Pages 部署"
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "本仓库 Python 应用",
+      "wraps": [
+        "entrypoint",
+        "app",
+        "providers",
+        "preflight",
+        "analysis",
+        "strategy",
+        "report",
+        "focus_pool"
+      ],
+      "pad": 34
+    },
+    {
+      "kind": "region",
+      "label": "运行态文件区",
+      "wraps": [
+        "cache",
+        "focus_pool",
+        "report"
+      ],
+      "pad": 24
+    }
+  ],
+  "connections": [
+    {
+      "id": "schedule-to-entry",
+      "from": "scheduler",
+      "to": "entrypoint",
+      "label": "执行 python 脚本",
+      "variant": "emphasis",
+      "labelDy": -48
+    },
+    {
+      "id": "entry-to-app",
+      "from": "entrypoint",
+      "to": "app",
+      "label": "启动四阶段流程",
+      "variant": "emphasis",
+      "labelDy": -48
+    },
+    {
+      "id": "app-to-providers",
+      "from": "app",
+      "to": "providers",
+      "label": "刷新/读取数据",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "labelDy": -52
+    },
+    {
+      "id": "apis-to-providers",
+      "from": "market_apis",
+      "to": "providers",
+      "label": "HTTP 拉取"
+    },
+    {
+      "id": "providers-to-cache",
+      "from": "providers",
+      "to": "cache",
+      "label": "标准化写入",
+      "labelDy": 48
+    },
+    {
+      "id": "cache-to-preflight",
+      "from": "cache",
+      "to": "preflight",
+      "label": "缓存审计",
+      "fromSide": "bottom",
+      "toSide": "right",
+      "labelDy": 44
+    },
+    {
+      "id": "app-to-preflight",
+      "from": "app",
+      "to": "preflight",
+      "label": "运行预检"
+    },
+    {
+      "id": "preflight-to-analysis",
+      "from": "preflight",
+      "to": "analysis",
+      "label": "闸门结果",
+      "variant": "security",
+      "labelDy": 52
+    },
+    {
+      "id": "analysis-to-strategy",
+      "from": "analysis",
+      "to": "strategy",
+      "label": "市场状态与样本",
+      "labelDy": 48
+    },
+    {
+      "id": "analysis-to-report",
+      "from": "analysis",
+      "to": "report",
+      "label": "主线、梯队、热力数据",
+      "variant": "emphasis",
+      "labelDy": -48
+    },
+    {
+      "id": "strategy-to-report",
+      "from": "strategy",
+      "to": "report",
+      "label": "仓位与场景建议"
+    },
+    {
+      "id": "strategy-to-focus",
+      "from": "strategy",
+      "to": "focus_pool",
+      "label": "筛选核心池",
+      "labelDy": 48
+    },
+    {
+      "id": "report-to-delivery",
+      "from": "report",
+      "to": "delivery",
+      "label": "发布 HTML",
+      "labelDy": -48
+    },
+    {
+      "id": "focus-to-delivery",
+      "from": "focus_pool",
+      "to": "delivery",
+      "label": "随报告输出",
+      "labelDy": 48,
+      "fromSide": "right",
+      "toSide": "bottom"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "主路径",
+      "items": [
+        "每日调度触发入口脚本",
+        "MarketTrackerApp 编排预检、分析、报告、交付四阶段",
+        "最终生成 output/主线强度追踪.html"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "数据保障",
+      "items": [
+        "沪深北全 A 股 universe 与 raw/qfq 价格分离",
+        "fetch_status 与 market_data_quality 记录覆盖率和失败状态",
+        "关键数据 partial/failed/stale 会阻断出报"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "策略输出",
+      "items": [
+        "连板梯队、主线强度、情绪指标共同进入分析引擎",
+        "择时、场景计划和后验概率形成仓位建议",
+        "明日核心股票池输出为 focus_pool.csv"
+      ]
+    }
+  ]
+}

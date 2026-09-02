@@ -34,6 +34,9 @@ focus_pool.csv
 连板高度分析.xlsx
 # 站点发布产物 (本地累积, CI 部署到 gh-pages 分支, 不入 master)
 output/site/
+# 架构图的 visual-check 复核产物 (PNG 渲染 + 判定 JSON, 由 .architecture.json 重跑可得,
+# 单份近 2MB 二进制, 不入库; 图的**源规格** docs/*.architecture.json 照常跟踪)
+docs/*.visual-check.*
 
 # === IDE / 编辑器 ===
 .vscode/
@@ -93,6 +96,10 @@ run_*.log
 %SystemRoot%/
 .playwright-cli/
 ai_quant_trade/
+# 别的任务在本目录里落下的 docx 提取残渣 (内容与本项目无关), 不入库
+source_extracted.*
+source_paragraphs.txt
+source_unescaped.txt
 
 # === AI 研判输出缓存 (运行时产物, 按输入指纹命名, 不入库) ===
 data/ai_output_cache/
