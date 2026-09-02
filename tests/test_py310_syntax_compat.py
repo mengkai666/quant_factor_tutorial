@@ -10,8 +10,13 @@ SyntaxError。三个调用点全包在 `except Exception` 里只打一行警告,
 报告照常发布、CI 全绿, 线上看板冻了近一个月。
 
 判据不能只靠"本机能跑": CI 用哪个版本从 workflow 反查 (单一真源), 不在测试里写死。
+
+已废弃的旧判据 tests/test_python310_compat.py (2026-08-13 加的) 用的是
+`ast.parse(src, feature_version=(3, 10))` —— 那个参数**管不住 f-string**:
+3.12+ 的 f-string 是在 tokenizer 阶段处理的, 早于 feature_version 生效,
+所以它对事故那份源码照样通过, 白白给了三周的虚假安全感。本文件取代它。
 """
-import ast  # noqa: F401  (保留: 供后续按需做更细的节点级判定)
+import ast
 import io
 import os
 import re
@@ -118,3 +123,22 @@ def test_detector_catches_the_original_regression(tmp_path):
     ok = tmp_path / 'ok.py'
     ok.write_text("y = f'<span>{d.get(\"k\") or \"兜底\"}</span>'\n", encoding='utf-8')
     assert not find_offenders(str(ok)), '修好的写法被误判为命中'
+
+
+def test_feature_version_alone_is_not_a_guard(tmp_path):
+    """钉住 `ast.parse(feature_version=(3,10))` 抓不到 PEP 701 —— 别再拿它当判据。
+
+    2026-08-13 的 tests/test_python310_compat.py 就是这么写的, 结果对事故源码
+    照样 pass。这条测试反过来断言"它确实抓不到", 谁想换回去会先撞到这里。
+    """
+    if sys.version_info < (3, 12):
+        pytest.skip('当前解释器 <3.12, 这种写法在这里是纯 SyntaxError')
+    bad = "x = f'<span>{d.get('k')}</span>'" + chr(10)
+    ast.parse(bad, feature_version=(3, 10))  # 不抛 —— 这就是旧判据失效的原因
+    assert find_offenders(str(_write(tmp_path, bad))), 'tokenize 判据必须能抓到'
+
+
+def _write(tmp_path, text):
+    path = tmp_path / 'sample.py'
+    path.write_text(text, encoding='utf-8')
+    return path
