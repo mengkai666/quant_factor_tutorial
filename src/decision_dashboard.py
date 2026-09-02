@@ -2543,13 +2543,13 @@ def _lianban_review_html(ctx: dict, prefix: str = '') -> str:
     negative = review.get('negative_feedback') if isinstance(review.get('negative_feedback'), dict) else {}
     missing_metrics = review.get('missing_metrics') or []
     rows = [
-        f'<span>首板 {_esc(str(review.get('first_board_count', counts.get(1, 0))))}</span>',
-        f'<span>二板 {_esc(str(review.get('second_board_count', counts.get(2, 0))))}</span>',
+        f'<span>首板 {_esc(str(review.get("first_board_count", counts.get(1, 0))))}</span>',
+        f'<span>二板 {_esc(str(review.get("second_board_count", counts.get(2, 0))))}</span>',
         f'<span>三板 {_esc(str(counts.get(3, 0)))}</span>',
         f'<span>四板 {_esc(str(counts.get(4, 0)))}</span>',
-        f'<span>首板→二板 {_esc(first.get('text') or '样本不足')}</span>',
-        f'<span>昨日连板池晋级 {_esc(streak.get('text') or '样本不足')}</span>',
-        f'<span>负反馈 {_esc(negative.get('text') or '样本不足')}</span>',
+        f'<span>首板→二板 {_esc(first.get("text") or "样本不足")}</span>',
+        f'<span>昨日连板池晋级 {_esc(streak.get("text") or "样本不足")}</span>',
+        f'<span>负反馈 {_esc(negative.get("text") or "样本不足")}</span>',
     ]
     if missing_metrics:
         missing_text = '、'.join(
