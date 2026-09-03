@@ -2780,15 +2780,24 @@ def _review_closure_html(ctx: dict, prefix: str = '') -> str:
 
     prediction_count = prediction.get('prediction_count', prediction.get('total', 0))
     pending_count = prediction.get('pending_count', prediction.get('pending', 0))
+    # 同一交易日重跑会各写一行 (指纹不同, 幂等拦不住), 样本数一度被放大 4 倍。
+    # 统计已按"交易日 x 时点 x 版本"折叠, 这里把折叠掉的次数摆出来, 免得读者
+    # 拿日志行数对不上看板数字。
+    superseded_count = int(prediction.get('superseded_count') or 0)
+    fold_text = f' (日志 {prediction.get("revision_count")} 行, 同日重跑折叠 {superseded_count} 次)' if superseded_count else ''
     scored_count = prediction.get('scored_count')
     if scored_count is not None and int(scored_count or 0) == 0:
-        prediction_html = f'<div style="{item_style}">历史记录 {_esc(_fmt(prediction_count, "0"))} 条 · 暂无可评分样本 · 待验证 {_esc(_fmt(pending_count, "0"))} 条</div>'
+        prediction_html = (
+            f'<div style="{item_style}">历史记录 {_esc(_fmt(prediction_count, "0"))} 条'
+            f'{_esc(fold_text)} · 暂无可评分样本 · 待验证 {_esc(_fmt(pending_count, "0"))} 条</div>'
+        )
     else:
         matured_count = prediction.get('matured_count', prediction.get('matured', 0))
         hit_rate = prediction.get('hit_rate')
         rate_text = f' · T+3 {_fmt(float(hit_rate) * 100, "—")}% ' if hit_rate is not None else ''
         prediction_html = (
-            f'<div style="{item_style}">历史记录 {_esc(_fmt(prediction_count, "0"))} 条 · '
+            f'<div style="{item_style}">历史记录 {_esc(_fmt(prediction_count, "0"))} 条'
+            f'{_esc(fold_text)} · '
             f'已到期 {_esc(_fmt(matured_count, "0"))} 条 · 可评分 {_esc(_fmt(scored_count, "0"))} 条'
             f'{_esc(rate_text)}</div>'
         )

@@ -415,9 +415,11 @@ def test_outcome_triggered_is_derived_from_structured_scenario_rules():
 
 def test_conditional_hit_rate_excludes_scenarios_that_never_triggered(tmp_path):
     history = tmp_path / "history.jsonl"
-    for pid, triggered, hit in (("p1", True, True), ("p2", False, False)):
+    for pid, report_date, triggered, hit in (
+        ("p1", "2026-08-14", True, True), ("p2", "2026-08-15", False, False),
+    ):
         append_prediction(history, {
-            "prediction_id": pid, "report_date": "2026-08-15",
+            "prediction_id": pid, "report_date": report_date,
             "primary_scenario_id": "repair",
             "scenario_plans": [{"scenario_id": "repair", "probability": 0.5}],
         })
@@ -562,3 +564,143 @@ def test_calibration_occurrence_prior_uses_realized_scenario_not_predicted_prima
         append_outcome(history, pid, "t3", {"triggered": True, "hit": True, "actual": {"breadth_ratio": 0.7}})
     calibration = build_scenario_calibration(history, min_samples=1)
     assert calibration["scenarios"]["realized_b"]["scenario_prior_probability"] > calibration["scenarios"]["predicted_a"]["scenario_prior_probability"]
+
+
+def test_same_day_reruns_collapse_into_one_prediction_sample(tmp_path):
+    """同一交易日重跑 N 次只算一个样本 (2026-09-02: 18 天被算成 72 个样本的根因)。"""
+    history = tmp_path / "history.jsonl"
+    previous = None
+    for index in range(3):
+        pid = f"2026-09-01:close:v2:fingerprint{index}"
+        append_prediction(history, {
+            "prediction_id": pid, "report_date": "2026-09-01",
+            "as_of_phase": "close", "prediction_version": "v2",
+            "generated_at": f"2026-09-01T1{index}:00:00+08:00",
+            "supersedes_prediction_id": previous,
+            "primary_scenario_id": "repair",
+            "scenario_plans": [{"scenario_id": "repair", "probability": 0.5}],
+        })
+        previous = pid
+    review = build_prediction_review(history)
+    assert review["revision_count"] == 3
+    assert review["prediction_count"] == 1
+    assert review["superseded_count"] == 2
+    assert list(review["predictions"]) == ["2026-09-01:close:v2:fingerprint2"]
+
+
+def test_collapsed_revisions_keep_outcomes_backfilled_on_earlier_revisions(tmp_path):
+    """T+1/T+3 回填在旧修订上, 之后又重跑一次 —— 结局必须跟着存活修订走, 不能变孤儿。"""
+    history = tmp_path / "history.jsonl"
+    old_pid = "2026-08-20:close:v2:aaaaaaaaaaaa"
+    append_prediction(history, {
+        "prediction_id": old_pid, "report_date": "2026-08-20",
+        "as_of_phase": "close", "prediction_version": "v2",
+        "generated_at": "2026-08-20T16:30:00+08:00",
+        "primary_scenario_id": "repair",
+        "scenario_plans": [{"scenario_id": "repair", "probability": 0.5}],
+    })
+    append_outcome(history, old_pid, "t1", {"triggered": True, "hit": True})
+    append_outcome(history, old_pid, "t3", {"triggered": True, "hit": True})
+    new_pid = "2026-08-20:close:v2:bbbbbbbbbbbb"
+    append_prediction(history, {
+        "prediction_id": new_pid, "report_date": "2026-08-20",
+        "as_of_phase": "close", "prediction_version": "v2",
+        "generated_at": "2026-08-20T20:30:00+08:00",
+        "supersedes_prediction_id": old_pid,
+        "primary_scenario_id": "repair",
+        "scenario_plans": [{"scenario_id": "repair", "probability": 0.5}],
+    })
+    review = build_prediction_review(history)
+    assert review["prediction_count"] == 1
+    assert review["orphan_outcome_count"] == 0
+    assert review["status_counts"]["matured"] == 1
+    assert set(review["predictions"][new_pid]["outcomes"]) == {"t1", "t3"}
+
+
+def test_parallel_revision_chains_keep_the_latest_run(tmp_path):
+    """CI 与本地各自接同一个父修订 (并行链), 存活的必须是时间上最新那条。"""
+    history = tmp_path / "history.jsonl"
+    parent = "2026-08-31:close:v2:parentaaaaaa"
+    append_prediction(history, {
+        "prediction_id": parent, "report_date": "2026-08-31",
+        "as_of_phase": "close", "prediction_version": "v2",
+        "generated_at": "2026-08-31T16:21:55+00:00",
+    })
+    for pid, generated_at in (
+        ("2026-08-31:close:v2:localbranch1", "2026-09-01T14:56:32+08:00"),
+        ("2026-08-31:close:v2:cibranch00001", "2026-09-01T06:15:31+00:00"),
+    ):
+        append_prediction(history, {
+            "prediction_id": pid, "report_date": "2026-08-31",
+            "as_of_phase": "close", "prediction_version": "v2",
+            "generated_at": generated_at, "supersedes_prediction_id": parent,
+        })
+    review = build_prediction_review(history)
+    assert review["prediction_count"] == 1
+    # 06:15 UTC = 14:15 北京, 早于 14:56 北京 —— 跨时区必须按绝对时间比。
+    assert list(review["predictions"]) == ["2026-08-31:close:v2:localbranch1"]
+
+
+def test_survivor_keeps_its_own_outcome_when_a_superseded_revision_has_a_different_one(tmp_path):
+    """折叠继承结局只是兜底: 存活修订自己已有的那条不许被旧修订的盖掉。
+
+    同日重跑事实会变 (阶段层收尾日差一天就能让主升段收益从 +0.86 翻成 -0.16),
+    两条修订的 delta 因此可能不同 —— 挂在存活样本上的必须是它自己那套。
+    """
+    history = tmp_path / "history.jsonl"
+    old_pid, new_pid = "2026-08-20:close:v2:old000000000", "2026-08-20:close:v2:new000000000"
+    for pid, generated_at, parent in (
+        (old_pid, "2026-08-20T16:30:00+08:00", None),
+        (new_pid, "2026-08-20T20:30:00+08:00", old_pid),
+    ):
+        append_prediction(history, {
+            "prediction_id": pid, "report_date": "2026-08-20",
+            "as_of_phase": "close", "prediction_version": "v2",
+            "generated_at": generated_at, "supersedes_prediction_id": parent,
+            "primary_scenario_id": "repair",
+            "scenario_plans": [{"scenario_id": "repair", "probability": 0.5}],
+        })
+    append_outcome(history, new_pid, "t1", {"triggered": True, "hit": True, "note": "own"})
+    append_outcome(history, old_pid, "t1", {"triggered": True, "hit": False, "note": "inherited"})
+    append_outcome(history, old_pid, "t3", {"triggered": True, "hit": False, "note": "inherited"})
+
+    review = build_prediction_review(history)
+    outcomes = review["predictions"][new_pid]["outcomes"]
+    assert outcomes["t1"]["note"] == "own"          # 自己那条赢
+    assert outcomes["t3"]["note"] == "inherited"    # 自己没有才继承
+    assert review["orphan_outcome_count"] == 0
+
+
+def test_backfill_only_writes_outcomes_for_the_surviving_revision(tmp_path):
+    """回填不再逐条修订写一遍 T+1/T+3 —— 留痕 7.6KB/行, 重跑 4 次就是 4 倍垃圾。"""
+    history = tmp_path / "history.jsonl"
+    snapshots = tmp_path / "snapshots"
+    snapshots.mkdir()
+    for day, breadth in (("2026-08-20", 0.8), ("2026-08-21", 0.9)):
+        (snapshots / f"{day}.json").write_text(json.dumps({
+            "report_date": day, "breadth_ratio": breadth, "promotion_rate": 0.5,
+            "limit_up": 60, "limit_down": 2, "max_height": 5,
+        }, ensure_ascii=False), encoding="utf-8")
+    previous = None
+    for index in range(3):
+        pid = f"2026-08-20:close:v2:fingerprint{index}"
+        append_prediction(history, {
+            "prediction_id": pid, "report_date": "2026-08-20",
+            "as_of_phase": "close", "prediction_version": "v2",
+            "generated_at": f"2026-08-20T1{index}:00:00+08:00",
+            "supersedes_prediction_id": previous,
+            "scenario_id": "repair_after_breadth_only",
+            "primary_scenario_id": "repair_after_breadth_only",
+            "market_snapshot": {"breadth_ratio": 0.8, "promotion_rate": 0.5,
+                                "limit_up": 60, "limit_down": 2, "max_height": 5},
+        })
+        previous = pid
+    result = reconcile_prediction_outcomes(
+        history, snapshots, trading_days=["2026-08-20", "2026-08-21"])
+
+    assert result["superseded_skipped"] == 2
+    written = [
+        json.loads(line) for line in history.read_text(encoding="utf-8").splitlines()
+        if line.strip() and json.loads(line).get("event_type") == "outcome"
+    ]
+    assert {row["prediction_id"] for row in written} == {"2026-08-20:close:v2:fingerprint2"}

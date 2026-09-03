@@ -197,3 +197,42 @@ def test_turning_summary_band_stays_intact_without_a_sub_phase():
     assert summary['current_phase']['sub'] == {}
     html = pr._turning_summary_html(summary)
     assert '小阶段' not in html and '当前阶段' in html
+
+
+def _lag_res(det, stale_through=None, report_date='2026-09-01'):
+    """够 render_phase_resonance_html 跑通的最小 res; 只关心滞后横幅那一段。"""
+    return {
+        'det': det, 'phase_names': ['最新日'], 'breadth': {}, 'index_ret': {},
+        'ranks': {}, 'quadrants': {}, 'corr': None,
+        'data_through': stale_through or det['latest']['date'],
+        'data_lag': None if stale_through is None else {
+            'data_through': stale_through, 'report_date': report_date,
+            'stale': stale_through < report_date,
+        },
+    }
+
+
+def test_data_lag_flags_index_line_that_stops_before_the_report_date(monkeypatch):
+    import datetime as _dt
+    import time_utils
+    monkeypatch.setattr(time_utils, 'get_latest_date',
+                        lambda *a, **k: _dt.datetime(2026, 9, 1))
+    assert pr._data_lag('2026-08-31') == {
+        'data_through': '2026-08-31', 'report_date': '2026-09-01', 'stale': True}
+    assert pr._data_lag('2026-09-01')['stale'] is False
+    assert pr._data_lag(None) is None
+
+
+def test_stale_phase_window_renders_the_ci_idempotency_marker():
+    # "阶段数据滞后" 是 .github/workflows/daily_run.yml 幂等检查 grep 的字面量:
+    # 报告自报滞后 → 后面的兜底 cron 重跑覆盖。改字要两边一起改, 这条就是闸门。
+    det = pr.detect_phases(_series(RETRACE_TAIL))
+    html = pr.render_phase_resonance_html(_lag_res(det, '2026-08-31'))
+    assert '阶段数据滞后' in html
+    assert '2026-08-31' in html and '2026-09-01' in html
+
+
+def test_fresh_phase_window_renders_no_lag_banner():
+    det = pr.detect_phases(_series(RETRACE_TAIL))
+    html = pr.render_phase_resonance_html(_lag_res(det))
+    assert '阶段数据滞后' not in html

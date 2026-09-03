@@ -598,6 +598,28 @@ def _attach_micro_cycle(result, det, cache):
     return {**result, **payload}
 
 
+def _data_lag(data_through):
+    """指数日线收尾日 vs 全项目报告日; 差一天 = 这一层用的是昨天的窗口。
+
+    2026-09-01 事故: 17:20 启动那次跑, akshare 指数日线还没有当天 K 线, 阶段层
+    静默用 08-31 收尾, 报告却盖 09-01 的章 —— 同一天两份报告的"主升段收益"一条
+    +0.86 一条 -0.16, 小阶段 bars 一个 9 一个 10。运行时修不了 (数据源就是还没
+    更新), 但必须显式披露, 并让 CI 的兜底 cron 重跑覆盖它。
+    """
+    if not data_through:
+        return None
+    try:
+        from time_utils import get_latest_date
+        report_date = get_latest_date().strftime('%Y-%m-%d')
+    except Exception:
+        return None
+    return {
+        'data_through': str(data_through),
+        'report_date': report_date,
+        'stale': str(data_through) < report_date,
+    }
+
+
 def _build(force_fetch=False):
     try:
         idx = fetch_index()
@@ -668,6 +690,9 @@ def _build(force_fetch=False):
     result = {
         'det': det, 'phase_names': ph, 'index_ret': idx_ret,
         'sub_phase': det.get('sub_phase'),
+        # 这一层自报数据截止日, 让下游 (渲染/预测快照/CI 幂等) 能判它是不是落后报告日
+        'data_through': latest,
+        'data_lag': _data_lag(latest),
         'timeline_segments': segments,
         'timeline_names': list(segments.keys()),
         'table': t, 'ranks': ranks, 'quadrants': quadrants(t, det),
@@ -1288,7 +1313,23 @@ def render_phase_resonance_html(res):
     top, bot, latest = det['top'], det['bottom'], det['latest']
     clr = '#58a6ff'
 
+    # 数据截止日落后报告日时先披露再上读数: 底下所有段收益都是按昨天的窗口算的。
+    # "阶段数据滞后" 这串字是 CI 幂等检查的判据 (与"数据未就位"同一套机制), 改字要同步改
+    # .github/workflows/daily_run.yml。
+    lag = res.get('data_lag') or {}
+    lag_html = ''
+    if lag.get('stale'):
+        lag_html = (
+            f'<div style="background:#3d2b12;border:1px solid #9e6a03;border-radius:6px;'
+            f'padding:8px 12px;margin-bottom:12px;color:#e3b341;font-size:12px;">'
+            f'⚠️ <b>阶段数据滞后</b>: 指数日线只到 {lag.get("data_through")}, 报告日为 '
+            f'{lag.get("report_date")}。本节所有段收益/形态/小阶段读数都按 '
+            f'{lag.get("data_through")} 收盘算, 尚未包含报告日当天 —— 数据源更新后重跑本节会变。'
+            f'</div>'
+        )
+
     head = (
+        lag_html +
         f'<div style="display:flex;gap:18px;flex-wrap:wrap;align-items:baseline;margin-bottom:10px;">'
         f'<div><span style="color:#8b949e;font-size:12px;">阶段起点(顶)</span> '
         f'<b style="color:#e6edf3;">{top["date"]} {top["close"]:.0f}</b></div>'

@@ -8,7 +8,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Iterable
 
-from prediction_review import append_outcome_once
+from prediction_review import append_outcome_once, collapse_prediction_revisions
 
 
 @dataclass(frozen=True)
@@ -394,6 +394,14 @@ def reconcile_prediction_outcomes(
                 existing.add((str(event.get("prediction_id")), str(event.get("horizon"))))
 
     predictions = [event for event in events if event.get("event_type") == "prediction"]
+    # 同一交易日重跑各写一行 prediction, 逐行回填等于把 T+1/T+3 也写 N 遍 (留痕
+    # 7.6KB/行, 白涨体积), 而统计侧只认折叠后的存活修订。只给存活那条回填。
+    survivor_ids, _remap = collapse_prediction_revisions(predictions)
+    survivors = set(survivor_ids)
+    superseded_skipped = len(predictions) - len(
+        [p for p in predictions if str(p.get("prediction_id") or "") in survivors]
+    )
+    predictions = [p for p in predictions if str(p.get("prediction_id") or "") in survivors]
     appended = unknown = skipped = missing_snapshots = 0
     for prediction in predictions:
         pid = str(prediction.get("prediction_id") or "")
@@ -443,5 +451,6 @@ def reconcile_prediction_outcomes(
         "appended": appended, "unknown": unknown, "skipped": skipped,
         "missing_snapshots": missing_snapshots, "calendar_source": resolved_calendar_source,
         "definition_id": definition.outcome_definition_id,
+        "superseded_skipped": superseded_skipped,
     }
 

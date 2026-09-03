@@ -326,7 +326,7 @@ def summarize_phase_resonance(result: dict[str, Any] | None) -> dict[str, Any]:
     # 明天做推断时最需要的恰是"离阶段高多远、走了几天、破位线在哪", 全是原生标量,
     # JSON 安全, 所以一并带走。
     for key in ("phase", "phase_shape", "phase_names", "index_ret", "corr",
-                "breadth", "sub_phase"):
+                "breadth", "sub_phase", "data_through", "data_lag"):
         if key in source:
             safe = _json_safe(source.get(key))
             if safe is not None:

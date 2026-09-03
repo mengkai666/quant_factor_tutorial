@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -322,11 +322,81 @@ def build_scenario_calibration(path: str | Path, *, min_samples: int = 8) -> dic
     }
 
 
+_PROJECT_TZ = timezone(timedelta(hours=8))
+_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+
+def _revision_time(event: dict[str, Any]) -> datetime:
+    """修订时间; 无时区的历史行按项目时区(UTC+8)读, 取不到时间的排到最前。"""
+    for key in ("generated_at", "recorded_at"):
+        text = str(event.get(key) or "").strip()
+        if not text:
+            continue
+        try:
+            parsed = datetime.fromisoformat(text)
+        except ValueError:
+            continue
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=_PROJECT_TZ)
+    return _EPOCH
+
+
+def _revision_bucket(event: dict[str, Any]) -> tuple[str, str, str] | None:
+    """一个交易日 x 一个时点 x 一个版本 = 一个样本桶; 缺 report_date 的行不归桶。"""
+    report_date = str(event.get("report_date") or "").strip()
+    if not report_date:
+        return None
+    return (
+        report_date,
+        str(event.get("as_of_phase") or "close"),
+        str(event.get("prediction_version") or "v1"),
+    )
+
+
+def collapse_prediction_revisions(
+    prediction_events: list[dict[str, Any]],
+) -> tuple[list[str], dict[str, str]]:
+    """同一交易日的多次重跑折叠成一个样本, 返回 (存活 id, 旧 id -> 存活 id)。
+
+    留痕文件是 append-only 的, 而 prediction_id 里带 facts_fingerprint: 同一天重跑
+    只要事实变一点指纹就变, id 跟着变, 于是一天留下 N 行 (CI 三次兜底 cron + 本地跑
+    各写一条)。统计侧必须按桶折叠 —— 2026-09-02 实测 18 个交易日被算成 72 个样本
+    (4.0x), 命中率 / Brier / 场景校准全部建在重复样本上, 且同桶各行的事实可能互相
+    矛盾 (2026-09-01 那天主升段收益一条 +0.86 一条 -0.16, 因为阶段层收尾日差一天)。
+    """
+    buckets: dict[Any, list[tuple[int, dict[str, Any]]]] = {}
+    for order, event in enumerate(prediction_events):
+        pid = str(event.get("prediction_id") or "")
+        if not pid:
+            continue
+        buckets.setdefault(_revision_bucket(event) or ("__pid__", pid), []).append((order, event))
+
+    survivors: list[str] = []
+    remap: dict[str, str] = {}
+    for rows in buckets.values():
+        superseded = {
+            str(event.get("supersedes_prediction_id"))
+            for _order, event in rows
+            if event.get("supersedes_prediction_id")
+        }
+        # 优先取没有被同桶其它行 supersede 的叶子; 并行链 (CI 与本地各自接同一个父)
+        # 或断链时退回"时间最新, 再退回文件里最后出现"。
+        leaves = [row for row in rows if str(row[1].get("prediction_id")) not in superseded]
+        _order, winner = max(leaves or rows, key=lambda row: (_revision_time(row[1]), row[0]))
+        winner_id = str(winner.get("prediction_id"))
+        survivors.append(winner_id)
+        for _order, event in rows:
+            pid = str(event.get("prediction_id"))
+            if pid != winner_id:
+                remap[pid] = winner_id
+    return survivors, remap
+
+
 def build_prediction_review(path: str | Path) -> dict[str, Any]:
     target = Path(path)
     predictions: dict[str, dict[str, Any]] = {}
     events: list[dict[str, Any]] = []
     orphan_outcomes = 0
+    revision_count = 0
     if target.exists():
         for raw in target.read_text(encoding="utf-8").splitlines():
             if not raw.strip():
@@ -338,22 +408,48 @@ def build_prediction_review(path: str | Path) -> dict[str, Any]:
             if not isinstance(event, dict):
                 continue
             events.append(event)
+
+        # 同一交易日的多次重跑先折叠成一个样本, 再建预测清单: 否则一天重跑 N 次就是
+        # N 个独立样本, 命中率/校准被自己的重跑刷出来。
+        prediction_events = [
+            event for event in events
+            if event.get("event_type") == "prediction" and str(event.get("prediction_id", ""))
+        ]
+        revision_count = len(prediction_events)
+        survivor_ids, revision_remap = collapse_prediction_revisions(prediction_events)
+        survivor_set = set(survivor_ids)
+        for event in prediction_events:
             pid = str(event.get("prediction_id", ""))
-            if event.get("event_type") == "prediction" and pid:
+            if pid in survivor_set:
                 predictions[pid] = {**event, "outcomes": {}}
 
         # Join outcomes only after the prediction inventory is known. Orphan
         # outcomes remain auditable but must not inflate the prediction sample.
+        # 被折叠掉的那些修订上已回填的 T+1/T+3 要改挂到存活修订上, 否则一次重跑就把
+        # 昨天回填好的结局变成孤儿, 样本从 matured 掉回 pending。
+        inherited: set[tuple[str, str]] = set()
         for event in events:
             if event.get("event_type") != "outcome":
                 continue
-            pid = str(event.get("prediction_id", ""))
+            raw_pid = str(event.get("prediction_id", ""))
+            pid = revision_remap.get(raw_pid, raw_pid)
             if pid not in predictions:
                 orphan_outcomes += 1
                 continue
             horizon = str(event.get("horizon", "")).lower().replace("+", "")
-            if horizon in {"t1", "t3"}:
-                predictions[pid].setdefault("outcomes", {})[horizon] = event.get("actual", {})
+            if horizon not in {"t1", "t3"}:
+                continue
+            slot = predictions[pid].setdefault("outcomes", {})
+            own = raw_pid == pid
+            # 存活修订自己那条结局优先: 被折叠掉的修订可能是按另一套当日事实算的
+            # delta (同日重跑事实会变), 让它盖掉存活修订的结局等于给样本换事实。
+            if not own and horizon in slot and (pid, horizon) not in inherited:
+                continue
+            slot[horizon] = event.get("actual", {})
+            if own:
+                inherited.discard((pid, horizon))
+            else:
+                inherited.add((pid, horizon))
 
     status_counts = {"pending": 0, "incomplete": 0, "matured": 0}
     matured_ids: list[str] = []
@@ -454,6 +550,10 @@ def build_prediction_review(path: str | Path) -> dict[str, Any]:
         "brier_score": (sum(brier_values) / len(brier_values)) if brier_values else None,
         "brier_sample_count": len(brier_values),
         "orphan_outcome_count": orphan_outcomes,
+        # revision_count = 留痕里的 prediction 行数; prediction_count = 折叠后的样本数。
+        # 两者差得越多, 说明同一天被重跑得越多 (审计用, 不参与任何统计)。
+        "revision_count": revision_count,
+        "superseded_count": max(0, revision_count - len(predictions)),
         "metrics_by_horizon": metrics_by_horizon,
         "metrics_by_scenario": metrics_by_scenario,
     }

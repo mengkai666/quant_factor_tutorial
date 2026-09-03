@@ -1362,6 +1362,37 @@ def test_dynamic_scenario_plan_keeps_validation_but_filters_actions_in_observati
         assert "仓位 · 1-4 成" not in html
 
 
+def test_dashboard_discloses_folded_same_day_reruns():
+    """看板样本数是折叠后的交易日数; 日志行数与它对不上必须当场说明白, 否则
+    读者只会以为其中一个错了 (曾经 73 行日志被当成 73 个样本, 放大 4 倍)。"""
+    ctx = _context()
+    ctx["prediction_review"] = {
+        "prediction_count": 18,
+        "revision_count": 73,
+        "superseded_count": 55,
+        "pending_count": 2,
+        "matured_count": 12,
+        "scored_count": 12,
+        "hit_rate": 0.5,
+    }
+
+    for html in (generate_dashboard_html(ctx), generate_dashboard_section(ctx)):
+        assert "历史记录 18 条" in html
+        assert "日志 73 行" in html and "同日重跑折叠 55 次" in html
+
+
+def test_dashboard_stays_quiet_when_no_rerun_was_folded():
+    ctx = _context()
+    ctx["prediction_review"] = {
+        "prediction_count": 18, "revision_count": 18, "superseded_count": 0,
+        "pending_count": 2, "matured_count": 12, "scored_count": 12, "hit_rate": 0.5,
+    }
+
+    for html in (generate_dashboard_html(ctx), generate_dashboard_section(ctx)):
+        assert "历史记录 18 条" in html
+        assert "同日重跑折叠" not in html and "日志 18 行" not in html
+
+
 def test_outcome_reconciliation_status_is_visible_without_fake_failures():
     ctx = _context()
     ctx["prediction_review"] = {
