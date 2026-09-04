@@ -1,0 +1,214 @@
+{
+  "report_date": "2026-09-04",
+  "run_id": "20260904T125313589235Z-a19f95b3",
+  "max_height": 5,
+  "limit_up": 39,
+  "limit_down": 9,
+  "breadth_ratio": 0.4554,
+  "ladder_integrity": 0.3333,
+  "concentration": 0.5556,
+  "promotion_rate": 0.1590909090909091,
+  "mainline_rank": "AI应用",
+  "limit_pool_rows": [
+    {
+      "code": "bj920075",
+      "name": "柏星龙",
+      "height": 1
+    },
+    {
+      "code": "sh600059",
+      "name": "古越龙山",
+      "height": 1
+    },
+    {
+      "code": "sh600108",
+      "name": "亚盛集团",
+      "height": 2
+    },
+    {
+      "code": "sh600354",
+      "name": "敦煌种业",
+      "height": 1
+    },
+    {
+      "code": "sh600506",
+      "name": "统一股份",
+      "height": 1
+    },
+    {
+      "code": "sh600698",
+      "name": "湖南天雁",
+      "height": 1
+    },
+    {
+      "code": "sh600802",
+      "name": "福建水泥",
+      "height": 1
+    },
+    {
+      "code": "sh600865",
+      "name": "百大集团",
+      "height": 2
+    },
+    {
+      "code": "sh600975",
+      "name": "新五丰",
+      "height": 1
+    },
+    {
+      "code": "sh601579",
+      "name": "会稽山",
+      "height": 1
+    },
+    {
+      "code": "sh601949",
+      "name": "中国出版",
+      "height": 1
+    },
+    {
+      "code": "sh603122",
+      "name": "合富中国",
+      "height": 1
+    },
+    {
+      "code": "sh603123",
+      "name": "翠微股份",
+      "height": 1
+    },
+    {
+      "code": "sh603151",
+      "name": "邦基科技",
+      "height": 1
+    },
+    {
+      "code": "sh603162",
+      "name": "海通发展",
+      "height": 2
+    },
+    {
+      "code": "sh603390",
+      "name": "通达电气",
+      "height": 1
+    },
+    {
+      "code": "sh603696",
+      "name": "安记食品",
+      "height": 1
+    },
+    {
+      "code": "sh605398",
+      "name": "新炬网络",
+      "height": 2
+    },
+    {
+      "code": "sh605577",
+      "name": "龙版传媒",
+      "height": 5
+    },
+    {
+      "code": "sh605580",
+      "name": "恒盛能源",
+      "height": 2
+    },
+    {
+      "code": "sz000428",
+      "name": "华天酒店",
+      "height": 1
+    },
+    {
+      "code": "sz000592",
+      "name": "平潭发展",
+      "height": 1
+    },
+    {
+      "code": "sz000702",
+      "name": "正虹科技",
+      "height": 1
+    },
+    {
+      "code": "sz000735",
+      "name": "罗 牛 山",
+      "height": 1
+    },
+    {
+      "code": "sz000798",
+      "name": "中水渔业",
+      "height": 1
+    },
+    {
+      "code": "sz000876",
+      "name": "新 希 望",
+      "height": 1
+    },
+    {
+      "code": "sz000892",
+      "name": "欢瑞世纪",
+      "height": 1
+    },
+    {
+      "code": "sz001222",
+      "name": "源飞宠物",
+      "height": 1
+    },
+    {
+      "code": "sz001316",
+      "name": "润贝航科",
+      "height": 1
+    },
+    {
+      "code": "sz001366",
+      "name": "播恩集团",
+      "height": 1
+    },
+    {
+      "code": "sz002124",
+      "name": "天邦食品",
+      "height": 1
+    },
+    {
+      "code": "sz002403",
+      "name": "爱仕达",
+      "height": 2
+    },
+    {
+      "code": "sz002564",
+      "name": "天沃科技",
+      "height": 1
+    },
+    {
+      "code": "sz002702",
+      "name": "海欣食品",
+      "height": 1
+    },
+    {
+      "code": "sz002827",
+      "name": "高争民爆",
+      "height": 1
+    },
+    {
+      "code": "sz002862",
+      "name": "实丰文化",
+      "height": 1
+    },
+    {
+      "code": "sz002868",
+      "name": "绿康生化",
+      "height": 1
+    },
+    {
+      "code": "sz002949",
+      "name": "华阳国际",
+      "height": 1
+    },
+    {
+      "code": "sz003040",
+      "name": "楚天龙",
+      "height": 1
+    }
+  ],
+  "snapshot_schema": "daily-fact-snapshot/v1",
+  "snapshot_source": "daily_snapshot",
+  "source": "daily_snapshot",
+  "date_verified": true,
+  "immutable": true
+}
