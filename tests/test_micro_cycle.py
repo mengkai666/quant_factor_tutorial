@@ -129,7 +129,8 @@ def _index_fixture():
     ]
 
 
-def test_detect_micro_cycle_separates_signal_close_confirmation_and_full_breakout():
+def test_detect_micro_cycle_rejects_a_noise_width_close_breakout():
+    """8/05 收盘只高出第一反弹收盘高 0.04% —— 噪音不算突破, 确认推到 8/06。"""
     from micro_cycle import detect_micro_cycle
 
     det = {
@@ -148,9 +149,13 @@ def test_detect_micro_cycle_separates_signal_close_confirmation_and_full_breakou
     assert result["events"]["secondary_bottom"]["higher_low"] is True
     assert result["events"]["retest"]["date"] == "2026-08-03"
     assert result["signal_date"] == "2026-08-04"
-    assert result["confirmation_date"] == "2026-08-05"
+    # 8/05 收 3878.430, 第一反弹收盘高 3876.777 -> 只 +0.04%, 被幅度门槛挡掉
+    assert result["confirmation_date"] == "2026-08-06"
     assert result["full_confirmation_date"] == "2026-08-06"
+    assert result["rebound_amp"] == pytest.approx(3.83, abs=0.01)
+    assert result["criteria"] == "micro-cycle/v2"
     assert result["status"] == "小周期主升"
+    assert result["stalled"] is False
     assert result["rising_days"] == 4
     assert result["signal_return"] == pytest.approx(3.08, abs=0.01)
     assert result["signal_basis"] == "price+limit_pool"
@@ -238,6 +243,142 @@ def test_detect_micro_cycle_counts_only_the_uninterrupted_rise_from_signal():
     assert result["signal_date"] == "2026-08-04"
     assert result["rising_days"] == 2
     assert result["status"] == "震荡转升"
+
+
+def test_detect_micro_cycle_still_separates_close_breakout_from_the_full_breakout():
+    """第一反弹留长上影时两级确认仍分得开: 收盘先过线, 盘中高点后过。"""
+    from micro_cycle import detect_micro_cycle
+
+    rows = [
+        {**row, "high": 3950.0} if row["date"] == "2026-07-22" else row
+        for row in _index_fixture()
+    ]
+    rows.append({"date": "2026-08-10", "low": 3930.0, "high": 3975.0, "close": 3960.0})
+
+    result = detect_micro_cycle({
+        "bottom": {"date": "2026-07-17", "close": 3764.155},
+        "index_series": rows,
+    })
+
+    assert result["events"]["rebound_high"]["high_date"] == "2026-07-22"
+    assert result["events"]["rebound_high"]["close_date"] == "2026-07-23"
+    assert result["confirmation_date"] == "2026-08-06"
+    assert result["full_confirmation_date"] == "2026-08-10"
+    assert result["status"] == "小周期主升"
+
+
+def _shallow_rebound_fixture(rebound_high):
+    """止跌低点 3741, 第一反弹高点由参数给 —— 用来卡反弹幅度门槛。"""
+    values = [
+        ("2026-07-17", 3745.0, 3790.0, 3760.0),
+        ("2026-07-20", 3741.0, 3775.0, 3765.0),
+        ("2026-07-21", 3750.0, 3800.0, 3795.0),
+        ("2026-07-22", 3780.0, rebound_high, 3805.0),
+        ("2026-07-23", 3775.0, 3800.0, 3785.0),
+        ("2026-07-24", 3760.0, 3790.0, 3770.0),
+        ("2026-07-27", 3765.0, 3800.0, 3795.0),
+        ("2026-07-28", 3790.0, 3830.0, 3825.0),
+        ("2026-07-29", 3800.0, 3840.0, 3835.0),
+    ]
+    return [
+        {"date": date, "low": low, "high": high, "close": close}
+        for date, low, high, close in values
+    ]
+
+
+def test_detect_micro_cycle_needs_a_real_first_rebound_before_the_template_applies():
+    """反弹只有 1.8% 时整套模板不适用; 抬到 2.4% 同一根 K 就认。"""
+    from micro_cycle import detect_micro_cycle
+
+    det = {"bottom": {"date": "2026-07-17", "close": 3760.0}}
+
+    shallow = detect_micro_cycle({**det, "index_series": _shallow_rebound_fixture(3810.0)})
+    assert shallow["rebound_amp"] == pytest.approx(1.84, abs=0.01)
+    assert shallow["status"] == "探底未完成"
+    assert shallow["events"] == {}
+    assert shallow["signal_date"] == ""
+    assert shallow["criteria"] == "micro-cycle/v2"
+
+    deep = detect_micro_cycle({**det, "index_series": _shallow_rebound_fixture(3830.0)})
+    assert deep["rebound_amp"] == pytest.approx(2.38, abs=0.01)
+    assert deep["events"]["rebound_high"]["high_date"] == "2026-07-22"
+
+
+def _index_fixture_through_september():
+    """真实 sh000001 日线: 8/06 全面突破之后推到 8/18 见顶, 再横到 9/03。"""
+    values = [
+        ("2026-08-10", 3938.620, 3967.590, 3966.590),
+        ("2026-08-11", 3930.640, 3966.390, 3934.090),
+        ("2026-08-12", 3927.550, 3950.620, 3946.680),
+        ("2026-08-13", 3924.640, 3968.480, 3926.970),
+        ("2026-08-14", 3903.700, 3932.640, 3927.180),
+        ("2026-08-17", 3924.470, 3983.510, 3982.650),
+        ("2026-08-18", 3955.600, 3994.180, 3990.304),
+        ("2026-08-19", 3879.580, 3961.140, 3894.420),
+        ("2026-08-20", 3888.100, 3925.060, 3903.720),
+        ("2026-08-21", 3883.790, 3912.130, 3905.200),
+        ("2026-08-24", 3855.350, 3910.240, 3882.008),
+        ("2026-08-25", 3850.860, 3896.210, 3889.450),
+        ("2026-08-26", 3881.740, 3926.430, 3912.520),
+        ("2026-08-27", 3909.310, 3958.030, 3956.570),
+        ("2026-08-28", 3947.800, 3970.310, 3952.180),
+        ("2026-08-31", 3926.500, 3986.300, 3986.300),
+        ("2026-09-01", 3976.470, 3995.180, 3979.890),
+        ("2026-09-02", 3932.250, 3965.810, 3941.390),
+        ("2026-09-03", 3930.450, 3968.110, 3942.088),
+    ]
+    return _index_fixture() + [
+        {"date": date, "low": low, "high": high, "close": close}
+        for date, low, high, close in values
+    ]
+
+
+def test_detect_micro_cycle_expires_main_advance_once_the_peak_stops_being_taken_out():
+    """8/06 那波是真的, 但一个月后不能还挂着"小周期主升"。"""
+    from micro_cycle import detect_micro_cycle
+
+    result = detect_micro_cycle(
+        {
+            "bottom": {"date": "2026-07-17", "close": 3764.155},
+            "index_series": _index_fixture_through_september(),
+        },
+        daily_limit_counts={"2026-08-03": 101, "2026-08-04": 140},
+    )
+
+    # 六个节点仍是历史上那六个 —— 事实不动, 只有结论会过期。
+    assert result["signal_date"] == "2026-08-04"
+    assert result["confirmation_date"] == "2026-08-06"
+    assert result["full_confirmation_date"] == "2026-08-06"
+    assert result["rising_days"] == 5
+    assert result["status"] == "主升告一段落"
+    assert result["stalled"] is True
+    assert result["peak_date"] == "2026-08-18"
+    assert result["peak_return"] == pytest.approx(4.40, abs=0.01)
+    assert result["fade_from_peak"] == pytest.approx(-1.21, abs=0.01)
+    assert result["bars_since_peak"] == 12
+    assert result["bars_since_window"] == 20
+    assert result["signal_return"] == pytest.approx(3.13, abs=0.01)
+
+
+def test_detect_micro_cycle_expires_main_advance_on_giveback_before_the_bar_count():
+    """回吐够深就不必等满 5 根 K: 峰值后第 2 根就 -3% 也要降档。"""
+    from micro_cycle import detect_micro_cycle
+
+    rows = _index_fixture() + [
+        {"date": "2026-08-10", "low": 3930.0, "high": 3970.0, "close": 3966.0},
+        {"date": "2026-08-11", "low": 3830.0, "high": 3900.0, "close": 3840.0},
+    ]
+
+    result = detect_micro_cycle({
+        "bottom": {"date": "2026-07-17", "close": 3764.155},
+        "index_series": rows,
+    })
+
+    assert result["peak_date"] == "2026-08-10"
+    assert result["bars_since_peak"] == 1
+    assert result["fade_from_peak"] == pytest.approx(-3.18, abs=0.01)
+    assert result["stalled"] is True
+    assert result["status"] == "主升告一段落"
 
 
 def test_phase_payload_does_not_publish_resonance_before_close_confirmation(monkeypatch):

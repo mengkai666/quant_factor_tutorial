@@ -1165,6 +1165,36 @@ def test_micro_cycle_template_renders_four_compact_resonance_sections():
     assert "micro-cycle-timeline" in html
 
 
+def test_micro_cycle_template_merges_the_two_breakout_tiers_on_a_shared_bar():
+    """幅度门槛让收盘/盘中突破常落同一根 K —— 同日就不能写成两件事。"""
+    from phase_resonance import _micro_cycle_html
+
+    def render(full_date):
+        return _micro_cycle_html({
+            "micro_cycle": {
+                "status": "小周期主升", "signal_date": "2026-08-04",
+                "confirmation_date": "2026-08-06", "full_confirmation_date": full_date,
+                "signal_return": 3.13, "rising_days": 5, "signal_basis": "price_only",
+                "events": {
+                    "final_stop": {"date": "2026-07-20", "low": 3741.11},
+                    "rebound_high": {"high_date": "2026-07-22", "close_date": "2026-07-23"},
+                    "secondary_bottom": {"date": "2026-07-30", "low": 3767.50, "higher_low": True},
+                    "retest": {"date": "2026-08-03", "close": 3809.66},
+                },
+            },
+            "micro_chain": {},
+            "micro_resonance": {},
+        })
+
+    same_bar = render("2026-08-06")
+    assert "收盘与盘中同日突破" in same_bar
+    assert "8/6 全面突破" not in same_bar
+
+    split = render("2026-08-10")
+    assert "8/10 全面突破" in split
+    assert "收盘与盘中同日突破" not in split
+
+
 def test_micro_cycle_template_hides_empty_evidence_headings_and_keeps_small_hint():
     from phase_resonance import _micro_cycle_html
 
@@ -1518,3 +1548,169 @@ def test_dashboard_section_surfaces_leader_signal_in_headline():
                      "stage": "孤峰", "headline": "10板高标成孤峰, 无承接, 别接力空中票。"}
     html = generate_dashboard_section(ctx)
     assert "高标 · 孤峰预警" in html
+
+def _decision_quality_for_priority_tests():
+    core = ("universe", "price_raw", "breadth", "limit_pool")
+    return {
+        "status": "ok", "publication_mode": "decision",
+        "modules": {name: {"status": "ok", "critical": True} for name in core},
+        "critical_blocked": [], "decision_degraded": [],
+    }
+
+
+def _priority_context(plan):
+    return {
+        "date_str": "2026-09-03",
+        "data_quality": _decision_quality_for_priority_tests(),
+        "market_state": {
+            "publication_mode": "decision",
+            "statistics_layer": {"status": "ok"},
+            "decision_layer": {"status": "ready"},
+        },
+        "mainline_review": {"top1": "AI算力", "concentration": 0.42},
+        "mainline_concentration": {"top_mainline": "AI算力", "top_share": 0.42},
+        "scenario_posterior": {"timeline": [{
+            "phase": "close", "top_scenario_id": "mainline_continuation",
+            "scenarios": [{"scenario_id": "mainline_continuation", "state": "supported"}],
+        }]},
+        "action_plan": plan,
+    }
+
+
+def test_today_decision_never_fills_unique_mainline_with_other_sector_candidates():
+    from decision_dashboard import build_today_decision
+
+    plan = {
+        "position": "2 成", "core_action": "按确认条件执行",
+        "publication_mode": "decision", "execution_allowed": True,
+        "groups": [{"code": "attack", "rows": [{
+            "name": "非主线候选", "code": "sz000001", "role": "attack",
+            "sector": "机器人", "height": 2, "action": "条件确认后执行",
+            "trigger": "主线联动", "invalid": "失效",
+            "execution_allowed": True,
+        }]}],
+    }
+
+    got = build_today_decision(_priority_context(plan), action_plan=plan)
+
+    assert got["watch_items"][1]["headline"] == "AI算力 · 42%"
+    assert got["watch_items"][1]["detail"] == "条件候选：暂无合格主线候选"
+    assert got["priority"]["primary"] is None
+    assert got["priority"]["alternates"] == []
+
+
+def test_today_decision_selects_one_mainline_primary_and_at_most_two_alternates():
+    from decision_dashboard import build_today_decision
+
+    rows = [
+        {"name": "非主线股", "code": "sz000001", "role": "attack", "sector": "机器人", "height": 2, "execution_allowed": True},
+        {"name": "主线确认股", "code": "sz000002", "role": "confirm", "sector": "AI算力", "height": 4, "execution_allowed": True},
+        {"name": "主线进攻股", "code": "sz000003", "role": "attack", "sector": "AI算力", "height": 2, "execution_allowed": True},
+        {"name": "主线备选股", "code": "sz000004", "role": "confirm", "sector": "AI算力", "height": 3, "execution_allowed": True},
+        {"name": "主线超额股", "code": "sz000005", "role": "attack", "sector": "AI算力", "height": 2, "execution_allowed": True},
+    ]
+    plan = {
+        "position": "2 成", "core_action": "按确认条件执行",
+        "publication_mode": "decision", "execution_allowed": True,
+        "groups": [{"code": "attack", "rows": rows}],
+    }
+
+    ctx = _priority_context(plan)
+    ctx["scenario_posterior"]["timeline"][0]["phase"] = "early_0935"
+    got = build_today_decision(ctx, action_plan=plan)
+
+    assert got["priority"]["primary"]["sector"] == "AI算力"
+    assert len(got["priority"]["alternates"]) == 2
+    assert all(row["sector"] == "AI算力" for row in [got["priority"]["primary"], *got["priority"]["alternates"]])
+    assert got["watch_items"][1]["detail"].startswith("条件候选：")
+
+
+def test_observation_mode_has_no_primary_or_alternate_trade_pick():
+    from decision_dashboard import build_today_decision
+
+    plan = {
+        "position": "0 成", "core_action": "不开新仓",
+        "publication_mode": "observation", "execution_allowed": False,
+        "groups": [{"code": "attack", "rows": [{
+            "name": "主线观察股", "code": "sz000001", "role": "attack",
+            "sector": "AI算力", "height": 2, "execution_allowed": False,
+        }]}],
+    }
+
+    got = build_today_decision(_priority_context(plan), action_plan=plan)
+
+    assert got["priority"]["primary"] is None
+    assert got["priority"]["alternates"] == []
+
+def test_action_plan_discloses_price_and_holdings_limits_when_rendered():
+    from decision_dashboard import build_dashboard_ctx, generate_dashboard_section
+
+    ctx = build_dashboard_ctx(
+        advance_decline={"up": 3500, "down": 1500, "zt": 90, "dt": 2, "zt_max_height": 3},
+        echelon=[{"height": "2连板", "stock_details": [{
+            "name": "测试候选", "code": "sh600001", "ml": "AI算力",
+        }]}],
+        report_date="2026-09-03",
+        data_quality={"status": "ok", "publication_mode": "decision", "modules": {
+            "universe": {"status": "ok", "critical": True},
+            "price_raw": {"status": "ok", "critical": True},
+            "breadth": {"status": "ok", "critical": True},
+            "limit_pool": {"status": "ok", "critical": True},
+        }},
+    )
+
+    html = generate_dashboard_section(ctx)
+
+    assert "报告日未复权收盘参考" in html or "不能计算价格参数" in html
+    assert "未提供持仓" in html
+    assert "T+1" in html
+
+def test_post_close_plan_keeps_conditional_primary_without_marking_it_executable():
+    from decision_dashboard import build_today_decision
+
+    plan = {
+        "position": "2 成", "core_action": "按确认条件执行",
+        "publication_mode": "decision", "execution_allowed": True,
+        "groups": [{"code": "attack", "rows": [{
+            "name": "主线条件股", "code": "sz000001", "role": "attack",
+            "sector": "AI算力", "height": 2, "execution_allowed": True,
+        }]}],
+    }
+    ctx = _priority_context(plan)
+    ctx["scenario_posterior"]["timeline"][0]["phase"] = "close"
+
+    got = build_today_decision(ctx, action_plan=plan)
+
+    assert got["priority"]["primary"]["name"] == "主线条件股"
+    assert got["readiness"]["action"]["status"] == "wait_confirmation"
+    assert got["execution_allowed"] is False
+    assert got["priority"]["primary"]["priority"] == "primary"
+
+
+def test_dashboard_keeps_trade_plan_review_separate_from_market_scenario_review():
+    from decision_dashboard import build_dashboard_ctx, generate_dashboard_section
+
+    context = {
+        "report_date": "2026-09-03",
+        "publication_mode": "decision",
+        "quality": {"status": "ok", "publication_mode": "decision", "modules": {}},
+        "facts": {"market_state": {"publication_mode": "decision"}},
+        "trade_plan_review": {
+            "report_date": "2026-09-03", "plan_count": 2, "outcome_count": 1,
+            "pending_count": 1, "triggered_count": 1, "filled_count": 0,
+            "pnl_known_count": 0, "net_pnl": None,
+            "status_counts": {"not_triggered": 0, "triggered_not_filled": 1, "filled": 0, "unknown": 0, "cancelled": 0},
+            "has_realized_trade_result": False,
+            "note": "暂无明确成交收益结果；未触发、未成交和未知不会计入交易胜率。",
+        },
+    }
+    ctx = build_dashboard_ctx(
+        advance_decline={"up": 3500, "down": 1500, "zt": 90, "dt": 2, "zt_max_height": 3},
+        echelon=[], report_date="2026-09-03", report_context=context,
+    )
+
+    html = generate_dashboard_section(ctx)
+
+    assert "交易计划复盘" in html
+    assert "非市场场景命中率" in html
+    assert "暂无明确成交收益结果" in html

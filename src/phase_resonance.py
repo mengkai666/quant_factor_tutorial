@@ -845,7 +845,9 @@ def _micro_text(value):
     return "" if text.lower() in {"nan", "none", "<na>", "nat"} else text
 
 
-_MICRO_FACT_STATUSES = frozenset({"探底未完成", "震荡筑底", "震荡转升", "小周期主升"})
+_MICRO_FACT_STATUSES = frozenset({
+    "探底未完成", "震荡筑底", "震荡转升", "小周期主升", "主升告一段落",
+})
 _MICRO_FACT_LEVELS = frozenset({"核心共振", "次级共振", "连板跟随"})
 _MICRO_FACT_DATE = re.compile(r"^(\d{4})[-/]?(\d{1,2})[-/]?(\d{1,2})$")
 _MICRO_DEFAULT_IGNORABLE_RANGES = (
@@ -1069,10 +1071,42 @@ def _micro_cycle_html(res, *, restricted=False):
     hint_html = " · ".join(escape(item, quote=True) for item in hints)
     hint_block = f'<div class="micro-cycle-hint">{hint_html}</div>' if hint_html else ""
     full_date = date_value(micro.get("full_confirmation_date"))
-    full_text = f" · {escape(full_date, quote=True)} 全面突破" if full_date else ""
+    confirm_date = date_value(micro.get("confirmation_date"))
+    # 两级确认落在同一根 K 上时别写成两件事 —— 幅度门槛让这种情形变常见了。
+    full_text = ""
+    if full_date:
+        full_text = (
+            " · 收盘与盘中同日突破" if full_date == confirm_date
+            else f" · {escape(full_date, quote=True)} 全面突破"
+        )
+    # 转强后收益是唯一会随最新收盘走的数字, 单独挂着会让读者以为窗口还在推进。
+    # 把峰值/回吐/窗口年龄一并写出, 这段叙事有多旧就自己说出来。
+    peak_date = date_value(micro.get("peak_date"))
+    peak_return = _micro_number(micro.get("peak_return"))
+    fade = _micro_number(micro.get("fade_from_peak"))
+    peak_text = ""
+    if peak_date and peak_return is not None:
+        peak_text = f' (峰值 {peak_return:+.1f}% @{escape(peak_date, quote=True)}'
+        peak_text += f', 已回吐 {abs(fade):.1f}%)' if fade is not None and fade < 0 else ')'
+    bars_since_peak = _micro_integer(micro.get("bars_since_peak"))
+    stall_text = (
+        f' · 距峰值 {bars_since_peak} 个交易日未创新高'
+        if micro.get("stalled") and bars_since_peak else ""
+    )
+    window_start = date_value((events.get("final_stop") or {}).get("date"))
+    window_end = full_date or date_value(micro.get("confirmation_date"))
+    bars_since_window = _micro_integer(micro.get("bars_since_window"))
+    window_text = ""
+    if window_start and window_end:
+        window_text = (
+            f' · 窗口 {escape(window_start, quote=True)}–{escape(window_end, quote=True)}'
+        )
+        if bars_since_window:
+            window_text += f', 距今 {bars_since_window} 个交易日'
     signal_summary = (
-        f'<small>转强后 {_micro_return(micro.get("signal_return"))} · '
-        f'连续 {_micro_integer(micro.get("rising_days"))} 日收涨{full_text}</small>'
+        f'<small>转强后 {_micro_return(micro.get("signal_return"))}{peak_text} · '
+        f'连续 {_micro_integer(micro.get("rising_days"))} 日收涨{full_text}'
+        f'{stall_text}{window_text}</small>'
         if date_value(micro.get("signal_date")) else ""
     )
     raw_status = (

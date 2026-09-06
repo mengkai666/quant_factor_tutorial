@@ -90,6 +90,41 @@ def test_summarize_phase_resonance_is_json_safe_and_keeps_decision_fields():
     assert "events" not in summary["micro_cycle"]
 
 
+def test_persisted_micro_cycle_carries_the_criteria_stamp_and_its_threshold_inputs():
+    """历史记录必须自报判据版本: 没这个键就是 v1 老口径, 不能跟 v2 混一桶算。"""
+    import json
+
+    from market_thesis import summarize_phase_resonance
+
+    summary = summarize_phase_resonance({
+        "micro_cycle": {
+            "status": "主升告一段落", "signal_date": "2026-08-04",
+            "confirmation_date": "2026-08-06", "full_confirmation_date": "2026-08-06",
+            "signal_return": 3.13, "rising_days": 5, "signal_basis": "price_only",
+            "criteria": "micro-cycle/v2", "rebound_amp": 3.83,
+            "peak_date": "2026-08-18", "peak_return": 4.4, "fade_from_peak": -1.21,
+            "bars_since_peak": 12, "bars_since_window": 20, "stalled": True,
+            "events": {"final_stop": {"date": "2026-07-20", "low": 3741.11}},
+        },
+    })
+
+    micro = summary["micro_cycle"]
+    assert micro["criteria"] == "micro-cycle/v2"
+    assert micro["rebound_amp"] == 3.83
+    assert micro["peak_date"] == "2026-08-18"
+    assert micro["fade_from_peak"] == -1.21
+    assert micro["bars_since_peak"] == 12
+    assert micro["bars_since_window"] == 20
+    assert micro["stalled"] is True
+    # 落盘走 JSON, 布尔/浮点都得原样回来
+    assert json.loads(json.dumps(micro))["stalled"] is True
+
+    stalled_false = summarize_phase_resonance({
+        "micro_cycle": {"status": "小周期主升", "stalled": False, "criteria": "micro-cycle/v2"},
+    })
+    assert stalled_false["micro_cycle"]["stalled"] is False
+
+
 def test_missing_limit_counts_remain_unknown_instead_of_zero():
     thesis = build_market_thesis(
         report_date="2026-08-19",

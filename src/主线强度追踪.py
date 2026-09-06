@@ -4978,7 +4978,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
             timing=timing_res, advance_decline=advance_decline,
             sentiment_df=sentiment_df, echelon=echelon, previous_echelon=previous_echelon,
             report_date=_report_date, focus_df=focus_df, focus_catalysts=focus_catalysts,
-            report_context=report_context,
+            report_context=report_context, price_df=price_df,
         )
         _dash_ctx['stance'] = stance
         _dash_ctx['leader'] = leader_result
@@ -6105,6 +6105,7 @@ def _main_impl():
     )
     _ladder_metrics = compute_ladder_metrics(
         _current_echelon_rows, _previous_echelon_rows,
+        transition_current_echelon=_current_progression_rows,
     )
 
     _price_target = _report_date
@@ -6710,27 +6711,39 @@ def _main_impl():
         scenario_posterior=_scenario_posterior,
         scenario_calibration=_scenario_calibration,
     ).to_dict()
-    write_report_audit(
-        os.path.join(AUDIT_DIR, f'{_report_date}.json'),
-        report_date=_report_date,
-        context=_report_context,
-        lineage=_lineage,
-    )
-
     # focus_pool.csv 是面向执行的唯一出口：最终场景后验、仓位与候选全部确定后再原子写出。
     # 即使没有候选也会覆盖旧文件表头，杜绝沿用前一交易日的陈旧股票池。
     try:
-        from decision_dashboard import build_dashboard_ctx, write_today_focus_pool
+        from decision_dashboard import build_dashboard_ctx, build_today_decision, write_today_focus_pool
         _focus_export_ctx = build_dashboard_ctx(
             timing=_report_timing, advance_decline=advance_decline,
             sentiment_df=sentiment_df, echelon=echelon, previous_echelon=previous_echelon,
             report_date=_report_date, focus_df=focus_df, focus_catalysts=focus_catalysts,
-            report_context=_report_context,
+            report_context=_report_context, price_df=price_df,
+        )
+        # 资格、信号与操作结论必须进入同一份审计，首页不能另算一套。
+        from trade_plan_review import (
+            append_trade_plan_once, build_trade_plan_records, build_trade_plan_review,
+        )
+        _today_decision = build_today_decision(_focus_export_ctx)
+        _report_context['decision_readiness'] = _today_decision['readiness']
+        for _trade_plan_record in build_trade_plan_records(
+            _today_decision['action_plan'], report_date=_report_date,
+            readiness=_today_decision['readiness'],
+        ):
+            append_trade_plan_once(PREDICTION_HISTORY, _trade_plan_record)
+        _report_context['trade_plan_review'] = build_trade_plan_review(
+            PREDICTION_HISTORY, report_date=_report_date,
         )
         _focus_written = write_today_focus_pool(_focus_export_ctx, focus_pool_path)
         print(f"  [今日决策] 已写出统一股票池 {_focus_written} 只: {focus_pool_path}")
     except Exception as e:
         print(f"  [警告] 统一股票池写出失败: {e}")
+
+    write_report_audit(
+        os.path.join(AUDIT_DIR, f'{_report_date}.json'),
+        report_date=_report_date, context=_report_context, lineage=_lineage,
+    )
 
     print("\n[6/6] 生成可视化...")
     generate_html(
@@ -6766,7 +6779,7 @@ def _main_impl():
         _quality = _report_context['quality']
         _market_state = _report_context['facts']['market_state']
         _sent_ok = sentiment_df is not None and not sentiment_df.empty
-        _data_ok = _quality['status'] in {'ok', 'degraded'} and _sent_ok
+        _data_ok = _quality['status'] == 'ok' and _sent_ok
         _notes = []
         if _market_state.get('reason') and _quality['status'] not in {'ok'}:
             _notes.append(_market_state['reason'])
@@ -6775,6 +6788,7 @@ def _main_impl():
         _summary = dict(_stance or {})
         _summary['data_ok'] = _data_ok
         _summary['data_quality'] = _quality
+        _summary['decision_readiness'] = _report_context.get('decision_readiness')
         _summary['market_state'] = _market_state
         _summary['allow_strong_conclusion'] = bool(
             _market_state.get('allow_strong_conclusion') and _sent_ok
@@ -6796,7 +6810,7 @@ def _main_impl():
                 timing=_timing, advance_decline=advance_decline,
                 sentiment_df=sentiment_df, echelon=echelon, previous_echelon=previous_echelon,
                 report_date=latest_date, focus_df=focus_df, focus_catalysts=focus_catalysts,
-                report_context=_report_context,
+                report_context=_report_context, price_df=price_df,
             )
             try:
                 from leader_tracker import build_leader_tracker

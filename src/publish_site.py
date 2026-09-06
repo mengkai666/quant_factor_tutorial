@@ -138,6 +138,10 @@ def _render_verdict(summary):
     """
     if not summary:
         return ''
+    readiness = summary.get('decision_readiness')
+    if isinstance(readiness, dict) and readiness:
+        from decision_readiness import render_decision_readiness
+        return render_decision_readiness(readiness)
     color = summary.get('color') or '#58a6ff'
     stance = _esc(summary.get('stance') or '—')
     head = _esc(summary.get('head') or '')
@@ -155,8 +159,12 @@ def _render_verdict(summary):
 
     # 数据可信度徽标
     badge = ''
-    if 'data_ok' in summary:
-        if summary['data_ok']:
+    quality = summary.get('data_quality') if isinstance(summary.get('data_quality'), dict) else {}
+    if 'data_ok' in summary or quality:
+        data_ok = bool(summary.get('data_ok', True))
+        if quality:
+            data_ok = data_ok and quality.get('status') == 'ok'
+        if data_ok:
             badge = ('<span class="badge ok">● 数据完整</span>')
         else:
             note = _esc(summary.get('data_note') or '部分数据缺失/降级')

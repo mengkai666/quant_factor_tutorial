@@ -38,6 +38,8 @@ import re
 from datetime import datetime
 from typing import Any
 
+from decision_readiness import build_decision_readiness, render_decision_readiness
+from execution_contract import build_execution_contract
 from report_logic import (
     assess_data_quality,
     build_market_state,
@@ -58,7 +60,8 @@ from report_logic import (
 def build_dashboard_ctx(timing=None, advance_decline=None, sentiment_df=None,
                         echelon=None, previous_echelon=None, report_date=None, focus_df=None,
                         focus_catalysts=None, report_context=None, regime=None,
-                        data_quality=None, ladder_review=None) -> dict:
+                        data_quality=None, ladder_review=None, price_df=None,
+                        holdings=None, next_trade_date=None) -> dict:
     """从 timing + 盘面 + focus_pool + 催化归因结果组装看板 ctx.
 
     focus_catalysts: {股票名: {catalyst: {tag, text, url} | None, raw: {...}}}
@@ -360,12 +363,16 @@ def build_dashboard_ctx(timing=None, advance_decline=None, sentiment_df=None,
         'report_context': unified_context,
         'daily_delta': unified_context.get('daily_delta', {}),
         'prediction_review': unified_context.get('prediction_review', {}),
+        'trade_plan_review': unified_context.get('trade_plan_review', {}),
         'market_thesis': unified_context.get('market_thesis', {}),
         'scenario_posterior': unified_context.get('scenario_posterior', {}),
         'scenario_calibration': unified_context.get('scenario_calibration', {}),
         'phase_snapshots': unified_context.get('phase_snapshots', []),
         'lineage': unified_context.get('lineage', {}),
         'progression_chain': (unified_context.get('facts') or {}).get('progression_chain', {}),
+        'price_df': price_df,
+        'holdings': holdings,
+        'next_trade_date': next_trade_date,
     }
 
 
@@ -659,18 +666,75 @@ def build_today_decision(
         row for row in actionable
         if top1 and top1 != '方向待确认' and top1 in str(row.get('sector') or '')
     ]
-    mainline_rows = (same_line or actionable)[:3]
+    # 唯一主线卡只允许展示同主线候选；没有匹配时明确为空，
+    # 不能用其他题材填满页面。观察模式可以显示同主线观察对象，
+    # 但只有执行资格成立时才产生首选/备选。
     mainline_names = '、'.join(
-        str(row.get('name') or '') for row in mainline_rows if row.get('name')
-    ) or '等待梯队确认'
+        str(row.get('name') or '') for row in same_line[:3] if row.get('name')
+    ) or '暂无合格主线候选'
     risk_names = '、'.join(
         str(row.get('name') or '') for row in risk_rows[:3] if row.get('name')
     ) or '高标与跌停反馈'
 
-    execution_allowed = bool(plan.get('execution_allowed'))
-    default_action = str(plan.get('core_action') or '不开新仓')
-    if not execution_allowed:
-        default_action = '不开新仓，只观察条件是否成立'
+    readiness = build_decision_readiness(
+        quality=ctx.get('data_quality'), market_state=ctx.get('market_state'),
+        action_plan=plan, scenario_posterior=ctx.get('scenario_posterior'),
+        phase_snapshots=ctx.get('phase_snapshots'), report_date=ctx.get('date_str'),
+    )
+    execution_allowed = readiness['execution_ready']
+    selected = same_line[:3] if readiness['plan_permitted'] else []
+    priority_rows = []
+    for index, row in enumerate(selected):
+        priority_rows.append({
+            **row,
+            'priority': 'primary' if index == 0 else 'alternate',
+        })
+    selected_codes = {str(row.get('code') or '') for row in priority_rows}
+    annotated_groups = []
+    for group in plan.get('groups') or []:
+        if not isinstance(group, dict):
+            continue
+        annotated_rows = []
+        for row in group.get('rows') or []:
+            if not isinstance(row, dict):
+                continue
+            code = str(row.get('code') or '')
+            marker = next((item.get('priority') for item in priority_rows
+                           if str(item.get('code') or '') == code), None)
+            annotated_rows.append({**row, 'priority': marker or ''})
+        annotated_groups.append({**group, 'rows': annotated_rows})
+    priority = {
+        'mainline': top1,
+        'primary': priority_rows[0] if priority_rows else None,
+        'alternates': priority_rows[1:3],
+        'candidate_count': len(same_line),
+        'selection_scope': 'mainline_only',
+        'reason': (
+            '执行资格成立后按主线匹配顺序选出首选与备选。'
+            if priority_rows else '暂无可执行的同主线候选；不使用其他题材填充。'
+        ),
+    }
+    execution_contract = build_execution_contract(
+        plan, price_df=ctx.get('price_df'), holdings=ctx.get('holdings'),
+        report_date=ctx.get('date_str'), next_trade_date=ctx.get('next_trade_date'),
+    )
+    execution_by_code = execution_contract.get('details') or {}
+    enriched_groups = []
+    for group in annotated_groups:
+        enriched_rows = []
+        for row in group.get('rows') or []:
+            code = str(row.get('code') or '')
+            enriched_rows.append({**row, 'execution': execution_by_code.get(code, {})})
+        enriched_groups.append({**group, 'rows': enriched_rows})
+    plan = {
+        **plan, 'groups': enriched_groups, 'priority': priority,
+        'execution_contract': execution_contract,
+    }
+    default_action = {
+        'no_new_positions': '不开新仓，只观察条件是否成立',
+        'wait_confirmation': '等待确认，未触发不执行',
+        'enter_plan': str(plan.get('core_action') or '按已确认条件计划执行'),
+    }[readiness['action']['status']]
 
     watch_items = [
         {
@@ -704,6 +768,8 @@ def build_today_decision(
         'watch_items': watch_items,
         'candidates': rows,
         'action_plan': plan,
+        'priority': priority,
+        'readiness': readiness,
     }
 
 
@@ -722,7 +788,11 @@ def _today_three_html(ctx: dict, action_plan: dict, prefix: str = '') -> str:
             f'<div style="color:#8b949e;font-size:11px;line-height:1.55;margin-top:6px">{_esc(item.get("check"))}</div>'
             '</article>'
         )
-    status = '条件成立后才允许试错' if decision['execution_allowed'] else '当前默认不开新仓'
+    status = {
+        'no_new_positions': '当前默认不开新仓',
+        'wait_confirmation': '条件计划获准，等待信号确认',
+        'enter_plan': '仅报告时点确认，目标交易日仍需复核',
+    }[decision['readiness']['action']['status']]
     return f'''
     <section class="{prefix}today-three" style="margin:14px 0 18px">
       <div style="display:flex;align-items:end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:9px">
@@ -747,6 +817,8 @@ def build_today_focus_rows(ctx: dict, action_plan: dict | None = None) -> list[d
         trigger = str(row.get('trigger') or '')
         invalid = str(row.get('invalid') or '')
         executable = bool(row.get('execution_allowed') and decision['execution_allowed'])
+        readiness = decision['readiness']
+        permitted = bool(row.get('execution_allowed') and readiness['plan_permitted'])
         rows.append({
             '报告日期': decision['report_date'],
             '股票': str(row.get('name') or ''),
@@ -755,7 +827,26 @@ def build_today_focus_rows(ctx: dict, action_plan: dict | None = None) -> list[d
             '角色': role_labels.get(role, role or '观察'),
             '策略池': f'【{role_labels.get(role, role or "观察")}】',
             '可执行': '是' if executable else '否',
-            '操作': str(row.get('action') or ''),
+            '优先级': {'primary': '首选', 'alternate': '备选'}.get(str(row.get('priority') or ''), '观察'),
+            '条件计划许可': '是' if permitted else '否',
+            '数据资格': readiness['data']['label'],
+            '策略资格': readiness['strategy']['label'],
+            '信号状态': readiness['signal']['label'],
+            '操作结论': readiness['action']['label'],
+            '结论原因': readiness['action']['reason'],
+            '重新评估条件': '；'.join(readiness['recheck_conditions']),
+            '验证时点': readiness['signal']['phase'],
+            '价格参数状态': str((row.get('execution') or {}).get('price_status') or 'unavailable'),
+            '报告日收盘参考': (str((row.get('execution') or {}).get('reference_close'))
+                              if (row.get('execution') or {}).get('reference_close') is not None else ''),
+            '入场价': '',
+            '失效价': '',
+            '持仓状态': str((row.get('execution') or {}).get('holding_status') or 'not_provided'),
+            'T+1约束': str((row.get('execution') or {}).get('t_plus_one') or ''),
+            '计划有效期': str((row.get('execution') or {}).get('valid_until') or ''),
+            '执行备注': str((row.get('execution') or {}).get('price_note') or ''),
+            '操作': (str(row.get('action') or '') if executable or role == 'risk'
+                     else ('等待确认，未触发不执行' if permitted else '仅观察，不下单')),
             '触发条件': trigger,
             '失效条件': invalid,
             '入场条件': trigger,
@@ -778,6 +869,9 @@ def write_today_focus_pool(ctx: dict, output_path: Any, action_plan: dict | None
         '报告日期', '股票', '代码', '板块', '角色', '策略池', '可执行', '操作',
         '触发条件', '失效条件', '入场条件', '防守位', '建议仓位', '默认动作',
         '数据状态', '数据来源', 'code', 'name', 'market', 'tradeable',
+        '优先级', '条件计划许可', '数据资格', '策略资格', '信号状态', '操作结论',
+        '结论原因', '重新评估条件', '验证时点', '价格参数状态', '报告日收盘参考',
+        '入场价', '失效价', '持仓状态', 'T+1约束', '计划有效期', '执行备注',
     ]
     rows = build_today_focus_rows(ctx, action_plan=action_plan)
     output = os.fspath(output_path)
@@ -880,6 +974,7 @@ def _action_plan_html(plan: dict, prefix: str = '') -> str:
                 '<article style="min-width:0;padding:12px 0;border-top:1px solid rgba(48,54,61,.72)">'
                 '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px">'
                 f'<div style="min-width:0"><b style="color:#f0f6fc;font-size:14px">{_esc(row.get("name"))}</b>'
+                f'{("<span style=\"color:#ffcc00;font-size:10px;margin-left:6px\">首选</span>" if row.get("priority") == "primary" else ("<span style=\"color:#d29922;font-size:10px;margin-left:6px\">备选</span>" if row.get("priority") == "alternate" else ""))}'
                 f'<span style="color:#8b949e;font-size:10px;margin-left:6px">{_esc(row.get("code"))}</span>'
                 f'<div style="color:#8b949e;font-size:11px;margin-top:2px">{_esc(_fmt(row.get("height"), "0"))}板 · {_esc(row.get("sector"))}</div></div>'
                 f'<strong style="color:{color};font-size:12px;text-align:right;max-width:42%">{_esc(row.get("action"))}</strong>'
@@ -887,6 +982,9 @@ def _action_plan_html(plan: dict, prefix: str = '') -> str:
                 '<div style="display:grid;grid-template-columns:44px minmax(0,1fr);gap:4px 8px;font-size:11.5px;line-height:1.55">'
                 f'<span style="color:#8b949e">触发</span><span style="color:#c9d1d9;overflow-wrap:anywhere">{_esc(row.get("trigger"))}</span>'
                 f'<span style="color:#8b949e">失效</span><span style="color:#c9d1d9;overflow-wrap:anywhere">{_esc(row.get("invalid"))}</span>'
+                f'<span style="color:#8b949e">价格</span><span style="color:#c9d1d9;overflow-wrap:anywhere">{_esc((row.get("execution") or {}).get("price_note") or "价格参数不可用")}</span>'
+                f'<span style="color:#8b949e">持仓</span><span style="color:#c9d1d9;overflow-wrap:anywhere">{_esc((row.get("execution") or {}).get("holding_note") or "未提供持仓")}</span>'
+                f'<span style="color:#8b949e">制度</span><span style="color:#c9d1d9;overflow-wrap:anywhere">{_esc((row.get("execution") or {}).get("t_plus_one") or "T+1约束待确认")}</span>'
                 '</div></article>'
             )
         if not rows:
@@ -2672,6 +2770,55 @@ def _outcome_reconciliation_html(
     )
 
 
+def _trade_plan_review_html(ctx: dict, prefix: str = '') -> str:
+    """Render explicit trade-plan outcomes separately from market scenarios."""
+    review = ctx.get('trade_plan_review') if isinstance(ctx.get('trade_plan_review'), dict) else {}
+    try:
+        plan_count = max(0, int(review.get('plan_count') or 0))
+    except (TypeError, ValueError):
+        plan_count = 0
+    if plan_count <= 0:
+        return ''
+
+    status_counts = review.get('status_counts') if isinstance(review.get('status_counts'), dict) else {}
+    def count(key: str) -> int:
+        try:
+            return max(0, int(status_counts.get(key) or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    outcome_count = max(0, int(review.get('outcome_count') or 0))
+    pending_count = max(0, int(review.get('pending_count') or 0))
+    triggered_count = max(0, int(review.get('triggered_count') or 0))
+    filled_count = max(0, int(review.get('filled_count') or 0))
+    pnl_known_count = max(0, int(review.get('pnl_known_count') or 0))
+    net_pnl = review.get('net_pnl')
+    if isinstance(net_pnl, (int, float)) and pnl_known_count:
+        pnl_text = f'明确成交净收益 {_esc(f"{net_pnl:+.2f}")}'
+    else:
+        pnl_text = '暂无明确成交收益结果'
+    rows = [
+        f'<span>计划数 {_esc(str(plan_count))}</span>',
+        f'<span>已记录结果 {_esc(str(outcome_count))}</span>',
+        f'<span>未触发 {_esc(str(count("not_triggered")))}</span>',
+        f'<span>触发未成交 {_esc(str(count("triggered_not_filled")))}</span>',
+        f'<span>已成交 {_esc(str(filled_count))}</span>',
+        f'<span>未知 {_esc(str(count("unknown")))}</span>',
+        f'<span>触发总数 {_esc(str(triggered_count))}</span>',
+        f'<span>{_esc(pnl_text)}</span>',
+    ]
+    note = str(review.get('note') or '只统计明确的交易计划结果，不替代市场场景命中率。')
+    if pending_count:
+        note += f'；仍有 {pending_count} 条计划待回填。'
+    return (
+        f'<div class="{prefix}quality-metrics" style="margin-top:12px">'
+        f'<div class="{prefix}metric-title">交易计划复盘（非市场场景命中率）</div>'
+        f'<div class="{prefix}metric-grid">{"".join(rows)}</div>'
+        f'<div class="{prefix}metric-note">{_esc(note)}</div>'
+        '</div>'
+    )
+
+
 def _review_closure_html(ctx: dict, prefix: str = '') -> str:
     """渲染简洁的日报闭环；详细来源仍由数据质量卡的折叠区承载。"""
     daily_delta = ctx.get('daily_delta') if isinstance(ctx.get('daily_delta'), dict) else {}
@@ -3004,11 +3151,15 @@ def generate_dashboard_html(ctx: dict) -> str:
     focus_catalysts = ctx.get('focus_catalysts') or {}
     focus_rows_html = _render_focus_table(focus_buckets, catalysts=focus_catalysts, mode=mode)
     action_plan = _build_action_plan(ctx, judgement)
+    today_decision = build_today_decision(ctx, action_plan)
+    action_plan = today_decision['action_plan']
+    readiness_html = render_decision_readiness(today_decision['readiness'])
     today_three_html = '' if blocked else _today_three_html(ctx, action_plan)
     action_plan_html = '' if blocked else _action_plan_html(action_plan)
     compact_market_facts_html = _compact_market_facts_html(ctx)
     quality_html = _quality_html(ctx)
     review_closure_html = _review_closure_html(ctx)
+    trade_plan_review_html = _trade_plan_review_html(ctx)
     historical_outcomes_only = _historical_outcomes_only(ctx)
     if historical_outcomes_only:
         scenario_heading = '当前策略 · 历史结果对照'
@@ -3425,6 +3576,8 @@ def generate_dashboard_html(ctx: dict) -> str:
     <div class="hero-desc">{_esc(desc)}</div>
   </div>
 
+  {readiness_html}
+
   {headline_html}
 
   {today_three_html}
@@ -3436,6 +3589,8 @@ def generate_dashboard_html(ctx: dict) -> str:
   {quality_html}
 
   {review_closure_html}
+
+  {trade_plan_review_html}
 
   {playbook_html}
 
@@ -3647,11 +3802,15 @@ def generate_dashboard_section(ctx: dict) -> str:
         focus_rows_inline = '<div class="dbd-fp-empty" style="color:#6e7681;padding:10px 2px;">暂无核心股票池 · 无近期催化</div>'
 
     action_plan = _build_action_plan(ctx, judgement)
+    today_decision = build_today_decision(ctx, action_plan)
+    action_plan = today_decision['action_plan']
+    readiness_html = render_decision_readiness(today_decision['readiness'])
     today_three_html = '' if blocked else _today_three_html(ctx, action_plan, prefix='dbd-')
     action_plan_html = '' if blocked else _action_plan_html(action_plan, prefix='dbd-')
     compact_market_facts_html = _compact_market_facts_html(ctx, prefix='dbd-')
     quality_html = _quality_html(ctx, prefix='dbd-')
     review_closure_html = _review_closure_html(ctx, prefix='dbd-')
+    trade_plan_review_html = _trade_plan_review_html(ctx, prefix='dbd-')
     historical_outcomes_only = _historical_outcomes_only(ctx)
     if historical_outcomes_only:
         scenario_heading = '当前策略 · 历史结果对照'
@@ -3972,6 +4131,8 @@ def generate_dashboard_section(ctx: dict) -> str:
     <div class="dbd-desc">{_esc(desc)}</div>
   </div>
 
+  {readiness_html}
+
   {headline_html}
 
   {today_three_html}
@@ -3983,6 +4144,8 @@ def generate_dashboard_section(ctx: dict) -> str:
   {quality_html}
 
   {review_closure_html}
+
+  {trade_plan_review_html}
 
   {playbook_html}
 

@@ -1103,9 +1103,20 @@ def _rate_result(successes: int, trials: int, label: str) -> dict[str, Any]:
 def compute_ladder_metrics(
     echelon: Iterable[Any] | None,
     previous_echelon: Iterable[Any] | None = None,
+    transition_current_echelon: Iterable[Any] | None = None,
 ) -> dict[str, Any]:
-    """计算梯队结构，并补充晋级率、炸板和孤悬龙头风险。"""
+    """计算梯队结构，并补充晋级率、炸板和孤悬龙头风险。
+
+    ``echelon`` 是当日仍在涨停池中的展示梯队；
+    ``transition_current_echelon`` 是用于昨日成员转移统计的完整当日结果。
+    后者可以包含断板/跌停/停牌成员，但这些成员不得污染当日高度与
+    梯队分。未传入时保持原有调用方行为。
+    """
     items = list(echelon or [])
+    transition_items = (
+        list(items) if transition_current_echelon is None
+        else list(transition_current_echelon or [])
+    )
     heights = [_height(item) for item in items]
     heights = [height for height in heights if height > 0]
     counts = {3: 0, 4: 0, 5: 0, 6: 0}
@@ -1132,7 +1143,9 @@ def compute_ladder_metrics(
 
     # 只有同时具备前后两日证券代码时，才计算真实的晋级/断板率；不能用
     # 今日静态高度分布冒充历史转移率。
-    current_by_code = {_row_code(item): item for item in items if _row_code(item)}
+    current_by_code = {
+        _row_code(item): item for item in transition_items if _row_code(item)
+    }
     previous_items = [item for item in (previous_echelon or []) if _height(item) > 0]
     previous_by_code = {_row_code(item): item for item in previous_items if _row_code(item)}
     current_sample_size = len(heights)
@@ -1259,20 +1272,26 @@ def compute_ladder_metrics(
     one_word_count = 0
     turnover_count = 0
     board_type_count = 0
+    event_fields = {"limit_up_attempted": 0, "broken": 0, "reclosed": 0, "board_type": 0}
     for item in items:
         attempted = _row_flag(item, ("limit_up_attempted", "曾涨停", "炸板样本", "attempted", "封板尝试"))
         broken = _row_flag(item, ("broken", "炸板", "炸板标记"))
+        reclosed_input = _row_flag(item, ("reclosed", "回封", "回封成功", "reclose"))
+        event_fields["limit_up_attempted"] += int(attempted is not None)
+        event_fields["broken"] += int(broken is not None)
+        event_fields["reclosed"] += int(reclosed_input is not None)
         if attempted is not None:
             bomb_total += 1
             if broken is True:
                 bomb_count += 1
-                reclosed = _row_flag(item, ("reclosed", "回封", "回封成功", "reclose"))
+                reclosed = reclosed_input
                 if reclosed is not None:
                     reclose_total += 1
                     if reclosed:
                         reclose_count += 1
         board_type = _row_board_type(item)
         if board_type:
+            event_fields["board_type"] += 1
             board_type_count += 1
             if board_type == "one_word":
                 one_word_count += 1
@@ -1365,6 +1384,14 @@ def compute_ladder_metrics(
         "bomb_rate": bomb_rate,
         "reclose_rate": reclose_rate,
         "board_structure": board_structure,
+        # Field presence is not market-wide coverage. False flags are observed
+        # zeros; absent/invalid flags must not be labelled as zero events.
+        "event_input_coverage": {
+            "scope": "provided_rows_only",
+            "source_rows": len(items),
+            "observed": event_fields,
+            "missing_fields": [name for name, count in event_fields.items() if count == 0],
+        },
         "quality_score": quality_score,
         "quality_text": quality_text,
         "quality_components": quality_components,

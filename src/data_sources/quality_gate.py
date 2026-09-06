@@ -583,6 +583,15 @@ def apply_review_readiness_gates(
             bomb_covered += 1
         else:
             bomb_missing.append(name)
+    input_coverage = metrics.get("event_input_coverage")
+    input_coverage = dict(input_coverage) if isinstance(input_coverage, dict) else {}
+    unprovided_fields = set(input_coverage.get("missing_fields") or [])
+    process_fields = {"limit_up_attempted", "broken", "reclosed", "board_type"}
+    fields_not_provided = bool(input_coverage.get("source_rows") and process_fields <= unprovided_fields)
+    bomb_reason = (
+        "未收到封板尝试、开板、回封与板型字段；当前涨停名单不能计算这些指标"
+        if fields_not_provided else "炸板率、炸板后回封率、板型结构存在样本不足"
+    )
     modules["bomb_metrics"] = build_module_quality(
         "bomb_metrics",
         total=3,
@@ -590,12 +599,13 @@ def apply_review_readiness_gates(
         source=str(metrics.get("source") or "ladder_metrics"),
         source_timestamp=str(metrics.get("report_date") or ""),
         missing_fields=bomb_missing,
-        errors=[] if not bomb_missing else ["炸板率、炸板后回封率、板型结构存在样本不足"],
+        errors=[] if not bomb_missing else [bomb_reason],
         critical=False,
         usable_threshold=0.0,
         lineage={
             "available": not bomb_missing,
             "metrics": [name for name, _ in bomb_specs],
+            "input_coverage": input_coverage,
         },
     )
 
@@ -632,7 +642,9 @@ def apply_review_readiness_gates(
         "bomb_metrics": {
             "ready": not bomb_missing,
             "missing": bomb_missing,
-            "reason": "" if not bomb_missing else "炸板指标样本不足",
+            "reason": "" if not bomb_missing else bomb_reason,
+            "unavailable_reason": ("fields_not_provided" if fields_not_provided
+                                   else ("insufficient_samples" if bomb_missing else "")),
         },
         "ai": {
             "ready": ai_ready,

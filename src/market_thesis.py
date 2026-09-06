@@ -335,9 +335,14 @@ def summarize_phase_resonance(result: dict[str, Any] | None) -> dict[str, Any]:
     micro = source.get("micro_cycle")
     if isinstance(micro, dict):
         micro_summary = {}
+        # criteria = 判据版本 (无此键 = v1, 幅度门槛前的老口径); 后面几个是 v2 门槛
+        # 实际比较的那些数, 一并留档 —— 将来调阈值时才能拿历史记录回答
+        # "哪几天会翻", 而不是只剩一个不知按什么标准盖的章。
         for key in (
             "status", "signal_date", "confirmation_date", "full_confirmation_date",
-            "signal_return", "rising_days", "signal_basis",
+            "signal_return", "rising_days", "signal_basis", "criteria",
+            "rebound_amp", "peak_date", "peak_return", "fade_from_peak",
+            "bars_since_peak", "bars_since_window", "stalled",
         ):
             if key in micro:
                 safe = _json_safe(micro.get(key))

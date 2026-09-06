@@ -19,6 +19,11 @@ MAINLINE_INDUSTRIES = {
 }
 LEVEL_ORDER = {"核心共振": 0, "次级共振": 1, "连板跟随": 2}
 INVALID_MAINLINES = {"", "其它", "其他", "nan", "None"}
+MICRO_STALL_BARS = 5    # 主升: 自信号后最高收盘起已 >= 此根 K 不创新高 -> 主升告一段落
+MICRO_FADE_PCT = 3.0    # 主升: 自信号后最高收盘回吐 >= 此值 (%) -> 主升告一段落
+MICRO_CONFIRM_MIN_PCT = 0.3   # 收盘突破: 需超出第一反弹收盘高 >= 此值 (%), 高零点几个点是噪音不是突破
+MICRO_REBOUND_MIN_PCT = 2.0   # 第一反弹: 高点相对止跌低点振幅 < 此值 (%) 视为没走出可参照的反弹高
+MICRO_CRITERIA_VERSION = "micro-cycle/v2"  # v2 = 幅度门槛 + 主升可过期; 历史记录无此键即 v1
 
 
 def _column(frame, *candidates):
@@ -46,6 +51,9 @@ def detect_micro_cycle(det: dict, *, daily_limit_counts=None) -> dict:
         "status": "探底未完成", "events": {}, "signal_date": "",
         "confirmation_date": "", "full_confirmation_date": "",
         "signal_return": None, "rising_days": 0, "signal_basis": "unavailable",
+        "peak_date": "", "peak_return": None, "fade_from_peak": None,
+        "bars_since_peak": 0, "bars_since_window": 0, "stalled": False,
+        "rebound_amp": None, "criteria": MICRO_CRITERIA_VERSION,
     }
     if start < 0 or len(rows) - start < 8:
         return empty
@@ -58,11 +66,19 @@ def detect_micro_cycle(det: dict, *, daily_limit_counts=None) -> dict:
         return empty
     high_peak = max(rebound_slice, key=lambda row: float(row["high"]))
     close_peak = max(rebound_slice, key=lambda row: float(row["close"]))
+    # 反弹幅度不够就谈不上"第一反弹高点" —— 后面每个节点都拿它当参照,
+    # 一段微幅震荡不该被套进底部反转模板讲成完整故事。
+    rebound_amp = round((float(high_peak["high"]) / float(stop["low"]) - 1) * 100, 2)
+    if rebound_amp < MICRO_REBOUND_MIN_PCT:
+        return {**empty, "rebound_amp": rebound_amp}
     close_peak_i = rows.index(close_peak)
 
     after_rebound = rows[close_peak_i + 1:]
+    # "突破"要有肉眼可辨的余量: 只高出零点几个点翻不动状态机。
+    # 全面突破共用这条线, 否则它可能早于收盘突破成立, 两级确认自相矛盾。
+    confirm_close = float(close_peak["close"]) * (1 + MICRO_CONFIRM_MIN_PCT / 100)
     confirmation = next(
-        (row for row in after_rebound if float(row["close"]) > float(close_peak["close"])),
+        (row for row in after_rebound if float(row["close"]) > confirm_close),
         None,
     )
     search_end = rows.index(confirmation) if confirmation else len(rows)
@@ -98,7 +114,7 @@ def detect_micro_cycle(det: dict, *, daily_limit_counts=None) -> dict:
     full = next((
         row for row in after_rebound
         if float(row["high"]) > float(high_peak["high"])
-        and float(row["close"]) > float(close_peak["close"])
+        and float(row["close"]) > confirm_close
     ), None)
     if not higher_low:
         signal = None
@@ -113,9 +129,35 @@ def detect_micro_cycle(det: dict, *, daily_limit_counts=None) -> dict:
             rising_days += 1
         else:
             break
+    # 主升是一个会过期的状态: 信号后的最高收盘就是这波的顶,
+    # 顶之后久不创新高 (或已明显回吐) 就不能再挂"主升"。
+    # confirmation 成立时"自底以来最高收盘"必然落在信号之后, 所以这里的
+    # peak 与大阶段 sub_phase 的阶段高是同一根 K, 两块结论天然对齐。
+    peak = max(signal_rows, key=lambda row: float(row["close"])) if signal_rows else None
+    peak_i = rows.index(peak) if peak else -1
+    bars_since_peak = len(rows) - 1 - peak_i if peak else 0
+    peak_return = (
+        round((float(peak["close"]) / float(signal["close"]) - 1) * 100, 2)
+        if peak and signal else None
+    )
+    fade_from_peak = (
+        round((float(rows[-1]["close"]) / float(peak["close"]) - 1) * 100, 2)
+        if peak else None
+    )
+    stalled = bool(peak) and (
+        bars_since_peak >= MICRO_STALL_BARS
+        or (fade_from_peak is not None and fade_from_peak <= -MICRO_FADE_PCT)
+    )
+    window_end_row = full or confirmation
+    window_end_i = rows.index(window_end_row) if window_end_row else -1
+    bars_since_window = len(rows) - 1 - window_end_i if window_end_row else 0
+
     status = "探底未完成" if not higher_low else "震荡筑底"
     if confirmation:
-        status = "小周期主升" if signal and rising_days >= 4 else "震荡转升"
+        if signal and rising_days >= 4:
+            status = "主升告一段落" if stalled else "小周期主升"
+        else:
+            status = "震荡转升"
     signal_return = (
         round((float(rows[-1]["close"]) / float(signal["close"]) - 1) * 100, 2)
         if signal else None
@@ -139,6 +181,14 @@ def detect_micro_cycle(det: dict, *, daily_limit_counts=None) -> dict:
         "signal_return": signal_return,
         "rising_days": rising_days if signal else 0,
         "signal_basis": basis,
+        "peak_date": peak["date"] if peak else "",
+        "peak_return": peak_return,
+        "fade_from_peak": fade_from_peak,
+        "bars_since_peak": bars_since_peak,
+        "bars_since_window": bars_since_window,
+        "stalled": stalled,
+        "rebound_amp": rebound_amp,
+        "criteria": MICRO_CRITERIA_VERSION,
     }
 
 

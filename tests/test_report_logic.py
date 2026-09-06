@@ -1740,3 +1740,26 @@ def test_email_is_blocked_when_site_publish_failed(monkeypatch):
 
     assert report._should_send_report_email(publish_succeeded=False) is False
     assert report._should_send_report_email(publish_succeeded=True) is True
+
+def test_ladder_metrics_can_use_complete_transition_rows_without_polluting_current_ladder():
+    from report_logic import compute_ladder_metrics
+
+    current = [{"code": "sh600001", "height": 3, "name": "晋级股"}]
+    previous = [
+        {"code": "sh600001", "height": 2, "name": "晋级股"},
+        {"code": "sh600002", "height": 2, "name": "断板股"},
+    ]
+    complete_transition = [
+        {"code": "sh600001", "height": 3, "name": "晋级股", "pct_change": 10},
+        {"code": "sh600002", "height": 0, "name": "断板股", "status": "broken_negative", "pct_change": -2},
+    ]
+
+    got = compute_ladder_metrics(
+        current, previous_echelon=previous,
+        transition_current_echelon=complete_transition,
+    )
+
+    assert got["height"] == 3
+    assert got["advancement_rates"]["2_to_3"]["text"] == "1/2（50%）"
+    assert got["transition_status_counts"]["broken_negative"] == 1
+    assert got["transition_status_counts"]["missing"] == 0
