@@ -35,7 +35,7 @@ def test_eastmoney_limit_pool_parses_beijing_code_and_count():
 
     frame = source.fetch_zt("2026-08-05")
 
-    assert frame.to_dict("records") == [
+    assert frame[["code", "name", "limit_count"]].to_dict("records") == [
         {"code": "920117", "name": "国航远洋", "limit_count": 2}
     ]
     assert session.calls[0][0].endswith("/getTopicZTPool")
@@ -67,7 +67,7 @@ def test_ths_limit_pool_extracts_high_days_count():
 
     frame = source.fetch_zt("2026-08-05")
 
-    assert frame.to_dict("records") == [
+    assert frame[["code", "name", "limit_count"]].to_dict("records") == [
         {"code": "920117", "name": "国航远洋", "limit_count": 2}
     ]
 

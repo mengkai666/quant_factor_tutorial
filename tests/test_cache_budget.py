@@ -314,3 +314,17 @@ def test_no_file_is_both_in_git_and_in_actions_cache():
     clash = [p for p in cached_paths
              if not p.startswith('~') and (p in tracked_set or p in tracked_dirs)]
     assert not clash, f'既进 git 又进 actions/cache (解包会盖掉 git 版本): {clash}'
+
+
+def test_trade_outcome_retention_follows_plan_date_not_late_confirmation_date(tmp_path):
+    path = tmp_path / 'journal.jsonl'
+    events = [
+        {'event_type': 'trade_plan', 'report_date': '2026-09-01', 'plan_id': '2026-09-01:sz000001:primary:v1'},
+        {'event_type': 'trade_plan_outcome', 'plan_id': '2026-09-01:sz000001:primary:v1', 'recorded_at': '2026-09-05T10:00:00+08:00', 'status': 'filled'},
+        {'event_type': 'daily_decision', 'report_date': '2026-09-02'},
+        {'event_type': 'daily_decision', 'report_date': '2026-09-03'},
+    ]
+    path.write_text(''.join(json.dumps(event) + '\n' for event in events), encoding='utf-8')
+    CB._trim_jsonl(str(path), 'report_date', keep=2, cap_mb=99)
+    kept = [json.loads(line) for line in path.read_text(encoding='utf-8').splitlines()]
+    assert [row['report_date'] for row in kept] == ['2026-09-02', '2026-09-03']

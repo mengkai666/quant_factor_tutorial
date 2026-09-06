@@ -5,7 +5,7 @@ The endpoint contracts are based on the Apache-2.0 a-stock-data project
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 import re
 import time
 
@@ -14,8 +14,27 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from limit_events import (
+    COMMON_EVENT_FIELDS, LIMIT_EVENT_FIELDS, extract_limit_event_fields,
+    limit_event_provenance,
+)
+
 
 SOURCE_COLUMNS = ["code", "name", "limit_count"]
+# Only documented semantic names, never guessed numeric THS field IDs.
+EASTMONEY_EVENT_ALIASES = {
+    "first_limit_time": ("fbt",), "last_limit_time": ("lbt",),
+    "limit_up_fund": ("fund",), "turnover_rate": ("hs",),
+    "float_market_cap": ("ltsz",),
+    "break_count": ("zbc",),
+}
+THS_EVENT_ALIASES = {
+    "first_limit_time": ("first_limit_up_time",),
+    "last_limit_time": ("last_limit_up_time",),
+    "limit_up_fund": ("order_amount",),
+    "amount": ("turnover",), "float_market_cap": ("currency_value",),
+    "break_count": ("open_num",), "board_type": ("limit_up_type",),
+}
 DEFAULT_HEADERS = {
     "User-Agent": "Mozilla/5.0",
     "Accept": "application/json,text/plain,*/*",
@@ -53,11 +72,16 @@ def _parse_limit_count(value) -> int:
     return max(1, int(matches[-1])) if matches else 1
 
 
-def _rows_to_frame(rows, *, count_key: str | None) -> pd.DataFrame:
+def _rows_to_frame(rows, *, count_key: str | None, aliases=None,
+                   pool_type: str = "ZT", metadata=None) -> pd.DataFrame:
     if not isinstance(rows, list):
         raise ValueError("pool rows must be a list")
+    metadata = metadata or {}
     if not rows:
-        return _empty_frame()
+        frame = _empty_frame()
+        frame.attrs.update(metadata, discarded_rows=0, pool_type=pool_type,
+                           population_scope="closing_limit_pool")
+        return frame
 
     normalized = []
     discarded = 0
@@ -71,13 +95,29 @@ def _rows_to_frame(rows, *, count_key: str | None) -> pd.DataFrame:
             continue
         name = str(item.get("n", item.get("name", "")) or "").strip()
         count = _parse_limit_count(item.get(count_key) if count_key else None)
-        normalized.append({"code": code, "name": name, "limit_count": count})
+        row = {"code": code, "name": name, "limit_count": count}
+        # fund/fbt/lbt/zbc in a DOWN pool do not describe up-limit events.
+        # Explicit canonical up-event facts, if supplied, remain unambiguous.
+        fields = (LIMIT_EVENT_FIELDS if pool_type == "ZT" else
+                  tuple(field for field in LIMIT_EVENT_FIELDS
+                        if field in COMMON_EVENT_FIELDS or field in item))
+        field_aliases = (aliases if pool_type == "ZT" else
+                         {key: value for key, value in (aliases or {}).items()
+                          if key in COMMON_EVENT_FIELDS})
+        row.update(extract_limit_event_fields(item, aliases=field_aliases, fields=fields))
+        row.update(limit_event_provenance(item, metadata))
+        normalized.append(row)
     if not normalized:
         raise ValueError("pool contains no valid stock rows")
     frame = pd.DataFrame(normalized, columns=SOURCE_COLUMNS)
-    frame.attrs["discarded_rows"] = discarded
+    extra_columns = dict.fromkeys(key for row in normalized for key in row
+                                 if key not in SOURCE_COLUMNS)
+    for column in extra_columns:
+        # pandas must not turn an absent count into NaN or False into numpy.bool_.
+        frame[column] = pd.Series([row.get(column) for row in normalized], dtype=object)
+    frame.attrs.update(metadata, discarded_rows=discarded, pool_type=pool_type,
+                       population_scope="closing_limit_pool")
     return frame
-
 
 class EastmoneyLimitPoolSource:
     """Direct push2ex adapter for the Eastmoney limit pools."""
@@ -86,12 +126,13 @@ class EastmoneyLimitPoolSource:
     UT = "7eea3edcaed734bea9cbfc24409ed989"
 
     def __init__(self, session=None, min_interval: float = 1.0,
-                 clock=None, sleep=None):
+                 clock=None, sleep=None, now=None):
         self.session = session or _retry_session()
         self.min_interval = max(0.0, float(min_interval))
         self.clock = clock or time.monotonic
         self.sleep = sleep or time.sleep
         self._last_call = None
+        self.now = now or (lambda: datetime.now(timezone.utc))
 
     def fetch_zt(self, date: str) -> pd.DataFrame:
         return self._fetch("getTopicZTPool", "fbt:asc", date, "lbc")
@@ -124,7 +165,14 @@ class EastmoneyLimitPoolSource:
         data = payload.get("data") if isinstance(payload, dict) else None
         if not isinstance(data, dict) or "pool" not in data:
             raise ValueError("response missing data.pool")
-        return _rows_to_frame(data["pool"], count_key=count_key)
+        return _rows_to_frame(
+            data["pool"], count_key=count_key, aliases=EASTMONEY_EVENT_ALIASES,
+            pool_type="ZT" if count_key else "DT",
+            metadata=limit_event_provenance(
+                data, payload, trade_date=date[:10], source="eastmoney_push2ex",
+                fetched_at=self.now(), date_aliases=("qdate",),
+            ),
+        )
 
     def _throttle(self) -> None:
         if self._last_call is not None:
@@ -139,8 +187,9 @@ class ThsLimitUpSource:
 
     URL = "https://data.10jqka.com.cn/dataapi/limit_up/limit_up_pool"
 
-    def __init__(self, session=None):
+    def __init__(self, session=None, now=None):
         self.session = session or requests.Session()
+        self.now = now or (lambda: datetime.now(timezone.utc))
 
     def fetch_zt(self, date: str) -> pd.DataFrame:
         response = self.session.get(
@@ -166,21 +215,8 @@ class ThsLimitUpSource:
         if (not isinstance(data, dict) or "info" not in data
                 or not isinstance(data["info"], list)):
             raise ValueError("response missing data.info")
-        rows = []
-        discarded = 0
-        for item in data["info"]:
-            if not isinstance(item, dict):
-                discarded += 1
-                continue
-            code = str(item.get("code", "")).strip()
-            if not re.fullmatch(r"\d{6}", code):
-                discarded += 1
-                continue
-            rows.append({
-                "c": code,
-                "n": str(item.get("name", "") or "").strip(),
-                "limit_count": _parse_limit_count(item.get("high_days")),
-            })
-        frame = _rows_to_frame(rows, count_key="limit_count")
-        frame.attrs["discarded_rows"] += discarded
-        return frame
+        return _rows_to_frame(
+            data["info"], count_key="high_days", aliases=THS_EVENT_ALIASES,
+            metadata=limit_event_provenance(data, payload, trade_date=date[:10],
+                                            source="ths_limit_up", fetched_at=self.now()),
+        )

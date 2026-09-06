@@ -26,7 +26,10 @@ def _ready_inputs():
                 "action": "条件确认后执行", "trigger": "按结构化规则确认", "invalid": "规则失效",
             }]}],
         },
-        "scenario_posterior": {"timeline": [{
+        "scenario_posterior": {"report_date": "2026-09-03", "target_trade_date": "2026-09-04", "timeline": [{
+            "report_date": "2026-09-03", "trade_date": "2026-09-04",
+            "captured_at": "2026-09-04T09:35:00+08:00", "snapshot_quality": {"status": "ok"},
+            "source_lineage": {"source": "fixture_feed"},
             "phase": "early_0935", "top_scenario_id": "mainline_continuation",
             "scenarios": [{"scenario_id": "mainline_continuation", "state": "supported"}],
         }]},
@@ -274,7 +277,7 @@ def test_close_snapshot_is_a_post_close_plan_with_intraday_phases_pending():
     from decision_readiness import build_decision_readiness
 
     inputs = _ready_inputs()
-    inputs["scenario_posterior"]["timeline"][0]["phase"] = "close"
+    inputs["scenario_posterior"]["timeline"][0].update(phase="close", trade_date="2026-09-03", captured_at="2026-09-03T15:00:00+08:00")
     got = build_decision_readiness(**inputs)
 
     assert got["phase_confirmation"]["status"] == "post_close_plan"
@@ -297,3 +300,12 @@ def test_intraday_phase_can_confirm_a_permitted_plan():
     assert got["phase_confirmation"]["pending_phases"] == ["auction", "confirm_1000", "afternoon"]
     assert got["action"]["status"] == "enter_plan"
     assert got["execution_ready"] is True
+
+
+def test_decision_mode_alone_does_not_prove_core_data_qualification():
+    inputs = _ready_inputs()
+    inputs["quality"] = {"publication_mode": "decision"}
+    got = _assess(inputs)
+    assert got["data"]["status"] == "missing"
+    assert got["action"]["reason_code"] == "data_unavailable"
+    assert not got["execution_ready"]

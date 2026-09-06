@@ -84,11 +84,13 @@ class ReportContext:
     phase_snapshots: list[dict[str, Any]] = field(default_factory=list)
     scenario_posterior: dict[str, Any] = field(default_factory=dict)
     scenario_calibration: dict[str, Any] = field(default_factory=dict)
+    target_trade_date: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "schema_version": "report-context/v1",
             "report_date": self.report_date,
+            "target_trade_date": self.target_trade_date,
             # Keep the batch identifier at the context root as well as in the
             # module lineage. Consumers should not have to traverse lineage
             # just to correlate one report run across all surfaces.

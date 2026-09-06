@@ -119,6 +119,7 @@ jobs:
           data/fetch_status.csv
           data/trading_calendar_cache.csv
           data/price_gap_negative_cache.csv
+          data/limit_events/
         key: market-data-cache-${{ github.run_number }}
         restore-keys: |
           market-data-cache-

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from dataclasses import asdict, dataclass
 from datetime import datetime, time, timedelta, timezone
@@ -79,11 +80,11 @@ def _valid_report_date(value: Any) -> str:
 
 _SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
 _PHASE_WINDOWS = {
-    "close": (time(14, 50), time(16, 30)),
-    "auction": (time(9, 15), time(9, 30)),
-    "early_0935": (time(9, 30), time(9, 45)),
-    "confirm_1000": (time(9, 45), time(10, 15)),
-    "afternoon": (time(13, 0), time(15, 10)),
+    "close": (time(15, 0), time(23, 59, 59)),
+    "auction": (time(9, 25), time(9, 29, 59)),
+    "early_0935": (time(9, 35), time(9, 44, 59)),
+    "confirm_1000": (time(10, 0), time(10, 15)),
+    "afternoon": (time(13, 0), time(14, 59, 59)),
 }
 
 
@@ -120,6 +121,8 @@ def _json_safe(value: Any) -> Any:
         return {str(key): _json_safe(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
         return [_json_safe(item) for item in value]
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value
     return str(value)
@@ -175,11 +178,17 @@ def build_phase_snapshot(
         normalized_trade_date = datetime.fromisoformat(normalized_captured_at).astimezone(_SHANGHAI_TZ).date().isoformat()
     else:
         normalized_trade_date = report_date
+    if normalized_captured_at:
+        observed_date = datetime.fromisoformat(normalized_captured_at).astimezone(_SHANGHAI_TZ).date().isoformat()
+        if normalized_trade_date != observed_date:
+            raise ValueError("trade_date 必须与 captured_at 的上海交易日一致")
+    if normalized_phase == "close" and normalized_trade_date != report_date:
+        raise ValueError("close 的 trade_date 必须等于 report_date，不能用次日收盘冒充基准")
     quality_payload = _json_safe(dict(quality or {}))
     quality_payload.setdefault("status", "unknown")
     quality_payload.setdefault("missing_fields", [])
-    for key, value in timestamp_quality.items():
-        quality_payload.setdefault(key, value)
+    # Validation facts are computed, never accepted from caller assertions.
+    quality_payload.update(timestamp_quality)
     identity = {
         "report_date": report_date,
         "trade_date": normalized_trade_date,
@@ -188,6 +197,7 @@ def build_phase_snapshot(
         "captured_at": normalized_captured_at,
         "metrics": normalized_metrics,
         "source_lineage": lineage,
+        "quality": quality_payload,
     }
     return PhaseSnapshot(
         report_date=report_date,
@@ -204,7 +214,7 @@ def build_phase_snapshot(
 
 def _coerce_record(value: PhaseSnapshot | dict[str, Any]) -> dict[str, Any]:
     if isinstance(value, PhaseSnapshot):
-        return value.to_dict()
+        value = value.to_dict()
     if not isinstance(value, dict):
         raise TypeError("阶段快照必须是 PhaseSnapshot 或 dict")
     # 兼容现有按日不可变收盘快照：只把它映射为 close，绝不把它
@@ -235,33 +245,16 @@ def _coerce_record(value: PhaseSnapshot | dict[str, Any]) -> dict[str, Any]:
             snapshot_id=value.get("snapshot_id"),
         ).to_dict()
     record = dict(value)
-    record.setdefault("event_type", EVENT_TYPE)
-    record.setdefault("snapshot_schema", SNAPSHOT_SCHEMA)
-    if record.get("snapshot_schema") != SNAPSHOT_SCHEMA:
+    if record.get("snapshot_schema", SNAPSHOT_SCHEMA) != SNAPSHOT_SCHEMA:
         raise ValueError("阶段快照 schema 不匹配")
-    record["phase"] = normalize_phase(record.get("phase"))
-    record["report_date"] = _valid_report_date(record.get("report_date"))
-    if record.get("trade_date"):
-        record["trade_date"] = _valid_report_date(record.get("trade_date"))
-    elif record.get("captured_at"):
-        parsed = datetime.fromisoformat(str(record["captured_at"]).replace("Z", "+00:00"))
-        record["trade_date"] = parsed.astimezone(_SHANGHAI_TZ).date().isoformat()
-    else:
-        record["trade_date"] = record["report_date"]
-    if not record.get("snapshot_id"):
-        rebuilt = build_phase_snapshot(
-            report_date=record["report_date"], trade_date=record["trade_date"], phase=record["phase"],
-            metrics=record.get("metrics"), run_id=record.get("run_id"),
-            captured_at=record.get("captured_at"),
-            source_lineage=record.get("source_lineage"), quality=record.get("quality"),
-        )
-        record["snapshot_id"] = rebuilt.snapshot_id
-    record["metrics"] = _json_safe(dict(record.get("metrics") or {}))
-    record["source_lineage"] = _json_safe(dict(record.get("source_lineage") or {}))
-    record["quality"] = _json_safe(dict(record.get("quality") or {}))
-    record["quality"].setdefault("status", "unknown")
-    record["quality"].setdefault("missing_fields", [])
-    return record
+    # An existing ID is not a validation bypass, including for loaded history.
+    rebuilt = build_phase_snapshot(
+        report_date=record.get("report_date"), trade_date=record.get("trade_date"),
+        phase=record.get("phase"), metrics=record.get("metrics"), run_id=record.get("run_id"),
+        captured_at=record.get("captured_at"), source_lineage=record.get("source_lineage"),
+        quality=record.get("quality"), snapshot_id=record.get("snapshot_id"),
+    )
+    return {**record, **rebuilt.to_dict()}
 
 
 def append_phase_snapshot_once(
@@ -326,14 +319,15 @@ def latest_phase_snapshots(rows: Iterable[dict[str, Any]]) -> dict[str, dict[str
         if previous is None:
             latest[phase] = record
             continue
-        def _sort_key(item: dict[str, Any]) -> tuple[float, str]:
+        def _sort_key(item: dict[str, Any]) -> float:
             captured = item.get("captured_at")
             try:
                 parsed = datetime.fromisoformat(str(captured).replace("Z", "+00:00")) if captured else None
                 epoch = parsed.astimezone(timezone.utc).timestamp() if parsed and parsed.tzinfo else float("-inf")
             except (TypeError, ValueError):
                 epoch = float("-inf")
-            return epoch, str(item.get("snapshot_id") or "")
+            # Equal/missing times retain append revision order, not hash order.
+            return epoch
         old_key = _sort_key(previous)
         new_key = _sort_key(record)
         if new_key >= old_key:
@@ -341,9 +335,96 @@ def latest_phase_snapshots(rows: Iterable[dict[str, Any]]) -> dict[str, dict[str
     return {phase: latest[phase] for phase in PHASE_ORDER if phase in latest}
 
 
+def snapshot_qualification_issues(
+    record: dict[str, Any], *, report_date: str, trade_date: str | None,
+) -> list[str]:
+    """Audit an observation against a specific forecast; never infer its target."""
+    issues: list[str] = []
+    phase = record["phase"]
+    if record["report_date"] != report_date:
+        issues.append("report_date_mismatch")
+    expected = report_date if phase == "close" else trade_date
+    if expected is None:
+        issues.append("target_trade_date_missing")
+    elif record["trade_date"] != expected:
+        issues.append("target_trade_date_mismatch")
+    if phase != "close" and record["trade_date"] <= report_date:
+        issues.append("target_trade_date_must_follow_report")
+    quality = record.get("quality") or {}
+    lineage = record.get("source_lineage") or {}
+    if quality.get("status") != "ok":
+        issues.append("quality_not_ok")
+    if quality.get("used_stale") or lineage.get("used_stale") or quality.get("freshness_level") in {"stale", "expired"}:
+        issues.append("stale_observation")
+    if str(lineage.get("source") or "").strip().lower() in {"", "unknown", "phase_monitor"}:
+        issues.append("source_missing")
+    # An immutable close may have an explicit source cutoff but no acquisition
+    # timestamp; that is a baseline only. Intraday requires observed time.
+    timestamp = record.get("captured_at") or (lineage.get("data_cutoff") if phase == "close" else None)
+    try:
+        canonical, _ = _normalize_captured_at(timestamp, phase)
+        if not canonical:
+            issues.append("observation_timestamp_missing")
+        elif datetime.fromisoformat(canonical).astimezone(_SHANGHAI_TZ).date().isoformat() != record["trade_date"]:
+            issues.append("observation_date_mismatch")
+        cutoff = lineage.get("data_cutoff")
+        if cutoff:
+            source_time, _ = _normalize_captured_at(cutoff, phase)
+            observed = datetime.fromisoformat(canonical) if canonical else None
+            source_at = datetime.fromisoformat(source_time) if source_time else None
+            if source_at and (source_at.astimezone(_SHANGHAI_TZ).date().isoformat() != record["trade_date"] or (observed and source_at > observed)):
+                issues.append("source_timestamp_mismatch")
+    except (TypeError, ValueError):
+        issues.append("observation_timestamp_invalid")
+    return list(dict.fromkeys(issues))
+
+
+def select_bound_phase_snapshots(
+    rows: Iterable[dict[str, Any]], *, report_date: str, trade_date: str | None,
+) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
+    """Keep report-day close plus qualified observations of the intended T+1."""
+    report_date = _valid_report_date(report_date)
+    if trade_date is not None:
+        trade_date = _valid_report_date(trade_date)
+        if trade_date <= report_date:
+            raise ValueError("目标交易日必须晚于报告日")
+    candidates, rejected = [], []
+    for raw in rows:
+        try:
+            record = _coerce_record(raw)
+        except (TypeError, ValueError) as exc:
+            record = raw if isinstance(raw, dict) else {}
+            rejected.append({"snapshot_id": record.get("snapshot_id"), "phase": record.get("phase"),
+                             "report_date": record.get("report_date"), "trade_date": record.get("trade_date"),
+                             "issues": ["invalid_snapshot:" + str(exc)], "selected_latest": True})
+            continue
+        expected = report_date if record["phase"] == "close" else trade_date
+        if record["report_date"] != report_date or expected is None or record["trade_date"] != expected:
+            rejected.append({"snapshot_id": record.get("snapshot_id"), "phase": record["phase"],
+                             "report_date": record["report_date"], "trade_date": record["trade_date"],
+                             "issues": snapshot_qualification_issues(record, report_date=report_date, trade_date=trade_date),
+                             "selected_latest": False})
+        else:
+            candidates.append(record)
+    # Select by observation time BEFORE qualification. New bad data must not
+    # make us silently reuse an earlier green observation of the same phase.
+    latest = latest_phase_snapshots(candidates)
+    accepted = {}
+    for record in candidates:
+        issues = snapshot_qualification_issues(record, report_date=report_date, trade_date=trade_date)
+        chosen = latest[record["phase"]]
+        selected = record["snapshot_id"] == chosen["snapshot_id"] and record.get("captured_at") == chosen.get("captured_at")
+        if issues:
+            rejected.append({"snapshot_id": record["snapshot_id"], "phase": record["phase"],
+                             "report_date": record["report_date"], "trade_date": record["trade_date"],
+                             "issues": issues, "selected_latest": selected})
+        elif selected:
+            accepted[record["phase"]] = record
+    return {phase: accepted[phase] for phase in PHASE_ORDER if phase in accepted}, rejected
+
+
 __all__ = [
-    "CORE_METRICS", "EVENT_TYPE", "PHASE_ORDER", "SNAPSHOT_SCHEMA",
-    "PhaseSnapshot", "append_phase_snapshot_once", "build_phase_snapshot",
-    "CORE_METRICS",
-    "latest_phase_snapshots", "load_phase_snapshots", "normalize_phase",
+    "CORE_METRICS", "EVENT_TYPE", "PHASE_ORDER", "SNAPSHOT_SCHEMA", "PhaseSnapshot",
+    "append_phase_snapshot_once", "build_phase_snapshot", "latest_phase_snapshots",
+    "load_phase_snapshots", "normalize_phase", "select_bound_phase_snapshots", "snapshot_qualification_issues",
 ]

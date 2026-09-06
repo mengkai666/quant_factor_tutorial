@@ -108,3 +108,9 @@ data/ai_output_cache/
 data/analyze_today_*.py
 data/today_*.json
 data/preplan_candidates_*.json
+
+# Shell-expanded Windows cache side effect; never a project source file
+%SystemDrive%/
+
+# Per-day source event observations (runtime cache, not source code)
+data/limit_events/

@@ -693,8 +693,9 @@ def test_degraded_dashboard_is_observation_only_and_has_no_unconditional_action(
     assert "盘面判断" in html
     assert "明日执行计划" in html
     assert "测试龙头" in html
-    assert "不追；断板减仓" in html
-    assert "建议仓位" in html
+    assert "风险锚" in html
+    assert "断板减仓" not in html
+    assert "模型参考区间" in html
     assert "数据状态" in html
     assert "观察模式" not in html
     for forbidden in ("锁仓主升", "立即清仓", "确定性买入"):

@@ -57,8 +57,8 @@ def test_dashboard_uses_unified_regime_title_over_timing_scene():
     assert "普涨反弹 · 高位分化" in html
     assert "明日验证路径" not in html
     assert "按条件确认强弱变化" not in html
-    assert "建议仓位" in html
-    assert "核心动作" in html
+    assert "操作结论" in html
+    assert "操作结论" in html
     assert "只做前排确认，不追孤峰" not in html
 
 

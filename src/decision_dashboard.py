@@ -40,6 +40,10 @@ from typing import Any
 
 from decision_readiness import build_decision_readiness, render_decision_readiness
 from execution_contract import build_execution_contract
+from candidate_funnel import build_candidate_funnel, matches_mainline
+from scenario_posterior import scenario_selection
+from recap_panels import (render_decision_changes, render_daily_journal, render_trade_history,
+                          render_scenario_checkpoint, render_limit_event_coverage)
 from report_logic import (
     assess_data_quality,
     build_market_state,
@@ -364,15 +368,20 @@ def build_dashboard_ctx(timing=None, advance_decline=None, sentiment_df=None,
         'daily_delta': unified_context.get('daily_delta', {}),
         'prediction_review': unified_context.get('prediction_review', {}),
         'trade_plan_review': unified_context.get('trade_plan_review', {}),
+        'daily_decision': unified_context.get('daily_decision', {}),
+        'daily_decision_review': unified_context.get('daily_decision_review', {}),
+        'decision_changes': unified_context.get('decision_changes', {}),
+        'limit_event_snapshot': facts.get('limit_event_snapshot', {}),
         'market_thesis': unified_context.get('market_thesis', {}),
         'scenario_posterior': unified_context.get('scenario_posterior', {}),
         'scenario_calibration': unified_context.get('scenario_calibration', {}),
         'phase_snapshots': unified_context.get('phase_snapshots', []),
         'lineage': unified_context.get('lineage', {}),
+        'candidate_funnel': facts.get('candidate_funnel'),
         'progression_chain': (unified_context.get('facts') or {}).get('progression_chain', {}),
         'price_df': price_df,
         'holdings': holdings,
-        'next_trade_date': next_trade_date,
+        'next_trade_date': next_trade_date or unified_context.get('target_trade_date'),
     }
 
 
@@ -389,68 +398,19 @@ def _height_number(value: Any) -> int:
     return int(match.group()) if match else 0
 
 
+def _candidate_funnel(ctx: dict) -> dict:
+    canonical = ctx.get('candidate_funnel')
+    if isinstance(canonical, dict) and canonical.get('schema_version') == 'candidate-funnel/v1':
+        return canonical
+    concentration = ctx.get('mainline_concentration')
+    concentration = concentration if isinstance(concentration, dict) else {}
+    mainline = (ctx.get('mainline_review') or {}).get('top1') or concentration.get('top_mainline')
+    return build_candidate_funnel(echelon=ctx.get('echelon'), progression_chain=ctx.get('progression_chain'),
+                                  mainline=mainline, report_date=ctx.get('date_str'), security_master=ctx.get('security_master'))
+
+
 def _echelon_action_rows(ctx: dict) -> list[dict[str, Any]]:
-    """将结构化梯队与负反馈统一成可追溯的操作候选。"""
-    candidates: dict[str, dict[str, Any]] = {}
-    priority = {'attack': 1, 'confirm': 2, 'risk': 3}
-    groups = [row for row in list(ctx.get('echelon') or []) if isinstance(row, dict)]
-    heights = [_height_number(row.get('height')) for row in groups]
-    max_height = max(heights, default=0)
-
-    def keep(row: dict[str, Any]) -> None:
-        code = normalize_stock_code(row.get('code'))
-        name = str(row.get('name') or '').strip()
-        role = str(row.get('role') or '')
-        if not code or not name or role not in priority:
-            return
-        existing = candidates.get(code)
-        if existing is None or priority[role] > priority[str(existing.get('role') or '')]:
-            candidates[code] = {**row, 'code': code, 'name': name}
-
-    for group in groups:
-        group_height = _height_number(group.get('height'))
-        group_sector = str(group.get('primary') or group.get('mainline') or '').strip()
-        for stock in list(group.get('stock_details') or []):
-            if not isinstance(stock, dict):
-                continue
-            height = _height_number(stock.get('height')) or group_height
-            if height == max_height and max_height >= 6:
-                role = 'risk'
-            elif height == 2:
-                role = 'attack'
-            elif 3 <= height <= 5:
-                role = 'confirm'
-            else:
-                continue
-            keep({
-                'name': stock.get('name'),
-                'code': stock.get('code'),
-                'height': height,
-                'sector': str(
-                    stock.get('ml') or stock.get('primary') or stock.get('sub')
-                    or group_sector or '题材待确认'
-                ).strip(),
-                'role': role,
-            })
-
-    progression = ctx.get('progression_chain')
-    progression_rows = progression.get('rows') if isinstance(progression, dict) else []
-    negative_statuses = {'broken_negative', 'limit_down'}
-    for stock in list(progression_rows or []):
-        if not isinstance(stock, dict) or str(stock.get('status') or '') not in negative_statuses:
-            continue
-        keep({
-            'name': stock.get('name'),
-            'code': stock.get('code'),
-            'height': _height_number(stock.get('previous_height') or stock.get('current_height')),
-            'sector': str(stock.get('sector') or stock.get('mainline') or '高位风险').strip(),
-            'role': 'risk',
-        })
-
-    return sorted(
-        candidates.values(),
-        key=lambda row: (-priority[row['role']], -int(row.get('height') or 0), row['name']),
-    )
+    return list(_candidate_funnel(ctx)['observations'])
 
 
 def _build_action_plan(ctx: dict, judgement: dict | None = None) -> dict[str, Any]:
@@ -472,6 +432,7 @@ def _build_action_plan(ctx: dict, judgement: dict | None = None) -> dict[str, An
         return {
             'position': '0 成',
             'posture': '无合格标的',
+            'position_source': 'no_candidates',
             'core_action': '今日无合格标的，不开新仓',
             'execution_allowed': False,
             'publication_mode': mode,
@@ -485,16 +446,16 @@ def _build_action_plan(ctx: dict, judgement: dict | None = None) -> dict[str, An
     posterior = ctx.get('scenario_posterior') if isinstance(ctx.get('scenario_posterior'), dict) else {}
     timeline = posterior.get('timeline') if isinstance(posterior.get('timeline'), list) else []
     latest_phase = timeline[-1] if timeline and isinstance(timeline[-1], dict) else {}
-    top_scenario_id = str(latest_phase.get('top_scenario_id') or '')
-    scenario_state = 'neutral'
-    for row in latest_phase.get('scenarios') or ():
-        if isinstance(row, dict) and str(row.get('scenario_id') or '') == top_scenario_id:
-            scenario_state = str(row.get('state') or 'neutral').lower()
-            break
+    selection = scenario_selection(latest_phase)
+    active_scenario_id = selection['scenario_id']
+    scenario_state = str(selection['row'].get('state') or 'neutral').lower()
     active_plan = next((
         plan for plan in scenario_plans
-        if isinstance(plan, dict) and str(plan.get('scenario_id') or '') == top_scenario_id
+        if isinstance(plan, dict) and str(plan.get('scenario_id') or '') == active_scenario_id
     ), None)
+    scenario_candidate_codes = None
+    if active_plan is not None and 'trade_candidates' in active_plan:
+        scenario_candidate_codes = {normalize_stock_code(row.get('code', row.get('代码'))) for row in active_plan.get('trade_candidates') or [] if isinstance(row, dict)}
     if active_plan:
         condition = 'any_invalidation' if scenario_state == 'invalidated' else (
             'all_required_triggers' if scenario_state == 'supported' else 'partial_confirmation'
@@ -566,6 +527,10 @@ def _build_action_plan(ctx: dict, judgement: dict | None = None) -> dict[str, An
         position, posture, core_action = structured_position, structured_posture, structured_action
         position_source = 'scenario_plan'
 
+    if selection['blocked']:
+        position, posture, core_action = '0 成', '场景失效', '情景失效，不开新仓；重新生成并验证计划'
+        position_source = 'scenario_invalidation'
+
     group_specs = {
         'attack': {
             'label': '进攻组', 'position': '单票不超过 1 成',
@@ -583,7 +548,7 @@ def _build_action_plan(ctx: dict, judgement: dict | None = None) -> dict[str, An
         },
         'risk': {
             'label': '风险组', 'position': '不新增仓位',
-            'action': '不追；断板减仓',
+            'action': '仅作风险锚；走弱时取消新增计划',
             'trigger': '仅作情绪锚，不把孤峰回封当作追高依据',
             'invalid': '放量断板或跌停反馈扩大',
             'limit': 4,
@@ -599,7 +564,7 @@ def _build_action_plan(ctx: dict, judgement: dict | None = None) -> dict[str, An
     for role in ('attack', 'confirm', 'risk'):
         spec = group_specs[role]
         role_rows = []
-        for row in [item for item in rows if item['role'] == role][:spec['limit']]:
+        for row in [item for item in rows if item['role'] == role]:
             action = spec['action']
             trigger = spec['trigger']
             if role in {'attack', 'confirm'} and not execution_allowed:
@@ -610,7 +575,10 @@ def _build_action_plan(ctx: dict, judgement: dict | None = None) -> dict[str, An
                 'action': action,
                 'trigger': trigger,
                 'invalid': spec['invalid'],
-                'execution_allowed': bool(execution_allowed and role != 'risk'),
+                'candidate_eligible': bool(row.get('candidate_eligible')),
+                'scenario_candidate_eligible': scenario_candidate_codes is None or row.get('code') in scenario_candidate_codes,
+                'execution_allowed': bool(execution_allowed and role != 'risk' and row.get('candidate_eligible')
+                                          and (scenario_candidate_codes is None or row.get('code') in scenario_candidate_codes)),
             })
         if role_rows:
             groups_out.append({
@@ -624,7 +592,9 @@ def _build_action_plan(ctx: dict, judgement: dict | None = None) -> dict[str, An
         'posture': posture,
         'core_action': core_action,
         'position_source': position_source,
-        'active_scenario_id': top_scenario_id or None,
+        'active_scenario_id': active_scenario_id or None,
+        'decision_scenario_id': latest_phase.get('decision_scenario_id'),
+        'scenario_status': latest_phase.get('scenario_status'),
         'execution_allowed': execution_allowed,
         'publication_mode': mode,
         'groups': groups_out,
@@ -664,7 +634,8 @@ def build_today_decision(
 
     same_line = [
         row for row in actionable
-        if top1 and top1 != '方向待确认' and top1 in str(row.get('sector') or '')
+        if matches_mainline(row.get('sector'), top1)
+        and row.get('candidate_eligible') is not False and row.get('scenario_candidate_eligible') is not False
     ]
     # 唯一主线卡只允许展示同主线候选；没有匹配时明确为空，
     # 不能用其他题材填满页面。观察模式可以显示同主线观察对象，
@@ -680,6 +651,7 @@ def build_today_decision(
         quality=ctx.get('data_quality'), market_state=ctx.get('market_state'),
         action_plan=plan, scenario_posterior=ctx.get('scenario_posterior'),
         phase_snapshots=ctx.get('phase_snapshots'), report_date=ctx.get('date_str'),
+        target_trade_date=ctx.get('next_trade_date'),
     )
     execution_allowed = readiness['execution_ready']
     selected = same_line[:3] if readiness['plan_permitted'] else []
@@ -701,7 +673,11 @@ def build_today_decision(
             code = str(row.get('code') or '')
             marker = next((item.get('priority') for item in priority_rows
                            if str(item.get('code') or '') == code), None)
-            annotated_rows.append({**row, 'priority': marker or ''})
+            annotated_rows.append({**row, 'priority': marker or '',
+                'conditional_action': row.get('conditional_action') or row.get('action'),
+                'action': (row.get('action') if row.get('role') == 'risk' or (execution_allowed and code in selected_codes)
+                           else '等待确认，未触发不执行' if code in selected_codes else '仅观察，不下单'),
+                'execution_allowed': bool(row.get('execution_allowed') and code in selected_codes)})
         annotated_groups.append({**group, 'rows': annotated_rows})
     priority = {
         'mainline': top1,
@@ -726,9 +702,17 @@ def build_today_decision(
             code = str(row.get('code') or '')
             enriched_rows.append({**row, 'execution': execution_by_code.get(code, {})})
         enriched_groups.append({**group, 'rows': enriched_rows})
+    enriched_by_code = {row.get('code'): row for group in enriched_groups for row in group.get('rows') or []}
+    if priority['primary']:
+        priority['primary'] = enriched_by_code[priority['primary']['code']]
+        priority['alternates'] = [enriched_by_code[row['code']] for row in priority['alternates']]
     plan = {
         **plan, 'groups': enriched_groups, 'priority': priority,
+        'trading_date': ctx.get('next_trade_date') or (ctx.get('scenario_posterior') or {}).get('target_trade_date'),
+        'plan_permitted': readiness['plan_permitted'], 'execution_ready': readiness['execution_ready'],
         'execution_contract': execution_contract,
+        'candidate_funnel_fingerprint': _candidate_funnel(ctx).get('fingerprint'),
+        'funnel_rejections': _candidate_funnel(ctx).get('rejected', []),
     }
     default_action = {
         'no_new_positions': '不开新仓，只观察条件是否成立',
@@ -740,7 +724,7 @@ def build_today_decision(
         {
             'code': 'market_gate',
             'title': '市场开关',
-            'headline': f'建议仓位 {plan.get("position") or "0 成"}',
+            'headline': (f'条件计划仓位 {plan.get("position")}' if readiness['plan_permitted'] else '当前不开新仓'),
             'detail': f'默认动作：{default_action}',
             'check': '9:35 前观察上涨家数、跌停反馈和中位梯队承接；恶化则取消全部新仓。',
         },
@@ -766,7 +750,8 @@ def build_today_decision(
         'position': str(plan.get('position') or '0 成'),
         'mainline': top1,
         'watch_items': watch_items,
-        'candidates': rows,
+        'candidates': _flatten_action_plan_rows(plan),
+        'candidate_funnel': _candidate_funnel(ctx),
         'action_plan': plan,
         'priority': priority,
         'readiness': readiness,
@@ -803,9 +788,9 @@ def _today_three_html(ctx: dict, action_plan: dict, prefix: str = '') -> str:
     </section>'''
 
 
-def build_today_focus_rows(ctx: dict, action_plan: dict | None = None) -> list[dict[str, Any]]:
+def build_today_focus_rows(ctx: dict, action_plan: dict | None = None, *, decision: dict | None = None) -> list[dict[str, Any]]:
     '''返回与今日执行计划同源、兼容旧表头的候选行。'''
-    decision = build_today_decision(ctx, action_plan=action_plan)
+    decision = decision or build_today_decision(ctx, action_plan=action_plan)
     plan = decision['action_plan']
     role_labels = {'attack': '进攻观察', 'confirm': '确认观察', 'risk': '风险锚'}
     rows: list[dict[str, Any]] = []
@@ -851,7 +836,8 @@ def build_today_focus_rows(ctx: dict, action_plan: dict | None = None) -> list[d
             '失效条件': invalid,
             '入场条件': trigger,
             '防守位': invalid,
-            '建议仓位': str(plan.get('position') or '0 成'),
+            '建议仓位': str(plan.get('position') or '0 成') if permitted else '不新增仓位',
+            '模型参考仓位': str(plan.get('position') or ''),
             '默认动作': decision['default_action'],
             '数据状态': str(plan.get('publication_mode') or ctx.get('publication_mode') or 'observation'),
             '数据来源': '今日执行计划',
@@ -863,7 +849,7 @@ def build_today_focus_rows(ctx: dict, action_plan: dict | None = None) -> list[d
     return rows
 
 
-def write_today_focus_pool(ctx: dict, output_path: Any, action_plan: dict | None = None) -> int:
+def write_today_focus_pool(ctx: dict, output_path: Any, action_plan: dict | None = None, *, decision: dict | None = None) -> int:
     '''原子写出与“明日执行计划”同源的股票池，空结果也覆盖旧文件。'''
     fieldnames = [
         '报告日期', '股票', '代码', '板块', '角色', '策略池', '可执行', '操作',
@@ -871,9 +857,9 @@ def write_today_focus_pool(ctx: dict, output_path: Any, action_plan: dict | None
         '数据状态', '数据来源', 'code', 'name', 'market', 'tradeable',
         '优先级', '条件计划许可', '数据资格', '策略资格', '信号状态', '操作结论',
         '结论原因', '重新评估条件', '验证时点', '价格参数状态', '报告日收盘参考',
-        '入场价', '失效价', '持仓状态', 'T+1约束', '计划有效期', '执行备注',
+        '入场价', '失效价', '持仓状态', 'T+1约束', '计划有效期', '执行备注', '模型参考仓位',
     ]
-    rows = build_today_focus_rows(ctx, action_plan=action_plan)
+    rows = build_today_focus_rows(ctx, action_plan=action_plan, decision=decision)
     output = os.fspath(output_path)
     parent = os.path.dirname(os.path.abspath(output))
     os.makedirs(parent, exist_ok=True)
@@ -958,61 +944,70 @@ def _compact_market_facts_html(ctx: dict, prefix: str = '') -> str:
 
 
 def _action_plan_html(plan: dict, prefix: str = '') -> str:
-    groups = [group for group in list(plan.get('groups') or []) if isinstance(group, dict)]
+    groups = [group for group in plan.get('groups') or [] if isinstance(group, dict)]
     if not groups:
         return ''
+    all_rows = _flatten_action_plan_rows(plan)
+    priority = plan.get('priority') or {}
+    picks = [priority.get('primary'), *(priority.get('alternates') or [])]
+    pick_codes = {row.get('code') for row in picks if isinstance(row, dict)}
+    if not pick_codes:
+        pick_codes = {row.get('code') for row in all_rows if row.get('role') in {'attack', 'confirm'}
+                      and row.get('candidate_eligible') is not False and row.get('scenario_candidate_eligible') is not False}
+        pick_codes = set([row.get('code') for row in all_rows if row.get('code') in pick_codes][:3])
+    risk_codes = {row.get('code') for row in sorted(
+        [row for row in all_rows if row.get('role') == 'risk'],
+        key=lambda row: (-_height_number(row.get('height')), str(row.get('code'))))[:2]}
+    visible_codes = pick_codes | risk_codes
     tone = {'attack': '#f85149', 'confirm': '#d29922', 'risk': '#58a6ff'}
     group_html = []
     for group in groups:
         code = str(group.get('code') or 'confirm')
         color = tone.get(code, '#8b949e')
         rows = []
-        for row in list(group.get('rows') or []):
-            if not isinstance(row, dict):
+        for row in group.get('rows') or []:
+            if not isinstance(row, dict) or row.get('code') not in visible_codes:
                 continue
+            marker = {'primary': '首选', 'alternate': '备选'}.get(row.get('priority'), '风险锚' if row.get('role') == 'risk' else '观察')
+            execution = row.get('execution') or {}
             rows.append(
-                '<article style="min-width:0;padding:12px 0;border-top:1px solid rgba(48,54,61,.72)">'
-                '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px">'
-                f'<div style="min-width:0"><b style="color:#f0f6fc;font-size:14px">{_esc(row.get("name"))}</b>'
-                f'{("<span style=\"color:#ffcc00;font-size:10px;margin-left:6px\">首选</span>" if row.get("priority") == "primary" else ("<span style=\"color:#d29922;font-size:10px;margin-left:6px\">备选</span>" if row.get("priority") == "alternate" else ""))}'
-                f'<span style="color:#8b949e;font-size:10px;margin-left:6px">{_esc(row.get("code"))}</span>'
-                f'<div style="color:#8b949e;font-size:11px;margin-top:2px">{_esc(_fmt(row.get("height"), "0"))}板 · {_esc(row.get("sector"))}</div></div>'
-                f'<strong style="color:{color};font-size:12px;text-align:right;max-width:42%">{_esc(row.get("action"))}</strong>'
-                '</div>'
-                '<div style="display:grid;grid-template-columns:44px minmax(0,1fr);gap:4px 8px;font-size:11.5px;line-height:1.55">'
-                f'<span style="color:#8b949e">触发</span><span style="color:#c9d1d9;overflow-wrap:anywhere">{_esc(row.get("trigger"))}</span>'
-                f'<span style="color:#8b949e">失效</span><span style="color:#c9d1d9;overflow-wrap:anywhere">{_esc(row.get("invalid"))}</span>'
-                f'<span style="color:#8b949e">价格</span><span style="color:#c9d1d9;overflow-wrap:anywhere">{_esc((row.get("execution") or {}).get("price_note") or "价格参数不可用")}</span>'
-                f'<span style="color:#8b949e">持仓</span><span style="color:#c9d1d9;overflow-wrap:anywhere">{_esc((row.get("execution") or {}).get("holding_note") or "未提供持仓")}</span>'
-                f'<span style="color:#8b949e">制度</span><span style="color:#c9d1d9;overflow-wrap:anywhere">{_esc((row.get("execution") or {}).get("t_plus_one") or "T+1约束待确认")}</span>'
-                '</div></article>'
+                '<article class="candidate-card" style="min-width:0;padding:12px 0;border-top:1px solid #30363d">'
+                f'<div style="display:flex;justify-content:space-between;gap:10px"><b style="color:#f0f6fc;font-size:14px">{_esc(row.get("name"))}</b>'
+                f'<span style="color:{color};font-size:11px">{marker}</span></div>'
+                f'<div style="color:#8b949e;font-size:11px">{_esc(row.get("code"))} · {_esc(row.get("height"))}板 · {_esc(row.get("sector"))}</div>'
+                f'<div style="font-weight:700;font-size:12px;margin:5px 0">{_esc(row.get("action"))}</div>'
+                '<div style="font-size:12px;line-height:1.65;overflow-wrap:anywhere">'
+                f'<div><b>触发：</b>{_esc(row.get("trigger"))}</div><div><b>撤销：</b>{_esc(row.get("invalid"))}</div>'
+                f'<div><b>价格：</b>{_esc(execution.get("price_note") or "价格参数不可用")}</div>'
+                f'<div><b>持仓：</b>{_esc(execution.get("holding_note") or "未提供持仓")}</div>'
+                f'<div style="color:#8b949e">{_esc(execution.get("t_plus_one") or "T+1约束待确认")}</div></div></article>'
             )
-        if not rows:
-            continue
-        group_html.append(
-            f'<section class="{prefix}action-group {prefix}action-{_esc(code)}" '
-            f'style="min-width:0;border-top:3px solid {color};padding:12px 14px 4px;background:rgba(22,27,34,.5)">'
-            '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px">'
-            f'<h3 style="margin:0;color:{color};font-size:14px;letter-spacing:0">{_esc(group.get("label"))}</h3>'
-            f'<span style="color:#8b949e;font-size:10px">{_esc(group.get("position"))}</span></div>'
-            f'{"".join(rows)}</section>'
-        )
-    if not group_html:
-        return ''
-    return f'''
-    <section class="{prefix}action-plan" style="margin:18px 0 20px">
-      <div style="display:flex;align-items:end;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:10px">
-        <div>
-          <div style="color:#ffcc00;font-size:15px;font-weight:800;border-left:3px solid #ffcc00;padding-left:9px">明日执行计划</div>
-          <div style="color:#8b949e;font-size:11px;margin:5px 0 0 12px">满足触发才执行，失效即撤销</div>
-        </div>
-        <div style="display:flex;gap:16px;flex-wrap:wrap;text-align:right">
-          <span style="color:#8b949e;font-size:11px">建议仓位 <b style="color:#f0f6fc;font-size:15px">{_esc(plan.get('position'))}</b></span>
-          <span style="color:#8b949e;font-size:11px">核心动作 <b style="color:#f0f6fc;font-size:13px">{_esc(plan.get('core_action'))}</b></span>
-        </div>
-      </div>
-      <div class="{prefix}action-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px">{''.join(group_html)}</div>
-    </section>'''
+        if rows:
+            group_html.append(f'<section class="{prefix}action-group" style="min-width:0;border-top:3px solid {color};padding:10px 14px;background:#161b22">'
+                              f'<b style="color:{color};font-size:13px">{_esc(group.get("label"))}</b> <span style="font-size:11px;color:#8b949e">{_esc(group.get("position"))}</span>'
+                              + ''.join(rows) + '</section>')
+    reasons = {'off_mainline': '非当前主线', 'risk_anchor': '仅作风险锚', 'mainline_unknown': '主线尚未确认',
+               'strategy_role': '不符合当前策略角色', 'not_tradeable': '证券资格未通过', 'attribution_missing': '缺少个股题材归因'}
+    other_rows = {str(row.get('code')): row for row in all_rows if row.get('code') not in visible_codes}
+    for row in plan.get('funnel_rejections') or []:
+        if row.get('code') not in visible_codes:
+            other_rows.setdefault(str(row.get('code')), row)
+    audit = ''
+    if other_rows:
+        table = ''.join(f'<tr><td>{_esc(row.get("name"))}</td><td>{_esc(row.get("code"))}</td><td>{_esc(row.get("sector"))}</td>'
+                        f'<td>{_esc(reasons.get(row.get("rejection_reason"), "未进入首选/备选；仅观察"))}</td></tr>' for row in other_rows.values())
+        audit = f'<details class="candidate-audit" style="margin-top:10px;font-size:12px"><summary style="cursor:pointer">其余观察与未采用对象（{len(other_rows)}只）</summary>'
+        audit += '<div style="overflow:auto;max-height:280px"><table style="width:100%;text-align:left"><thead><tr><th>标的</th><th>代码</th><th>题材</th><th>未采用原因</th></tr></thead>' + f'<tbody>{table}</tbody></table></div></details>'
+    if plan.get('plan_permitted'):
+        position_label = '条件确认后的计划仓位' if plan.get('execution_ready') else '待触发的条件仓位'
+        position_note = f"{position_label} {_esc(plan.get('position'))}；仍须执行前复核"
+    else:
+        position_note = f"当前未授权，暂不执行 · 模型参考区间 {_esc(plan.get('position'))}"
+    return (f'<section class="{prefix}action-plan" style="margin:16px 0"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px">'
+            '<div style="color:#ffcc00;font-size:15px;font-weight:800">明日执行计划</div>'
+            f'<div style="color:#8b949e;font-size:12px">{position_note}</div></div>'
+            '<div style="font-size:11px;color:#8b949e;margin:5px 0 9px">最多1只首选、2只备选；其余保留核查。条件未确认不执行，失效即撤销。</div>'
+            f'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">{"".join(group_html)}</div>{audit}</section>')
 
 
 def _win_rate_color(wr: float | None) -> str:
@@ -1365,7 +1360,7 @@ def _factor_row(name: str, value: str, ok: str, hint: str) -> str:
 def _scen_card(s: dict) -> str:
     items = ''.join(f'<li>{_esc(x)}</li>' for x in s.get('items', []))
     base_cls = ' scen-base' if s.get('is_base') else ''
-    base_badge = '<span class="scen-base-badge">基准</span>' if s.get('is_base') else ''
+    base_badge = '<span class="scen-base-badge">先验参考</span>' if s.get('is_base') else ''
     compact_public = bool(s.get('compact_public'))
     hide_stat = bool(s.get('hide_stat')) or compact_public
     stat_html = '' if hide_stat else f'<div class="scen-stat">{_esc(_scenario_stat_text(s))}</div>'
@@ -2771,52 +2766,7 @@ def _outcome_reconciliation_html(
 
 
 def _trade_plan_review_html(ctx: dict, prefix: str = '') -> str:
-    """Render explicit trade-plan outcomes separately from market scenarios."""
-    review = ctx.get('trade_plan_review') if isinstance(ctx.get('trade_plan_review'), dict) else {}
-    try:
-        plan_count = max(0, int(review.get('plan_count') or 0))
-    except (TypeError, ValueError):
-        plan_count = 0
-    if plan_count <= 0:
-        return ''
-
-    status_counts = review.get('status_counts') if isinstance(review.get('status_counts'), dict) else {}
-    def count(key: str) -> int:
-        try:
-            return max(0, int(status_counts.get(key) or 0))
-        except (TypeError, ValueError):
-            return 0
-
-    outcome_count = max(0, int(review.get('outcome_count') or 0))
-    pending_count = max(0, int(review.get('pending_count') or 0))
-    triggered_count = max(0, int(review.get('triggered_count') or 0))
-    filled_count = max(0, int(review.get('filled_count') or 0))
-    pnl_known_count = max(0, int(review.get('pnl_known_count') or 0))
-    net_pnl = review.get('net_pnl')
-    if isinstance(net_pnl, (int, float)) and pnl_known_count:
-        pnl_text = f'明确成交净收益 {_esc(f"{net_pnl:+.2f}")}'
-    else:
-        pnl_text = '暂无明确成交收益结果'
-    rows = [
-        f'<span>计划数 {_esc(str(plan_count))}</span>',
-        f'<span>已记录结果 {_esc(str(outcome_count))}</span>',
-        f'<span>未触发 {_esc(str(count("not_triggered")))}</span>',
-        f'<span>触发未成交 {_esc(str(count("triggered_not_filled")))}</span>',
-        f'<span>已成交 {_esc(str(filled_count))}</span>',
-        f'<span>未知 {_esc(str(count("unknown")))}</span>',
-        f'<span>触发总数 {_esc(str(triggered_count))}</span>',
-        f'<span>{_esc(pnl_text)}</span>',
-    ]
-    note = str(review.get('note') or '只统计明确的交易计划结果，不替代市场场景命中率。')
-    if pending_count:
-        note += f'；仍有 {pending_count} 条计划待回填。'
-    return (
-        f'<div class="{prefix}quality-metrics" style="margin-top:12px">'
-        f'<div class="{prefix}metric-title">交易计划复盘（非市场场景命中率）</div>'
-        f'<div class="{prefix}metric-grid">{"".join(rows)}</div>'
-        f'<div class="{prefix}metric-note">{_esc(note)}</div>'
-        '</div>'
-    )
+    return render_daily_journal(ctx) + render_trade_history(ctx)
 
 
 def _review_closure_html(ctx: dict, prefix: str = '') -> str:
@@ -3154,6 +3104,9 @@ def generate_dashboard_html(ctx: dict) -> str:
     today_decision = build_today_decision(ctx, action_plan)
     action_plan = today_decision['action_plan']
     readiness_html = render_decision_readiness(today_decision['readiness'])
+    scenario_checkpoint_html = '' if blocked else render_scenario_checkpoint(ctx, today_decision['readiness'])
+    decision_changes_html = render_decision_changes(ctx.get('decision_changes'))
+    limit_event_html = render_limit_event_coverage(ctx.get('limit_event_snapshot'))
     today_three_html = '' if blocked else _today_three_html(ctx, action_plan)
     action_plan_html = '' if blocked else _action_plan_html(action_plan)
     compact_market_facts_html = _compact_market_facts_html(ctx)
@@ -3208,13 +3161,12 @@ def generate_dashboard_html(ctx: dict) -> str:
     else:
         headline_label, headline_value, headline_sub = f'重点 · 明日基准情形 {base_prob}', base_name, f'{base_first} · 建议仓位 {base_pos}'
     if not policy['facts_only']:
-        headline_label = '盘面判断'
-        headline_value = _esc(scene)
-        headline_sub = (
-            f'建议仓位 {_esc(action_plan.get("position"))} · '
-            f'核心动作 {_esc(action_plan.get("core_action"))} · '
-            f'{_esc(judgement.get("condition"))}'
-        )
+        headline_label = '唯一操作结论'
+        headline_value = _esc(today_decision['readiness']['action']['label'])
+        headline_sub = (_esc(today_decision['readiness']['action']['reason'])
+                        + '<br><span style="font-size:11px;color:#8b949e">盘面判断：'
+                        + _esc(scene) + ' · ' + _esc(judgement.get('condition')) + '</span>')
+    pick_html = ''  # Candidate priorities are displayed only in the canonical plan cards.
     _leader = ctx.get('leader') or {}
     leader_tag = ''
     if _leader.get('signal') and not policy['facts_only']:
@@ -3248,9 +3200,7 @@ def generate_dashboard_html(ctx: dict) -> str:
     </div>'''
 
     # 数据门禁提示统一收敛到顶部折叠卡；非决策模式不在正文重复输出。
-    playbook_html = '' if policy['facts_only'] or policy['observation_only'] else _render_playbook(
-        _build_playbook(curr_h, zt, breadth, h5, date_str)
-    )
+    playbook_html = ''  # No independent instruction channel outside readiness.
 
     wr_color = _win_rate_color(win_rate)
     wr_str = f'{win_rate * 100:.0f}%' if isinstance(win_rate, (int, float)) else '—'
@@ -3413,7 +3363,7 @@ def generate_dashboard_html(ctx: dict) -> str:
       font-size: 11px; margin-top: 2px; }
     .gauge-mood { font-size: 13px; margin-top: 6px; font-weight: 700; }
 
-    /* 今日操作口令带: 命中实证规律 → 动作 */
+    /* Legacy playbook styles (not rendered as an instruction channel) */
     .playbook { margin-bottom: 22px; }
     .pb-title { font-size: 14px; font-weight: 700; color: #ffcc00;
       margin-bottom: 10px; padding-left: 10px; border-left: 4px solid #ffcc00; }
@@ -3577,12 +3527,15 @@ def generate_dashboard_html(ctx: dict) -> str:
   </div>
 
   {readiness_html}
+  {scenario_checkpoint_html}
+  {decision_changes_html}
 
   {headline_html}
 
   {today_three_html}
 
   {compact_market_facts_html}
+  {limit_event_html}
 
   {action_plan_html}
 
@@ -3739,7 +3692,7 @@ def generate_dashboard_section(ctx: dict) -> str:
         items = ''.join(f'<li>{_esc(x)}</li>' for x in s.get('items', []))
         kind = s.get('kind', 'moderate')
         base_cls = ' dbd-scen-base' if s.get('is_base') else ''
-        base_badge = '<span class="dbd-scen-base-badge">基准</span>' if s.get('is_base') else ''
+        base_badge = '<span class="dbd-scen-base-badge">先验参考</span>' if s.get('is_base') else ''
         compact_public = bool(s.get('compact_public'))
         hide_stat = bool(s.get('hide_stat')) or compact_public
         stat_html = '' if hide_stat else f'<div class="dbd-scen-stat">{_esc(_scenario_stat_text(s))}</div>'
@@ -3805,6 +3758,9 @@ def generate_dashboard_section(ctx: dict) -> str:
     today_decision = build_today_decision(ctx, action_plan)
     action_plan = today_decision['action_plan']
     readiness_html = render_decision_readiness(today_decision['readiness'])
+    scenario_checkpoint_html = '' if blocked else render_scenario_checkpoint(ctx, today_decision['readiness'])
+    decision_changes_html = render_decision_changes(ctx.get('decision_changes'))
+    limit_event_html = render_limit_event_coverage(ctx.get('limit_event_snapshot'))
     today_three_html = '' if blocked else _today_three_html(ctx, action_plan, prefix='dbd-')
     action_plan_html = '' if blocked else _action_plan_html(action_plan, prefix='dbd-')
     compact_market_facts_html = _compact_market_facts_html(ctx, prefix='dbd-')
@@ -3855,13 +3811,12 @@ def generate_dashboard_section(ctx: dict) -> str:
     else:
         headline_label, headline_value, headline_sub = f'重点 · 明日基准情形 {base_prob}', base_name, f'{base_first} · 建议仓位 {base_pos}'
     if not policy['facts_only']:
-        headline_label = '盘面判断'
-        headline_value = _esc(scene)
-        headline_sub = (
-            f'建议仓位 {_esc(action_plan.get("position"))} · '
-            f'核心动作 {_esc(action_plan.get("core_action"))} · '
-            f'{_esc(judgement.get("condition"))}'
-        )
+        headline_label = '唯一操作结论'
+        headline_value = _esc(today_decision['readiness']['action']['label'])
+        headline_sub = (_esc(today_decision['readiness']['action']['reason'])
+                        + '<br><span style="font-size:11px;color:#8b949e">盘面判断：'
+                        + _esc(scene) + ' · ' + _esc(judgement.get('condition')) + '</span>')
+    pick_html = ''  # Candidate priorities are displayed only in the canonical plan cards.
     _leader = ctx.get('leader') or {}
     leader_tag = ''
     if _leader.get('signal') and not policy['facts_only']:
@@ -3895,9 +3850,7 @@ def generate_dashboard_section(ctx: dict) -> str:
     </div>'''
 
     # 数据门禁提示统一收敛到顶部折叠卡；非决策模式不在正文重复输出。
-    playbook_html = '' if policy['facts_only'] or policy['observation_only'] else _render_playbook(
-        _build_playbook(curr_h, zt, breadth, h5, date_str), p='dbd-'
-    )
+    playbook_html = ''  # No independent instruction channel outside readiness.
 
     kpi_html = f'''
     <div class="dbd-grid">
@@ -4132,12 +4085,15 @@ def generate_dashboard_section(ctx: dict) -> str:
   </div>
 
   {readiness_html}
+  {scenario_checkpoint_html}
+  {decision_changes_html}
 
   {headline_html}
 
   {today_three_html}
 
   {compact_market_facts_html}
+  {limit_event_html}
 
   {action_plan_html}
 

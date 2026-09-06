@@ -75,7 +75,8 @@ def test_action_plan_builds_named_attack_confirm_and_risk_groups_from_echelon():
     assert "爱丽家居" in str(plan)
     assert "买入" in str(plan["groups"][0])
     assert "加仓" in str(plan["groups"][1])
-    assert "减仓" in str(plan["groups"][2])
+    assert "风险锚" in str(plan["groups"][2])
+    assert "减仓" not in str(plan["groups"][2])
 
 
 def test_action_plan_rejects_missing_codes_and_deduplicates_by_risk_priority():
@@ -223,6 +224,7 @@ def test_actionable_dashboard_replaces_generic_blocks_with_named_execution_rows(
     ctx["publication_mode"] = "decision"
     ctx["market_state"] = {"publication_mode": "decision"}
     ctx["scene"] = "高位承压 · 结构换挡"
+    ctx["mainline_review"] = {"top1": "AI算力"}
     ctx["echelon"] = [
         {
             "height": "2连板",
@@ -250,16 +252,19 @@ def test_actionable_dashboard_replaces_generic_blocks_with_named_execution_rows(
     }
 
     for html in (generate_dashboard_html(ctx), generate_dashboard_section(ctx)):
-        assert "建议仓位" in html
+        assert "模型参考区间" in html
         assert "2-4 成" in html
-        assert "核心动作" in html
+        assert "操作结论" in html
         assert "明日执行计划" in html
         assert "江化微" in html
-        assert "分歧回封买入" in html
+        assert "仅观察，不下单" in html
+        assert "分歧回封买入" not in html
         assert "沃格光电" in html
-        assert "晋级确认后加仓" in html
+        assert "晋级确认后加仓" not in html
+        assert "未提供持仓" in html
         assert "爱丽家居" in html
-        assert "断板减仓" in html
+        assert "风险锚" in html
+        assert "断板减仓" not in html
         assert "触发" in html
         assert "失效" in html
         assert "判断依据" not in html
@@ -1256,8 +1261,9 @@ def test_observation_mode_removes_generic_scenarios_and_uses_direct_plan_copy():
         assert "顶部崩塌预警" not in page
         assert "等待验证信号" not in page
         assert "按条件确认强弱变化" not in page
-        assert "建议仓位" in page
-        assert "今日无合格标的，不开新仓" in page
+        assert "操作结论" in page
+        assert "核心行情缺失或未通过校验" in page
+        assert "今日无合格标的，不开新仓" not in page
 
 def test_action_plan_uses_structured_thesis_not_description_keywords():
     from decision_dashboard import _build_action_plan

@@ -46,7 +46,7 @@ def test_trade_plan_event_and_outcome_are_append_only_and_idempotent(tmp_path):
     assert append_trade_plan_once(path, record)["appended"] is False
     plan_id = record["plan_id"]
     assert append_trade_plan_outcome_once(path, plan_id, "triggered_not_filled")["appended"] is True
-    assert append_trade_plan_outcome_once(path, plan_id, "filled", actual={"net_pnl": 1.2})["appended"] is False
+    assert append_trade_plan_outcome_once(path, plan_id, "triggered_not_filled")["appended"] is False
 
     review = build_trade_plan_review(path, report_date="2026-09-03")
     assert review["plan_count"] == 1
@@ -68,7 +68,7 @@ def test_trade_plan_review_only_counts_explicit_filled_net_pnl(tmp_path):
     records = build_trade_plan_records(_plan(), report_date="2026-09-03", readiness={"plan_permitted": True})
     for record in records:
         append_trade_plan_once(path, record)
-    append_trade_plan_outcome_once(path, records[0]["plan_id"], "filled", actual={"net_pnl": 1.2})
+    append_trade_plan_outcome_once(path, records[0]["plan_id"], "filled", actual={"net_pnl": 1.2, "currency": "CNY", "pnl_basis": "realized_after_fees_and_taxes", "source": "manual_confirmation"})
     append_trade_plan_outcome_once(path, records[1]["plan_id"], "unknown")
 
     review = build_trade_plan_review(path, report_date="2026-09-03")

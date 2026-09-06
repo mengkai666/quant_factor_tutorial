@@ -864,9 +864,10 @@ def test_dashboard_non_decision_outputs_are_semantically_clean():
                 assert forbidden not in standalone
                 assert forbidden not in embedded
         else:
-            assert "建议仓位" in standalone
-            assert "今日无合格标的，不开新仓" in standalone
-            assert "建议仓位" in embedded
+            assert "操作结论" in standalone
+            assert "核心行情缺失或未通过校验" in standalone
+            assert "今日无合格标的，不开新仓" not in standalone
+            assert "操作结论" in embedded
 
 
 def test_dashboard_normalizes_conditional_layers_and_renders_lineage_sources():

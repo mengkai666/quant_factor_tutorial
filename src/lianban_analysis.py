@@ -404,6 +404,21 @@ def is_stale_pool_snapshot(new_codes, prev_codes) -> bool:
     return len(new_set & prev_set) / len(union) >= STALE_POOL_JACCARD
 
 
+def _legacy_pool_with_events(part, *, trade_date: str, include_count: bool):
+    """Keep the old table shape while retaining the source event snapshot."""
+    from limit_events import build_limit_event_snapshot
+    columns = ["代码", "名称"] + (["连板数"] if include_count else [])
+    out = pd.DataFrame(columns=columns)
+    if not part.empty:
+        out = pd.DataFrame({"代码": part["code"].astype(str).str[2:], "名称": part["name"].astype(str)})
+        if include_count:
+            out["连板数"] = pd.to_numeric(part["limit_count"], errors="coerce").fillna(1).astype(int)
+        out = out[columns].reset_index(drop=True)
+    if include_count:
+        out.attrs["limit_event_snapshot"] = build_limit_event_snapshot(part, trade_date=trade_date)
+    return out
+
+
 def fetch_zt_pool_data(n_trading_days=120, provider=None, calendar_provider=None):
     """Fetch historical ZT/DT pools through the canonical LimitPoolProvider."""
     from data_sources.fetch_status import FetchStatusStore
@@ -468,11 +483,7 @@ def fetch_zt_pool_data(n_trading_days=120, provider=None, calendar_provider=None
                       f"判为陈旧快照, 不入库 (下次运行重试)")
                 continue
             if result.status in {FetchStatus.SUCCESS, FetchStatus.ZERO} or not zt_part.empty:
-                zt_data[canonical] = pd.DataFrame({
-                    "代码": zt_part["code"].astype(str).str[2:].tolist(),
-                    "名称": zt_part["name"].astype(str).tolist(),
-                    "连板数": pd.to_numeric(zt_part["limit_count"], errors="coerce").fillna(1).astype(int).tolist(),
-                })
+                zt_data[canonical] = _legacy_pool_with_events(zt_part, trade_date=date_str, include_count=True)
             if result.status in {FetchStatus.SUCCESS, FetchStatus.ZERO} or not dt_part.empty:
                 dt_data[canonical] = pd.DataFrame({
                     "代码": dt_part["code"].astype(str).str[2:].tolist(),
@@ -513,16 +524,7 @@ def refresh_latest_limit_pool(zt_data, dt_data, date: str, provider, persist: bo
 
     def legacy_pool(pool_type: str, include_count: bool):
         part = data[data["pool_type"] == pool_type].copy()
-        columns = ["代码", "名称"] + (["连板数"] if include_count else [])
-        if part.empty:
-            return pd.DataFrame(columns=columns)
-        out = pd.DataFrame({
-            "代码": part["code"].astype(str).str[2:],
-            "名称": part["name"].astype(str),
-        })
-        if include_count:
-            out["连板数"] = pd.to_numeric(part["limit_count"], errors="coerce").fillna(1).astype(int)
-        return out[columns].reset_index(drop=True)
+        return _legacy_pool_with_events(part, trade_date=iso_date, include_count=include_count)
 
     present_types = set(data["pool_type"].astype(str)) if not data.empty else set()
     complete = result.status in {FetchStatus.SUCCESS, FetchStatus.ZERO}
@@ -568,6 +570,17 @@ def _save_cache(zt_data, dt_data):
         cache_df = cache_df.drop_duplicates()
         cache_df.to_csv(CACHE_FILE, index=False, encoding='utf-8-sig')
         _trim_cache(CACHE_FILE, date_col='日期')
+        # Only newly fetched frames carry this attr. Do not rewrite historical
+        # days or reconstruct event facts from the narrow legacy CSV.
+        from pathlib import Path
+        from limit_events import archive_limit_event_snapshot
+        for frame in zt_data.values():
+            snapshot = frame.attrs.get("limit_event_snapshot") if isinstance(frame, pd.DataFrame) else None
+            if snapshot is not None:
+                try:
+                    archive_limit_event_snapshot(snapshot, Path(CACHE_FILE).parent / "limit_events")
+                except (OSError, ValueError) as exc:
+                    print(f"  [事件观测] 归档失败，行情门禁不变: {exc}")
 
 
 def _save_limit_pool_metadata(results):

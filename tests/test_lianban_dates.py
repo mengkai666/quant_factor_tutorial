@@ -1,10 +1,20 @@
 from datetime import datetime
 
 import pandas as pd
+import pytest
 
 import lianban_analysis
 from data_sources.calendar_provider import CalendarProvider
 from data_sources.models import FetchResult
+
+
+@pytest.fixture(autouse=True)
+def isolate_calendar_files(monkeypatch, tmp_path):
+    """Fake calendars must never replace the user's real calendar/status files."""
+    import paths
+    monkeypatch.setattr(paths, "CALENDAR_CACHE", str(tmp_path / "calendar.csv"))
+    monkeypatch.setattr(paths, "FETCH_STATUS_CACHE", str(tmp_path / "fetch_status.csv"))
+    monkeypatch.setattr(lianban_analysis, "LIMIT_POOL_META_CACHE", str(tmp_path / "limit_pool_meta.csv"))
 
 
 class _CalendarAkshare:

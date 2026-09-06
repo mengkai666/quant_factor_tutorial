@@ -278,6 +278,7 @@ def build_scenario_plans(
     probabilities: dict[str, Any] | None = None,
     prior_probabilities: dict[str, Any] | None = None,
     threshold_adjustments: dict[str, Any] | None = None,
+    candidate_funnel: dict[str, Any] | None = None,
 ) -> list[ScenarioPlan]:
     """根据广度×接力状态生成 2~4 个可验证场景。"""
     thesis = market_thesis if isinstance(market_thesis, dict) else {}
@@ -293,6 +294,9 @@ def build_scenario_plans(
     except (TypeError, ValueError):
         limit_down_text = "缺失"
     candidates = tuple(dict(row) for row in (focus_pool or ()) if isinstance(row, dict))
+    funnel = candidate_funnel if isinstance(candidate_funnel, dict) else {}
+    if funnel:
+        candidates = tuple(dict(row) for row in funnel.get("eligible_candidates", []))
     probabilities = probabilities if isinstance(probabilities, dict) else {}
     prior_probabilities = prior_probabilities if isinstance(prior_probabilities, dict) else {}
     threshold_adjustments = threshold_adjustments if isinstance(threshold_adjustments, dict) else {}
@@ -305,6 +309,9 @@ def build_scenario_plans(
         kwargs["threshold_adjustments"] = calibration.get("thresholds") if isinstance(calibration.get("thresholds"), dict) else {}
         kwargs["calibration_sample_size"] = int(calibration.get("sample_size") or 0)
         kwargs["prior_probability"] = prior_probabilities.get(scenario_id)
+        if funnel:
+            kwargs["observations"] = tuple(dict(row) for row in funnel.get("observations", []))
+            kwargs["evidence"] = (*kwargs["evidence"], "candidate_funnel:" + funnel["fingerprint"])
         return _plan(**kwargs)
 
     common_invalidation = (

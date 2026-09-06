@@ -44,6 +44,8 @@ from __future__ import annotations
 import glob
 import json
 import os
+import re
+from datetime import date
 
 import pandas as pd
 
@@ -128,6 +130,20 @@ def _record_date(obj: dict, date_col: str, sample: str = '') -> str:
     value = str(obj.get(date_col, '') or '')
     if value and value.lower() != 'nan':
         return value
+    if obj.get('event_type') in {'trade_plan_outcome', 'outcome'}:
+        key = 'plan_id' if obj['event_type'] == 'trade_plan_outcome' else 'prediction_id'
+        identity = str(obj.get(key) or '')
+        matched = re.match(r'^(\d{4}-\d{2}-\d{2}):', identity)
+        if matched:
+            try:
+                got = date.fromisoformat(matched.group(1)).isoformat()
+                return got.replace('-', '') if len(sample) == 8 and sample.isdigit() else got
+            except ValueError:
+                pass
+        # No safe plan date: preserve the unassigned result; confirmation time
+        # must not move it into a newer decision-day retention bucket.
+        if obj.get('event_type') == 'trade_plan_outcome':
+            return ''
     for key in _FALLBACK_DATE_KEYS:
         raw = str(obj.get(key, '') or '')
         if len(raw) >= 10 and raw[:2] == '20':

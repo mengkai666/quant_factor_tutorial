@@ -206,7 +206,7 @@ def test_phase_monitor_records_observation_and_updates_prediction_posterior(tmp_
     history = tmp_path / "history.jsonl"
     phase_path = tmp_path / "phases.jsonl"
     append_prediction(history, {
-        "prediction_id": "p1", "report_date": "2026-08-19", "as_of_phase": "close",
+        "prediction_id": "p1", "report_date": "2026-08-19", "as_of_phase": "close", "target_trade_date": "2026-08-20",
         "scenario_plans": [
             {"scenario_id": "strong", "prior_probability": 0.5, "trigger_rules": {
                 "auction": [{"rule_id": "strong", "metric": "breadth_ratio", "operator": "gte", "value": 0.6}],
@@ -222,6 +222,7 @@ def test_phase_monitor_records_observation_and_updates_prediction_posterior(tmp_
         history_path=history, phase_snapshot_path=phase_path,
         report_date="2026-08-19", trade_date="2026-08-20", phase="auction",
         metrics={"breadth_ratio": 0.7}, captured_at="2026-08-20T09:25:00+08:00",
+        source_lineage={"source": "fixture_feed"}, quality={"status": "ok"},
     )
     assert result["snapshot"]["appended"] is True
     assert result["posterior"]["phases_observed"] == ["auction"]

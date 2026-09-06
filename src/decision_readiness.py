@@ -11,6 +11,8 @@ import re
 from typing import Any
 
 from report_logic import resolve_publication_mode
+from scenario_posterior import scenario_selection
+from market_snapshot import build_phase_snapshot, snapshot_qualification_issues
 
 
 _CORE_MODULES = ("universe", "price_raw", "breadth", "limit_pool")
@@ -59,6 +61,7 @@ def build_decision_readiness(
     *, quality: dict | None = None, market_state: dict | None = None,
     action_plan: dict | None = None, scenario_posterior: dict | None = None,
     phase_snapshots: list | None = None, report_date: str | None = None,
+    target_trade_date: str | None = None,
 ) -> dict[str, Any]:
     """Return an explanatory, conservative projection of existing decisions.
 
@@ -91,7 +94,7 @@ def build_decision_readiness(
             if item.get("status") != "ok":
                 add_issue(name, str(item.get("status") or "unknown"),
                           scope="core_market" if item.get("critical") else None)
-    elif str(quality.get("status") or "") != "ok" and mode != "decision":
+    elif str(quality.get("status") or "") != "ok":
         add_issue("core_market", "unknown", scope="core_market", label="基础行情校验",
                   recheck="取得报告日核心行情校验结果后重新评估，不能把未知状态当作市场结论。")
 
@@ -128,6 +131,7 @@ def build_decision_readiness(
         row for group in plan.get("groups") or [] if isinstance(group, dict)
         for row in group.get("rows") or [] if isinstance(row, dict)
         and str(row.get("role") or group.get("code") or "") in {"attack", "confirm"}
+        and row.get("candidate_eligible") is not False and row.get("scenario_candidate_eligible") is not False
     ]
     position = str(plan.get("position") or "").strip()
     zero_position = position == "空仓" or bool(re.fullmatch(r"0(?:\.0+)?\s*成", position))
@@ -139,33 +143,63 @@ def build_decision_readiness(
     else:
         strategy_status = "applicable"
 
-    timeline = [item for item in _dict(scenario_posterior).get("timeline") or [] if isinstance(item, dict)]
+    posterior = _dict(scenario_posterior)
+    target_trade_date = target_trade_date or posterior.get("target_trade_date")
+    timeline = [item for item in posterior.get("timeline") or [] if isinstance(item, dict)]
     latest = timeline[-1] if timeline else {}
+
+    def phase_issues(item: dict) -> list[str]:
+        try:
+            record = build_phase_snapshot(
+                report_date=item.get("report_date"), trade_date=item.get("trade_date"), phase=item.get("phase"),
+                captured_at=item.get("captured_at"), source_lineage=_dict(item.get("source_lineage")),
+                quality=_dict(item.get("snapshot_quality", item.get("quality"))),
+            ).to_dict()
+            reasons = snapshot_qualification_issues(record, report_date=str(report_date or ""), trade_date=target_trade_date)
+        except (ValueError, TypeError):
+            reasons = ["invalid_or_missing_phase_metadata"]
+        if item.get("phase") in _INTRADAY_PHASES and item.get("confirmation_eligible") is False:
+            reasons.append("confirmation_ineligible")
+        return list(dict.fromkeys(reasons))
+
     phase_rows = timeline + [item for item in (phase_snapshots or []) if isinstance(item, dict)]
     observed_phases = []
+    validation_issues = []
     for item in phase_rows:
         phase = str(item.get("phase") or "").strip().lower()
-        if phase in {"close", *_INTRADAY_PHASES} and phase not in observed_phases:
+        reasons = phase_issues(item)
+        if reasons:
+            validation_issues.append({"phase": phase, "snapshot_id": item.get("snapshot_id"), "issues": reasons})
+        elif phase in {"close", *_INTRADAY_PHASES} and phase not in observed_phases:
             observed_phases.append(phase)
     intraday_observed = [phase for phase in observed_phases if phase in _INTRADAY_PHASES]
+    latest_phase_issues = phase_issues(latest) if latest else []
+    if posterior.get("confirmation_blocked"):
+        latest_phase_issues.append("newer_observation_unqualified")
+        validation_issues.extend(posterior.get("rejected_snapshots") or [])
     phase_confirmation = {
         "status": "intraday_observed" if intraday_observed else "post_close_plan",
         "plan_type": "盘中确认" if intraday_observed else "盘后条件计划",
+        "target_trade_date": target_trade_date,
         "observed_phases": observed_phases,
         "pending_phases": [phase for phase in _INTRADAY_PHASES if phase not in observed_phases],
+        "validation_issues": validation_issues,
     }
-    active_id = str(plan.get("active_scenario_id") or latest.get("top_scenario_id") or "")
-    signal_row = next((
-        item for item in latest.get("scenarios") or []
-        if isinstance(item, dict) and active_id and str(item.get("scenario_id") or "") == active_id
-    ), {})
+    selection = scenario_selection(latest, preferred_scenario_id=plan.get("active_scenario_id"))
+    active_id = selection["scenario_id"]
+    signal_row = selection["row"]
     raw_signal = str(signal_row.get("state") or "unknown").lower()
     signal_status = {"supported": "met", "neutral": "not_triggered", "invalidated": "invalidated"}.get(raw_signal, "not_evaluable")
-    if data_status != "ready" or (signal_status == "met" and signal_row.get("missing_fields")):
+    if selection["no_valid_scenario"]:
+        signal_status = "invalidated"
+    missing_required = signal_row.get("missing_required_fields", signal_row.get("missing_fields"))
+    snapshot_unqualified = bool((latest.get("phase") in _INTRADAY_PHASES and latest_phase_issues) or posterior.get("confirmation_blocked"))
+    if data_status != "ready" or snapshot_unqualified or (signal_status == "met" and missing_required):
         signal_status = "not_evaluable"
 
     plan_permitted = bool(plan.get("execution_allowed") and mode == "decision"
-                          and strategy_status == "applicable" and data_status == "ready")
+                          and strategy_status == "applicable" and data_status == "ready"
+                          and not selection["blocked"])
     if data_status != "ready":
         action_status = "no_new_positions"
         reason_code = "data_expired" if expired else "data_unavailable"
@@ -174,6 +208,15 @@ def build_decision_readiness(
         action_status, reason_code = "no_new_positions", "qualification_incomplete"
         names = "、".join(item["label"] for item in issues[:3])
         reason = f"基础行情可用，但{names or '策略资格'}尚未通过；这是判断资格不足，不等于市场没有机会。"
+    elif selection["no_valid_scenario"] and not snapshot_unqualified:
+        action_status, reason_code = "no_new_positions", "no_valid_scenario"
+        reason = "全部情景已经失效，当前没有可用的决策情景；不能沿用排名最高的旧情景。"
+    elif snapshot_unqualified:
+        action_status, reason_code = "wait_confirmation" if plan_permitted else "no_new_positions", "signal_snapshot_unqualified"
+        reason = "阶段快照的日期、时段、来源或质量尚未通过，不能把旧记录当作目标交易日的触发确认。"
+    elif not candidates and plan.get("position_source") == "no_candidates":
+        action_status, reason_code = "no_new_positions", "no_candidates"
+        reason = "现有筛选没有合格的新机会，风险锚不属于可执行标的。"
     elif zero_position:
         action_status, reason_code = "no_new_positions", "market_no_trade"
         reason = "数据与资格已通过，但既有市场/仓位规则给出零仓位：判断后决定不买。"
@@ -202,9 +245,11 @@ def build_decision_readiness(
         recheck.append("重新计算既有市场/仓位规则；只有规则允许非零仓位且候选合格时才重新评估。")
     elif reason_code == "no_candidates":
         recheck.append("按既有筛选规则重新获得合格候选；不使用风险锚或其他题材填满名单。")
+    elif reason_code == "no_valid_scenario":
+        recheck.append("重新生成有效情景，并用目标交易日下一阶段快照逐项验证；不得沿用失效情景。")
     elif reason_code == "signal_invalidated":
         recheck.append("失效条件解除后重新生成并验证计划，不复用旧信号。")
-    elif reason_code == "signal_pending":
+    elif reason_code in {"signal_pending", "intraday_confirmation_pending", "signal_snapshot_unqualified"}:
         recheck.append("采集目标交易日与时点的竞价、9:35等快照，核对全部必要触发条件后重新评估。")
     elif reason_code == "existing_gate":
         recheck.append("核对原计划的执行门禁与当前情景，不用展示层越过阻断。")
@@ -213,11 +258,14 @@ def build_decision_readiness(
 
     return {
         "schema_version": "decision-readiness/v1", "report_date": str(report_date or ""),
-        "publication_mode": mode,
+        "publication_mode": mode, "target_trade_date": target_trade_date,
         "data": _axis("data", data_status, scope="核心行情"),
         "strategy": _axis("strategy", strategy_status, scope="新机会策略"),
         "signal": _axis("signal", signal_status, phase=str(latest.get("phase") or ""),
-                        scenario_id=active_id, scope="报告快照时点"),
+                        scenario_id=active_id, snapshot_id=latest.get("snapshot_id"), captured_at=latest.get("captured_at"),
+                        ranked_scenario_id=selection["ranked_scenario_id"],
+                        decision_scenario_id=latest.get("decision_scenario_id"),
+                        scenario_status=latest.get("scenario_status"), scope="报告快照时点"),
         "phase_confirmation": phase_confirmation,
         "action": _axis("action", action_status, reason_code=reason_code, reason=reason),
         "issues": issues, "recheck_conditions": list(dict.fromkeys(recheck)),

@@ -141,5 +141,6 @@ quant_factor_tutorial/
 
 ## 📖 文档
 
+- [今日复盘与明日推演：候选、验证和结果闭环](docs/howto/recap-scenario-closure.md)
 - [运行主线追踪](docs/howto/run-mainline-tracker.md)
 - [文档索引](docs/index.md)

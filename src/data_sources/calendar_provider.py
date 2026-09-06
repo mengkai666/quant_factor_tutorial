@@ -37,6 +37,17 @@ class CalendarProvider:
         dates = pd.to_datetime(frame[column], errors="coerce").dropna()
         return sorted(dates.dt.strftime("%Y-%m-%d").unique().tolist())
 
+    def cached_next_trading_day(self, report_date: str) -> str | None:
+        """Read only: no network request, no weekday/holiday guess on cache gaps."""
+        try:
+            report_date = datetime.strptime(str(report_date), "%Y-%m-%d").date().isoformat()
+            dates = self._read_cache()
+        except (ValueError, OSError, KeyError):
+            return None
+        if report_date not in dates:
+            return None
+        return next((day for day in dates if day > report_date), None)
+
     def _write_cache(self, dates: list[str]) -> None:
         if self.cache_path is None or not dates:
             return

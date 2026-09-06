@@ -39,6 +39,9 @@ from report_logic import (
 )
 from data_sources.name_resolver import NameResolution, resolve_names
 from data_sources.universe_provider import UniverseProvider
+from data_sources.calendar_provider import CalendarProvider
+from report_closure import build_decision_replay_context, persist_decision_review, merge_limit_event_observations
+from limit_events import build_limit_event_snapshot, archive_limit_event_snapshot, load_limit_event_snapshot
 from data_sources.quality_gate import (
     aggregate_report_quality,
     build_module_quality,
@@ -104,7 +107,7 @@ from paths import (
     ZT_CACHE_FILE, PRICE_CACHE, INDUSTRY_CACHE,
     SENTIMENT_CACHE, CLS_PLATE_CACHE, OUTPUT_HTML,
     SITE_DIR, SITE_URL, SECURITY_MASTER_CACHE, UNIVERSE_CACHE,
-    PREDICTION_HISTORY, DAILY_SNAPSHOT_DIR, PHASE_SNAPSHOT_HISTORY, AUDIT_DIR,
+    PREDICTION_HISTORY, DAILY_SNAPSHOT_DIR, PHASE_SNAPSHOT_HISTORY, AUDIT_DIR, CALENDAR_CACHE, LIMIT_EVENT_SNAPSHOT_DIR,
 )
 CACHE_DIR = DATA_DIR  # 向后兼容: 旧代码引用 CACHE_DIR 的地方仍指向数据目录
 
@@ -1356,6 +1359,7 @@ def _build_local_daily_fact_input(report_date, classified_rows):
             if target and row_date != target:
                 continue
             rows.append({
+                **raw,
                 'code': code,
                 'name': str(raw.get('名称') or raw.get('name') or ''),
                 'level': _safe_board_level(raw.get('连板数') or raw.get('level')),
@@ -1383,6 +1387,7 @@ def _snapshot_to_fact_input(snapshot):
         if not code:
             continue
         rows.append({
+            **raw,
             'code': code,
             'name': str(raw.get('name') or raw.get('名称') or ''),
             'level': _safe_board_level(raw.get('height') or raw.get('level')),
@@ -6094,6 +6099,21 @@ def _main_impl():
         f'{str(latest_date)[:4]}-{str(latest_date)[4:6]}-{str(latest_date)[6:]}'
         if len(str(latest_date)) == 8 else str(latest_date)
     )
+    # Event fields are observational only. Never feed this closing-pool subset
+    # into the full-market bomb/reclose gate or change the authoritative members.
+    try:
+        _limit_event_snapshot = load_limit_event_snapshot(LIMIT_EVENT_SNAPSHOT_DIR, _report_date)
+    except (OSError, ValueError) as exc:
+        _limit_event_snapshot = None
+        print(f"  [事件观测] 历史归档不可用: {exc}")
+    if _limit_event_snapshot is None:
+        _limit_event_snapshot = build_limit_event_snapshot(
+            _authoritative_limit_rows, trade_date=_report_date, source=_fact_pool_source,
+        )
+        archive_limit_event_snapshot(_limit_event_snapshot, LIMIT_EVENT_SNAPSHOT_DIR)
+    _authoritative_limit_rows = merge_limit_event_observations(
+        _authoritative_limit_rows, _limit_event_snapshot, report_date=_report_date,
+    )
     _report_timing = generate_timing_signal(sentiment_df, advance_decline, echelon)
     _security_master = market_meta.get('security_master', {})
     _current_echelon_rows = _flatten_echelon_rows(echelon)
@@ -6407,6 +6427,7 @@ def _main_impl():
         'mainline_rank': _mainline_concentration.get('top_mainline') or None,
         'limit_pool_rows': [
             {
+                **row,
                 'code': row.get('code'),
                 'name': row.get('name'),
                 'height': row.get('height', row.get('level')),
@@ -6428,7 +6449,10 @@ def _main_impl():
             'data_cutoff': f'{_report_date}T15:00:00+08:00',
         },
         quality={
-            'status': _report_quality.get('status', 'unknown'),
+            'status': 'ok' if all((_modules.get(name) or {}).get('status') == 'ok'
+                                  for name in ('universe', 'price_raw', 'breadth', 'limit_pool')) else 'unknown',
+            'report_quality_status': _report_quality.get('status', 'unknown'),
+            'used_stale': bool(_report_quality.get('used_stale')),
             'missing_fields': list(_report_quality.get('missing_fields') or []),
         },
     )
@@ -6477,6 +6501,8 @@ def _main_impl():
 
     # 旧 A/B/C/D 仅保留在兼容渲染函数中；日报主流程只发布 ScenarioPlan。
     _scenarios = []
+    # Cached exchange calendar only: do not guess weekends/holidays or fetch here.
+    _target_trade_date = CalendarProvider(cache_path=CALENDAR_CACHE).cached_next_trading_day(_report_date)
     _scenario_plans = build_scenario_plans(
         report_date=_report_date,
         market_thesis=_market_thesis_dict,
@@ -6563,10 +6589,19 @@ def _main_impl():
 
     # 候选池与首屏“明日执行计划”统一使用梯队事实源；旧 screener 只保留兼容 API，
     # 不再直接写 focus_pool.csv，避免 CSV 与报告候选、板块归因互相打架。
+    from candidate_funnel import build_candidate_funnel
+    _candidate_funnel = build_candidate_funnel(
+        echelon=echelon, progression_chain=_progression_chain,
+        mainline=_mainline_concentration.get('top_mainline'),
+        security_master=_security_master, report_date=_report_date,
+    )
     if _policy.allow_focus_pool:
         from decision_dashboard import build_today_focus_rows
         _focus_seed_ctx = {
             'date_str': _report_date,
+            'candidate_funnel': _candidate_funnel,
+            'mainline_review': {'top1': _candidate_funnel['mainline']},
+            'data_quality': _report_quality,
             'publication_mode': _effective_mode,
             'market_state': _report_market_state,
             'market_thesis': _market_thesis_dict,
@@ -6616,9 +6651,25 @@ def _main_impl():
         probabilities=_calibrated_probabilities,
         prior_probabilities=_scenario_priors,
         threshold_adjustments=_calibration_rows,
+        candidate_funnel=_candidate_funnel,
     )
+    # Pin a prediction revision to its facts, rules, candidate funnel and target.
+    # A rebuilt forecast must not inherit a different revision's confirmations.
+    _facts_fingerprint = hashlib.sha256(
+        json.dumps({'facts': _ai_facts, 'plans': [p.to_dict() for p in _scenario_plans],
+                    'candidate_funnel_fingerprint': _candidate_funnel['fingerprint'],
+                    'target_trade_date': _target_trade_date, 'publication_mode': _policy.mode},
+                   ensure_ascii=False, sort_keys=True, default=str).encode('utf-8')
+    ).hexdigest()
+    _prediction_version = 'v3-recap-closure'
+    _current_prediction_id = f'{_report_date}:close:{_prediction_version}:{_facts_fingerprint[:12]}'
     _phase_snapshots = load_phase_snapshots(PHASE_SNAPSHOT_HISTORY, report_date=_report_date)
-    _scenario_posterior = build_scenario_posterior_timeline(_scenario_plans, _phase_snapshots)
+    _scenario_posterior = build_scenario_posterior_timeline(
+        _scenario_plans, _phase_snapshots, report_date=_report_date, trade_date=_target_trade_date,
+        prediction_id=_current_prediction_id,
+    )
+    _phase_snapshots = [row for row in _phase_snapshots if row.get('phase') == 'close'
+                        or (row.get('source_lineage') or {}).get('prediction_id') == _current_prediction_id]
 
     # 三类复盘摘要统一在主流程只计算一次，主报告、独立看板和内嵌看板共用。
     _data_credibility = build_data_credibility_summary(
@@ -6651,9 +6702,7 @@ def _main_impl():
         'history': _modules['history'],
         'ai': _ai_lineage,
     }
-    _facts_fingerprint = hashlib.sha256(
-        json.dumps(_ai_facts, ensure_ascii=False, sort_keys=True, default=str).encode('utf-8')
-    ).hexdigest()
+    _prediction_snapshot = None
     if _policy.allow_scenarios:
         _focus_pool_snapshot = [
             {'code': str(row.get('代码', row.get('code', ''))), 'name': str(row.get('名称', row.get('name', '')))}
@@ -6663,7 +6712,7 @@ def _main_impl():
             PREDICTION_HISTORY, report_date=_report_date, as_of_phase='close',
         )
         _prediction_snapshot = build_prediction_snapshot(
-            report_date=_report_date, as_of_phase='close', prediction_version='v2',
+            report_date=_report_date, as_of_phase='close', prediction_version=_prediction_version,
             market_thesis=_market_thesis_dict,
             scenario_plans=[plan.to_dict() for plan in _scenario_plans],
             market_snapshot=_current_snapshot, focus_pool=_focus_pool_snapshot,
@@ -6675,9 +6724,9 @@ def _main_impl():
                 'scene': (_report_timing or {}).get('scene'),
                 'scenario_calibration': _scenario_calibration,
                 'scenario_posterior': _scenario_posterior,
+                'target_trade_date': _target_trade_date,
             },
         )
-        append_prediction_once(PREDICTION_HISTORY, _prediction_snapshot)
     # 日报生成必须是只读复盘；T+1/T+3 回填由显式维护流程负责。
     _prediction_review = build_prediction_review(PREDICTION_HISTORY)
     _prediction_review['matured_count'] = _prediction_review.get('completed_count', 0)
@@ -6690,6 +6739,8 @@ def _main_impl():
         quality=_report_quality,
         facts={
             'market_state': _report_market_state,
+            'candidate_funnel': _candidate_funnel,
+            'limit_event_snapshot': _limit_event_snapshot,
             'market_snapshot': _current_snapshot,
             'progression_chain': _progression_chain,
             'ladder_metrics': _ladder_metrics,
@@ -6710,35 +6761,26 @@ def _main_impl():
         phase_snapshots=_phase_snapshots,
         scenario_posterior=_scenario_posterior,
         scenario_calibration=_scenario_calibration,
+        target_trade_date=_target_trade_date,
     ).to_dict()
-    # focus_pool.csv 是面向执行的唯一出口：最终场景后验、仓位与候选全部确定后再原子写出。
-    # 即使没有候选也会覆盖旧文件表头，杜绝沿用前一交易日的陈旧股票池。
-    try:
-        from decision_dashboard import build_dashboard_ctx, build_today_decision, write_today_focus_pool
-        _focus_export_ctx = build_dashboard_ctx(
-            timing=_report_timing, advance_decline=advance_decline,
-            sentiment_df=sentiment_df, echelon=echelon, previous_echelon=previous_echelon,
-            report_date=_report_date, focus_df=focus_df, focus_catalysts=focus_catalysts,
-            report_context=_report_context, price_df=price_df,
-        )
-        # 资格、信号与操作结论必须进入同一份审计，首页不能另算一套。
-        from trade_plan_review import (
-            append_trade_plan_once, build_trade_plan_records, build_trade_plan_review,
-        )
-        _today_decision = build_today_decision(_focus_export_ctx)
-        _report_context['decision_readiness'] = _today_decision['readiness']
-        for _trade_plan_record in build_trade_plan_records(
-            _today_decision['action_plan'], report_date=_report_date,
-            readiness=_today_decision['readiness'],
-        ):
-            append_trade_plan_once(PREDICTION_HISTORY, _trade_plan_record)
-        _report_context['trade_plan_review'] = build_trade_plan_review(
-            PREDICTION_HISTORY, report_date=_report_date,
-        )
-        _focus_written = write_today_focus_pool(_focus_export_ctx, focus_pool_path)
-        print(f"  [今日决策] 已写出统一股票池 {_focus_written} 只: {focus_pool_path}")
-    except Exception as e:
-        print(f"  [警告] 统一股票池写出失败: {e}")
+    # One computed decision feeds journal, CSV and audit; even empty/facts-only
+    # days are recorded. A failed journal/export must not silently publish stale plans.
+    from decision_dashboard import build_dashboard_ctx, build_today_decision, write_today_focus_pool
+    _focus_export_ctx = build_dashboard_ctx(
+        timing=_report_timing, advance_decline=advance_decline,
+        sentiment_df=sentiment_df, echelon=echelon, previous_echelon=previous_echelon,
+        report_date=_report_date, focus_df=focus_df, focus_catalysts=focus_catalysts,
+        report_context=_report_context, price_df=price_df, next_trade_date=_target_trade_date,
+    )
+    _today_decision = build_today_decision(_focus_export_ctx)
+    _report_context['decision_readiness'] = _today_decision['readiness']
+    _report_context['today_decision'] = _today_decision
+    _report_context.update(persist_decision_review(PREDICTION_HISTORY, _today_decision))
+    if _prediction_snapshot is not None:
+        _prediction_snapshot['decision_context'] = build_decision_replay_context(_focus_export_ctx, _today_decision)
+        append_prediction_once(PREDICTION_HISTORY, _prediction_snapshot)
+    _focus_written = write_today_focus_pool(_focus_export_ctx, focus_pool_path, decision=_today_decision)
+    print(f"  [今日决策] 已写出统一股票池 {_focus_written} 只: {focus_pool_path}")
 
     write_report_audit(
         os.path.join(AUDIT_DIR, f'{_report_date}.json'),
