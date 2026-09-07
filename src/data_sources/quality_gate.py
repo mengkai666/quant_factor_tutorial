@@ -385,6 +385,7 @@ def build_module_quality(
     covered: Any = 0,
     source: str = "",
     source_timestamp: str = "",
+    report_date: str | None = None,
     missing_fields: Iterable[Any] | None = None,
     errors: Iterable[Any] | None = None,
     lineage: dict[str, Any] | None = None,
@@ -423,6 +424,10 @@ def build_module_quality(
         status = "unknown"
     run_id = current_run_id()
     lineage_payload = dict(lineage or {})
+    if report_date is not None:
+        # Explicit applicability is not the source collection timestamp, and
+        # an existing incompatible source claim must remain visible.
+        lineage_payload.setdefault("report_date", report_date)
     if run_id:
         lineage_payload.setdefault("run_id", run_id)
     item = ModuleQuality(
@@ -554,6 +559,7 @@ def apply_review_readiness_gates(
         covered=1 if delta_ready else 0,
         source=str(delta.get("source") or "daily_snapshot"),
         source_timestamp=str(delta.get("report_date") or ""),
+        report_date=delta.get("report_date"),
         missing_fields=[] if delta_ready else ["previous_limit_pool_snapshot"],
         errors=[] if delta_ready else [delta_reason],
         critical=False,
@@ -564,25 +570,30 @@ def apply_review_readiness_gates(
         },
     )
 
-    bomb_specs = (
-        ("bomb_rate", metrics.get("bomb_rate")),
-        ("reclose_rate", metrics.get("reclose_rate")),
-        ("board_structure", metrics.get("board_structure")),
-    )
+    from event_qualification import assess_event_metrics
+    event_assessment = assess_event_metrics(metrics)
+    bomb_specs = tuple((name, metrics.get(name)) for name in ("bomb_rate", "reclose_rate", "board_structure"))
     bomb_missing = []
     bomb_covered = 0
-    for name, value in bomb_specs:
-        item = dict(value or {}) if isinstance(value, dict) else {}
-        trials = item.get("trials")
-        sample_size = item.get("sample_size")
-        try:
-            ready = int(float(sample_size if name == "board_structure" else (trials or 0))) > 0
-        except (TypeError, ValueError):
-            ready = False
-        if ready:
-            bomb_covered += 1
-        else:
-            bomb_missing.append(name)
+    if "event_input_coverage" in metrics:
+        for name, item in event_assessment["metrics"].items():
+            if item["status"] in {"ready", "not_applicable"}:
+                bomb_covered += 1
+            else:
+                bomb_missing.append(name)
+    else:
+        # Legacy summary rows remain descriptive; scoped strategies require
+        # the new coverage contract before using event metrics as a dependency.
+        for name, value in bomb_specs:
+            item = value if isinstance(value, dict) else {}
+            try:
+                ready = int(float(item.get("sample_size") if name == "board_structure" else item.get("trials", 0))) > 0
+            except (TypeError, ValueError):
+                ready = False
+            if ready:
+                bomb_covered += 1
+            else:
+                bomb_missing.append(name)
     input_coverage = metrics.get("event_input_coverage")
     input_coverage = dict(input_coverage) if isinstance(input_coverage, dict) else {}
     unprovided_fields = set(input_coverage.get("missing_fields") or [])
@@ -633,6 +644,7 @@ def apply_review_readiness_gates(
             "allow_strong_conclusion", "run_id", "run_id_consistency",
         }:
             final.setdefault(key, value)
+    final["event_qualification"] = event_assessment
     final["review_readiness"] = {
         "previous_stock_delta": {
             "ready": delta_ready,
@@ -641,6 +653,8 @@ def apply_review_readiness_gates(
         },
         "bomb_metrics": {
             "ready": not bomb_missing,
+            "metrics": event_assessment["metrics"],
+            "population": event_assessment["population"],
             "missing": bomb_missing,
             "reason": "" if not bomb_missing else bomb_reason,
             "unavailable_reason": ("fields_not_provided" if fields_not_provided

@@ -106,7 +106,12 @@ def test_monitor_preserves_report_day_close_for_target_day_baseline_rules(tmp_pa
         report_date=REPORT, trade_date=TARGET, phase="auction", metrics={"breadth_ratio": .7},
         captured_at=TARGET + "T09:25:00+08:00", source_lineage={"source": "fixture_feed"}, quality={"status": "ok"})
     assert result["posterior"]["phases_observed"] == ["close", "auction"]
-    assert result["posterior"]["timeline"][-1]["decision_scenario_id"] == "repair"
+    phase = result["posterior"]["timeline"][-1]
+    # Preserve baseline analysis without treating an unregistered legacy plan
+    # as independent strategy authorization.
+    assert next(row for row in phase["scenarios"] if row["scenario_id"] == "repair")["state"] == "supported"
+    assert phase["active_scenario_id"] is None
+    assert phase["decision_scenario_id"] is None
 
 
 def test_monitor_rejects_wrong_target_date_before_writing(tmp_path):

@@ -401,6 +401,15 @@ def resolve_publication_mode(
     """
     quality = quality or {}
     state = market_state or {}
+    from strategy_qualification import qualified_publication_mode
+    scoped_mode = qualified_publication_mode(quality)
+    if scoped_mode is not None:
+        # Explicit facts-only/observation requests remain ceilings. Production
+        # calls pass the newly computed scoped mode, not the legacy health mode.
+        requested = str(requested_mode or "").strip().lower()
+        if requested in {"facts_only", "observation"}:
+            return min((requested, scoped_mode), key=lambda mode: _PUBLICATION_MODE_RANK[mode])
+        return scoped_mode
     candidates: list[str] = []
     requested = str(requested_mode or "").strip().lower()
     if requested in _PUBLICATION_MODE_RANK:
@@ -820,10 +829,23 @@ def build_market_state(
         statistics_label = "统计待核验"
         allow_probability = False
 
+    from strategy_qualification import qualified_publication_mode, scoped_qualification
+    scoped = scoped_qualification(quality)
+    scoped_mode = qualified_publication_mode(quality)
+    if scoped is not None:
+        validated = [row.get("validation") or {} for row in scoped.get("strategies", {}).values()
+                     if isinstance(row, dict) and (row.get("validation") or {}).get("status") == "validated"]
+        sample_size = max((int(row.get("sample_size") or 0) for row in validated), default=0)
+        statistics_status = "blocked" if scoped_mode == "facts_only" else "ok" if validated else "unverified"
+        statistics_label = "独立策略验证通过" if validated else "策略独立验证待补"
+        # Strategy authorization does not turn a historical rate into a
+        # calibrated scenario probability.
+        allow_probability = False
+        blocked = scoped_mode == "facts_only"
     if blocked:
         decision_status = "blocked"
         decision_label = "禁止强结论"
-    elif status == "ok" and statistics_valid is not False and statistics_status == "ok":
+    elif scoped_mode == "decision" or (scoped is None and status == "ok" and statistics_valid is not False and statistics_status == "ok"):
         decision_status = "ready"
         decision_label = "可发布规则结论"
     else:
@@ -846,7 +868,7 @@ def build_market_state(
             "中" if sample_size is not None and sample_size >= 10 else "低"
         ),
     }
-    allow_strong = status == "ok" and statistics_status == "ok"
+    allow_strong = scoped_mode == "decision" if scoped is not None else status == "ok" and statistics_status == "ok"
     allow_observation = status in {"ok", "degraded"} and statistics_status != "blocked"
     publication_mode = (
         "facts_only" if blocked else
@@ -870,7 +892,8 @@ def build_market_state(
         "allow_observation": allow_observation,
         "allow_focus_pool": allow_strong,
         "publication_mode": publication_mode,
-        "allow_scenario_probability": allow_strong,
+        "allow_scenario_probability": allow_strong if scoped is None else False,
+        "strategy_qualification": scoped,
         "confidence": "高" if status == "ok" else ("中" if status == "degraded" else "低"),
         "reason": "；".join(dedupe_quality_messages(reasons)) or "质量检查通过",
         "scene": str(scene or ""),
@@ -1275,6 +1298,7 @@ def compute_ladder_metrics(
     turnover_count = 0
     board_type_count = 0
     event_fields = {"limit_up_attempted": 0, "broken": 0, "reclosed": 0, "board_type": 0}
+    event_counts = {"attempted": 0, "broken": 0, "reclosed": 0, "reclosed_known_on_broken": 0, "inconsistent_rows": 0}
     for item in items:
         attempted = _row_flag(item, ("limit_up_attempted", "曾涨停", "炸板样本", "attempted", "封板尝试"))
         broken = _row_flag(item, ("broken", "炸板", "炸板标记"))
@@ -1282,7 +1306,12 @@ def compute_ladder_metrics(
         event_fields["limit_up_attempted"] += int(attempted is not None)
         event_fields["broken"] += int(broken is not None)
         event_fields["reclosed"] += int(reclosed_input is not None)
-        if attempted is not None:
+        event_counts["attempted"] += int(attempted is True)
+        event_counts["broken"] += int(broken is True)
+        event_counts["reclosed"] += int(reclosed_input is True)
+        event_counts["reclosed_known_on_broken"] += int(broken is True and reclosed_input is not None)
+        event_counts["inconsistent_rows"] += int((attempted is False and broken is True) or (broken is False and reclosed_input is True))
+        if attempted is True and broken is not None:
             bomb_total += 1
             if broken is True:
                 bomb_count += 1
@@ -1392,6 +1421,7 @@ def compute_ladder_metrics(
             "scope": "provided_rows_only",
             "source_rows": len(items),
             "observed": event_fields,
+            "event_counts": event_counts,
             "missing_fields": [name for name, count in event_fields.items() if count == 0],
         },
         "quality_score": quality_score,

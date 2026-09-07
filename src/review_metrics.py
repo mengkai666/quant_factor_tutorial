@@ -180,8 +180,14 @@ DELTA_LABELS = {
 
 def build_daily_delta_snapshot(current: dict[str, Any] | None, previous: dict[str, Any] | None) -> dict[str, Any]:
     current, previous = dict(current or {}), dict(previous or {})
+    provenance = {
+        "report_date": current.get("report_date") or "",
+        "run_id": current.get("run_id") or "",
+        "previous_report_date": previous.get("report_date") or "",
+    }
     if not previous:
         return {
+            **provenance,
             "available": False,
             "reason": "缺少上一交易日结构化快照",
             "metrics": {},
@@ -219,6 +225,7 @@ def build_daily_delta_snapshot(current: dict[str, Any] | None, previous: dict[st
     if current_pool is None and isinstance(current.get("limit_pool"), list):
         current_pool = current.get("limit_pool")
     return {
+        **provenance,
         "available": True,
         "reason": "",
         "metrics": metrics,

@@ -19,7 +19,11 @@ def test_preview_preserves_source_audit_and_official_history(tmp_path):
     before_audit, before_history = audit.read_bytes(), history.read_bytes()
     result = module.build_preview(audit, tmp_path / "preview", calendar_cache=calendar, history_path=history)
     assert result["target_trade_date"] == "2026-09-04"
-    assert result["quality_unchanged"]
+    # The preview adds an unverified authorization summary, without changing
+    # any original core inputs or the facts-only ceiling.
+    assert result["core_modules_unchanged"]
+    assert result["source_publication_mode"] == "facts_only"
+    assert result["strategy_qualification"]["eligible_strategy_ids"] == []
     assert result["publication_mode"] == "facts_only"
     assert not result["readiness"]["execution_ready"]
     assert Path(result["preview"]).exists()

@@ -64,19 +64,34 @@ def test_phase_import_reuses_original_gates_and_revises_the_same_plan(tmp_path):
     from report_closure import build_decision_replay_context
     from phase_monitor import record_phase_observation
     from trade_plan_review import build_trade_plan_review
-    from test_recap_scenario_closure import _confirmed_context
-    ctx = _confirmed_context()
+    from test_strategy_qualification_integration import context
+    from test_strategy_qualification import record, event_metrics
+    from strategy_qualification import qualify_strategies
+    ctx = context()
     ctx["scenario_plans"][0]["invalidation_rules"] = [{"rule_id": "weak", "metric": "breadth_ratio", "operator": "lt", "value": .5}]
+    # This is a new, explicitly qualified fixture revision. A legacy history
+    # entry with only descriptive counts is no longer allowed to open a plan.
+    evidence = record(ctx["scenario_plans"][0])
+    qualified = qualify_strategies(ctx["scenario_plans"], quality=ctx["data_quality"],
+        validation_records=[evidence], event_metrics=event_metrics(),
+        report_date="2026-09-03", target_trade_date="2026-09-04")
+    ctx["data_quality"]["strategy_qualification"] = qualified
+    ctx["data_quality"]["publication_mode"] = qualified["publication_mode"]
+    ctx["publication_mode"] = qualified["publication_mode"]
+    validation_file = tmp_path / "validation.json"
+    validation_file.write_text(json.dumps({"schema_version": "strategy-validation-set/v1",
+        "records": [evidence]}), encoding="utf-8")
     history = tmp_path / "history.jsonl"
     history.write_text(json.dumps({"event_type": "prediction", "prediction_id": "p1", "report_date": "2026-09-03",
         "target_trade_date": "2026-09-04", "scenario_plans": ctx["scenario_plans"],
         "decision_context": build_decision_replay_context(ctx, build_today_decision(ctx))}) + "\n", encoding="utf-8")
     args = dict(history_path=history, phase_snapshot_path=tmp_path / "phases.jsonl",
+        validation_path=validation_file,
         report_date="2026-09-03", trade_date="2026-09-04", phase="early_0935",
         source_lineage={"source": "fixture_feed"}, quality={"status": "ok"})
-    first = record_phase_observation(**args, metrics={"breadth_ratio": .8}, captured_at="2026-09-04T09:35:00+08:00")
+    first = record_phase_observation(**args, metrics={"breadth_ratio": .8, "promotion_rate": .7, "limit_down": 2}, captured_at="2026-09-04T09:35:00+08:00")
     assert first["daily_decision"]["status"] == "conditional_plan"
-    last = record_phase_observation(**args, metrics={"breadth_ratio": .2}, captured_at="2026-09-04T09:36:00+08:00")
+    last = record_phase_observation(**args, metrics={"breadth_ratio": .2, "promotion_rate": .7, "limit_down": 2}, captured_at="2026-09-04T09:36:00+08:00")
     assert not last["decision"]["readiness"]["execution_ready"]
     review = build_trade_plan_review(history)
     assert review["plan_count"] == 1

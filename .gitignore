@@ -114,3 +114,6 @@ data/preplan_candidates_*.json
 
 # Per-day source event observations (runtime cache, not source code)
 data/limit_events/
+
+# Explicit strategy-validation evidence may contain private research/trade samples
+data/strategy_validation.json

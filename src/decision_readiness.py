@@ -12,6 +12,7 @@ from typing import Any
 
 from report_logic import resolve_publication_mode
 from scenario_posterior import scenario_selection
+from strategy_qualification import scoped_qualification
 from market_snapshot import build_phase_snapshot, snapshot_qualification_issues
 
 
@@ -72,10 +73,30 @@ def build_decision_readiness(
     quality, state, plan = _dict(quality), _dict(market_state), _dict(action_plan)
     modules = {str(k): _dict(v) for k, v in _dict(quality.get("modules")).items()}
     mode = resolve_publication_mode(plan.get("publication_mode"), quality=quality, market_state=state)
+    scoped = scoped_qualification(quality)
+    qualification = (_dict(_dict(scoped.get("strategies")).get(plan.get("strategy_id"))) if scoped is not None else None)
+    required_modules = set((qualification or {}).get("required_modules") or _CORE_MODULES)
+    nonblocking_issues = []
     issues: list[dict] = []
 
     def add_issue(module: str, status: str, *, scope: str | None = None,
                   label: str | None = None, recheck: str | None = None) -> None:
+        consistency = _dict(quality.get("run_id_consistency"))
+        drift = set(consistency.get("missing_modules") or []) | set(consistency.get("mismatched_modules") or [])
+        critical_modules = {name for name, item in modules.items() if item.get("critical")}
+        optional_batch_drift = (module == "run_id_consistency" and bool(drift)
+                                and drift <= set(modules)
+                                and not drift.intersection(required_modules | critical_modules))
+        protected = {"strategy_validation", "strategy_dependency", "freshness", "core_market", "run_id_consistency"}
+        if scoped is not None and module == "run_id_consistency" and scope is None and drift and drift <= set(modules):
+            if drift.intersection(set(_CORE_MODULES) | critical_modules):
+                scope = "core_market"
+            elif drift.intersection(required_modules):
+                scope = "strategy_data"
+        if scoped is not None and module not in required_modules and (module not in protected or optional_batch_drift) and scope != "core_market":
+            if not any(item["module"] == module for item in nonblocking_issues):
+                nonblocking_issues.append({"module": module, "status": status})
+            return
         if any(item["module"] == module for item in issues):
             return
         spec = _MODULES.get(module, (module, "strategy_data", "补齐该模块的数据并重新校验。"))
@@ -103,12 +124,19 @@ def build_decision_readiness(
     for name in quality.get("decision_degraded") or []:
         add_issue(str(name), str(modules.get(str(name), {}).get("status") or "degraded"))
 
+    scoped_core_issues = list((scoped or {}).get("core_issues") or [])
+    if scoped is not None and (scoped.get("core_ready") is not True or scoped_core_issues):
+        add_issue("core_provenance", "missing", scope="core_market", label="核心行情日期与批次",
+                  recheck="补齐并核验报告日输入与运行批次元信息（" + "、".join(scoped_core_issues)
+                          + "）；旧审计缺少字段时应重新生成，不能把未知信息补写为通过。")
+
     expired = bool(quality.get("used_stale") or quality.get("freshness_level") in {"stale", "expired"})
     expired = expired or any(
         item.get("status") in {"stale", "expired"} or item.get("used_stale")
         or _dict(item.get("lineage")).get("used_stale")
         for name, item in modules.items() if name in _CORE_MODULES or item.get("critical")
     )
+    expired = expired or any(code.endswith(":expired") or code == "core_market_expired" for code in scoped_core_issues)
     if expired:
         add_issue("freshness", "expired", scope="core_market", label="核心行情时效",
                   recheck="更新到目标交易日的数据，核对来源时间与有效期后重新校验。")
@@ -116,14 +144,21 @@ def build_decision_readiness(
     data_status = "expired" if expired else ("missing" if core_issues else "ready")
 
     statistics = _dict(state.get("statistics_layer"))
-    if statistics.get("status") not in {None, "", "ok"}:
+    if scoped is None and statistics.get("status") not in {None, "", "ok"}:
         add_issue("statistics", str(statistics["status"]), scope="validation", label="统计验证",
                   recheck="补齐同型可评分样本与到期结果，通过既有统计验证后重新评估。")
     decision = _dict(state.get("decision_layer"))
-    if decision.get("status") not in {None, "", "ready"} and not issues:
+    if scoped is None and decision.get("status") not in {None, "", "ready"} and not issues:
         add_issue("strategy_validation", str(decision["status"]), scope="validation", label="策略资格验证",
                   recheck="完成既有策略资格校验，不能把条件性结论当作已验证策略。")
-    if mode != "decision" and not issues:
+    if scoped is not None:
+        if not qualification or _dict(qualification.get("validation")).get("status") != "validated":
+            add_issue("strategy_validation", "unverified", scope="validation", label="策略独立验证",
+                      recheck="提供匹配策略、规则指纹与结果口径的独立样本外验证，不以历史天数或市场命中率代替。")
+        elif qualification.get("status") == "missing_dependency":
+            add_issue("strategy_dependency", "missing", scope="strategy_data", label="本策略必要数据",
+                      recheck="；".join(qualification.get("recheck_conditions") or []))
+    if mode != "decision" and not issues and scoped is None:
         add_issue("publication_gate", mode, scope="validation", label="现行发布门禁",
                   recheck="核对现行门禁阻断原因并重新运行校验，不手动把观察模式改为可执行。")
 
@@ -136,9 +171,11 @@ def build_decision_readiness(
     position = str(plan.get("position") or "").strip()
     zero_position = position == "空仓" or bool(re.fullmatch(r"0(?:\.0+)?\s*成", position))
     qualification_missing = data_status != "ready" or bool(issues) or mode != "decision"
+    if scoped is not None:
+        qualification_missing = data_status != "ready" or bool(issues) or (qualification or {}).get("status") not in {"eligible", "not_applicable"}
     if qualification_missing:
         strategy_status = "unverified"
-    elif zero_position or not candidates:
+    elif zero_position or not candidates or (qualification or {}).get("status") == "not_applicable":
         strategy_status = "not_applicable"
     else:
         strategy_status = "applicable"
@@ -192,6 +229,8 @@ def build_decision_readiness(
     signal_status = {"supported": "met", "neutral": "not_triggered", "invalidated": "invalidated"}.get(raw_signal, "not_evaluable")
     if selection["no_valid_scenario"]:
         signal_status = "invalidated"
+    if scoped is not None and latest.get("phase") in {None, "", "close"} and (qualification or {}).get("plan_permitted"):
+        signal_status = "not_triggered"
     missing_required = signal_row.get("missing_required_fields", signal_row.get("missing_fields"))
     snapshot_unqualified = bool((latest.get("phase") in _INTRADAY_PHASES and latest_phase_issues) or posterior.get("confirmation_blocked"))
     if data_status != "ready" or snapshot_unqualified or (signal_status == "met" and missing_required):
@@ -208,6 +247,9 @@ def build_decision_readiness(
         action_status, reason_code = "no_new_positions", "qualification_incomplete"
         names = "、".join(item["label"] for item in issues[:3])
         reason = f"基础行情可用，但{names or '策略资格'}尚未通过；这是判断资格不足，不等于市场没有机会。"
+    elif scoped is not None and (qualification or {}).get("status") == "not_applicable":
+        action_status, reason_code = "no_new_positions", "strategy_not_applicable"
+        reason = "策略验证已通过，但完整观测表明本次没有该策略所需的事件；这是不适用，不是数据缺失。"
     elif selection["no_valid_scenario"] and not snapshot_unqualified:
         action_status, reason_code = "no_new_positions", "no_valid_scenario"
         reason = "全部情景已经失效，当前没有可用的决策情景；不能沿用排名最高的旧情景。"
@@ -229,6 +271,9 @@ def build_decision_readiness(
     elif not plan_permitted:
         action_status, reason_code = "no_new_positions", "existing_gate"
         reason = "既有执行门禁尚未允许该计划；本状态说明不会提高原有交易权限。"
+    elif scoped is not None and phase_confirmation["status"] == "post_close_plan":
+        action_status, reason_code = "wait_confirmation", "intraday_confirmation_pending"
+        reason = "该策略的数据与独立验证已通过；当前是盘后条件预案，等待目标交易日逐项确认，尚未触发。"
     elif signal_status != "met":
         action_status, reason_code = "wait_confirmation", "signal_pending"
         reason = "条件计划已获准，但尚未取得完整触发确认；未确认不执行。"
@@ -241,7 +286,9 @@ def build_decision_readiness(
         reason = "现有门禁、候选与目标时点的规则确认已通过；只进入条件计划，不代表已成交。"
 
     recheck = [item["recheck"] for item in issues]
-    if reason_code == "market_no_trade":
+    if reason_code == "strategy_not_applicable":
+        recheck.extend((qualification or {}).get("recheck_conditions") or ["等待真实适用事件出现，再按原策略与当前时点核验。"])
+    elif reason_code == "market_no_trade":
         recheck.append("重新计算既有市场/仓位规则；只有规则允许非零仓位且候选合格时才重新评估。")
     elif reason_code == "no_candidates":
         recheck.append("按既有筛选规则重新获得合格候选；不使用风险锚或其他题材填满名单。")
@@ -268,7 +315,9 @@ def build_decision_readiness(
                         scenario_status=latest.get("scenario_status"), scope="报告快照时点"),
         "phase_confirmation": phase_confirmation,
         "action": _axis("action", action_status, reason_code=reason_code, reason=reason),
-        "issues": issues, "recheck_conditions": list(dict.fromkeys(recheck)),
+        "issues": issues, "nonblocking_issues": nonblocking_issues,
+        "strategy_qualification": qualification, "strategy_scope_enabled": scoped is not None,
+        "recheck_conditions": list(dict.fromkeys(recheck)),
         "plan_permitted": plan_permitted,
         "execution_ready": bool(plan_permitted and action_status == "enter_plan"),
     }

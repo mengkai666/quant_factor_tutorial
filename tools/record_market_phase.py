@@ -12,7 +12,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from paths import CALENDAR_CACHE, PHASE_SNAPSHOT_HISTORY, PREDICTION_HISTORY
+from paths import CALENDAR_CACHE, PHASE_SNAPSHOT_HISTORY, PREDICTION_HISTORY, STRATEGY_VALIDATION_FILE
 from phase_monitor import record_phase_observation
 
 
@@ -27,6 +27,7 @@ def main() -> int:
     parser.add_argument("--source-as-of", help="来源标注的数据截止时刻（如与观察时刻不同，必须提供）")
     parser.add_argument("--quality-status", required=True, choices=["ok", "degraded", "unknown", "unavailable", "blocked"], help="数据校验结果；导入成功不能自动等同 ok")
     parser.add_argument("--run-id")
+    parser.add_argument("--validation-file", default=STRATEGY_VALIDATION_FILE, help="重新核验显式策略验证记录；撤回或缺失时不提升原计划权限")
     parser.add_argument("--history", default=PREDICTION_HISTORY)
     parser.add_argument("--phase-history", default=PHASE_SNAPSHOT_HISTORY)
     parser.add_argument("--calendar-cache", default=CALENDAR_CACHE, help="旧预测无目标日时只读此日历，不回退工作日推算")
@@ -43,7 +44,7 @@ def main() -> int:
             history_path=args.history, phase_snapshot_path=args.phase_history,
             report_date=args.report_date, trade_date=args.trade_date, phase=args.phase,
             metrics=metrics, captured_at=args.captured_at, run_id=args.run_id,
-            source_lineage=lineage, quality={"status": args.quality_status}, calendar_cache=args.calendar_cache,
+            source_lineage=lineage, quality={"status": args.quality_status}, calendar_cache=args.calendar_cache, validation_path=args.validation_file,
         )
     except (ValueError, OSError) as exc:
         parser.error(str(exc))

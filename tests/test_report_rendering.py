@@ -73,8 +73,10 @@ def test_action_plan_builds_named_attack_confirm_and_risk_groups_from_echelon():
     assert "江化微" in str(plan)
     assert "沃格光电" in str(plan)
     assert "爱丽家居" in str(plan)
-    assert "买入" in str(plan["groups"][0])
-    assert "加仓" in str(plan["groups"][1])
+    # A mode label alone cannot override the fixture's degraded data quality.
+    assert "仅观察，不下单" in str(plan["groups"][0])
+    assert "仅观察，不下单" in str(plan["groups"][1])
+    assert plan["execution_allowed"] is False
     assert "风险锚" in str(plan["groups"][2])
     assert "减仓" not in str(plan["groups"][2])
 

@@ -191,3 +191,47 @@ def render_trade_history(ctx: dict) -> str:
             '<details><summary style="cursor:pointer">查看历史计划、修订与结果（最近20条）</summary>'
             '<div style="overflow:auto;max-height:280px"><table style="width:100%;font-size:12px;text-align:left"><thead><tr><th>报告日</th><th>标的</th><th>计划状态</th><th>最新结果</th><th>历史成交</th><th>版本</th></tr></thead>'
             f'<tbody>{"".join(rows)}</tbody></table></div></details>{extra}</section>')
+
+
+def render_strategy_qualification(quality: dict | None) -> str:
+    from strategy_qualification import MIN_VALIDATION_SAMPLES, public_validation_summary
+
+    scoped = _dict(_dict(quality).get("strategy_qualification"))
+    if scoped.get("schema_version") != "strategy-qualification-set/v1":
+        return ""
+    labels = {"eligible": "条件许可", "unverified": "未验证", "missing_dependency": "缺少本策略数据",
+              "not_applicable": "本次不适用", "research_only": "研究观察", "blocked_core": "核心行情阻断"}
+    event_labels = {"bomb_rate": "炸板率", "reclose_rate": "炸板后回封率", "board_structure": "板型"}
+    rows = []
+    for value in _dict(scoped.get("strategies")).values():
+        row = _dict(value)
+        # Escaping a dict is not redaction: old or malformed summaries must
+        # cross the same scalar allowlist as decision/replay serialization.
+        validation = public_validation_summary(_dict(row.get("validation")))
+        count = validation["sample_size"]
+        verified = (validation.get("status") == "validated" and not validation.get("issues") and count is not None
+                    and count >= MIN_VALIDATION_SAMPLES
+                    and count == validation.get("declared_sample_size")
+                    and all(validation.get(key) for key in ("source", "evidence_ref", "evaluated_at", "valid_from", "valid_until")))
+        status = row.get("status") if isinstance(row.get("status"), str) else "unverified"
+        status = status if status in labels else "unverified"
+        if status == "eligible" and not verified:
+            status = "unverified"
+        conditions = row.get("recheck_conditions")
+        reason = '；'.join(item for item in conditions if isinstance(item, str)) if isinstance(conditions, list) else ""
+        reason = reason or ("数据与独立验证已通过，等待目标阶段触发。" if status == "eligible" else "资格元信息待核验。")
+        deps = '、'.join(event_labels.get(key, "未知事件依赖") for key in _dict(row.get("event_dependencies"))) or "无全市场事件指标依赖"
+        title = row.get("title") if isinstance(row.get("title"), str) else row.get("strategy_id")
+        title = title if isinstance(title, str) else "策略待核验"
+        samples = "样本数未知" if count is None else f"{count} 例"
+        validation_status = "已验证" if verified else "未验证"
+        rows.append(f'<tr><td>{_esc(title)}</td><td>{_esc(labels[status])}</td>'
+                    f'<td>{_esc(samples)} · {_esc(validation_status)}</td><td>{_esc(deps)}</td><td>{_esc(reason)}</td></tr>')
+    nonblocking = scoped.get("nonblocking_modules")
+    nonblocking = nonblocking if isinstance(nonblocking, list) else []
+    note = "AI文案不可用：使用确定性说明；不影响已独立验证策略的资格。" if "ai" in nonblocking else "AI文案是增强说明，不承担策略授权。"
+    return (f'<section class="strategy-qualification" style="{_PANEL}"><b>逐策略资格 · 哪条路径能用，哪条还不能</b>'
+            f'<div>{_esc(note)}</div><div style="{_MUTED}">历史同型样本数不等于独立验证；核心行情阻断仍对全部策略生效。</div>'
+            '<details><summary>查看各策略依赖、独立验证与恢复条件</summary><div style="overflow:auto">'
+            '<table style="width:100%;text-align:left;font-size:12px"><thead><tr><th>策略</th><th>状态</th><th>独立验证</th><th>事件依赖</th><th>何时重新评估</th></tr></thead>'
+            f'<tbody>{"".join(rows)}</tbody></table></div></details></section>')

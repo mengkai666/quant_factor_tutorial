@@ -112,9 +112,55 @@ def build_decision_replay_context(ctx: dict, decision: dict) -> dict[str, Any]:
     keys = (
         "date_str", "publication_mode", "data_quality", "market_state", "market_thesis",
         "mainline_review", "mainline_concentration", "progression_chain", "echelon",
-        "scenario_plans", "next_trade_date", "breadth_ratio", "ladder", "dt",
+        "scenario_plans", "next_trade_date", "breadth_ratio", "ladder", "dt", "event_metrics",
     )
     payload = {key: ctx[key] for key in keys if key in ctx}
+    effective = decision.get("strategy_qualification")
+    if isinstance(effective, dict):
+        from strategy_qualification import scoped_qualification
+        # Use only renderer-sanitized metadata. Original policy/permission bits
+        # remain ceilings, but none of its old validation payload is copied back.
+        original = scoped_qualification(ctx.get("data_quality")) or {}
+        effective = {**effective, "strategies": {
+            sid: dict(row) for sid, row in _dict(effective.get("strategies")).items()
+            if isinstance(row, dict)
+        }}
+        modes = ("facts_only", "observation", "decision")
+        ceilings = [str(layer.get("publication_mode") or "").strip().lower() for layer in (
+            ctx, _dict(ctx.get("data_quality")), _dict(ctx.get("market_state")),
+            original, effective, _dict(decision.get("readiness")),
+        )]
+        mode = min((value for value in ceilings if value in modes), key=modes.index, default="observation")
+        if original and original.get("core_ready") is not True:
+            effective["core_ready"] = False
+            effective["core_issues"] = list(dict.fromkeys([
+                *effective.get("core_issues", []), "original_core_not_ready",
+            ]))
+        original_ids = original.get("eligible_strategy_ids")
+        original_ids = original_ids if isinstance(original_ids, list) else []
+        for sid, row in effective["strategies"].items():
+            previous = _dict(_dict(original.get("strategies")).get(sid))
+            permitted = (
+                mode == "decision" and original.get("core_ready") is True
+                and original.get("publication_mode") == "decision" and sid in original_ids
+                and previous.get("plan_permitted") is True and previous.get("status") == "eligible"
+                and previous.get("strategy_id") == sid
+                and all(previous.get(key) == row.get(key) for key in ("rule_version", "rule_fingerprint"))
+            )
+            if row.get("plan_permitted") and not permitted:
+                row.update(plan_permitted=False, status="unverified")
+                row["issues"] = list(dict.fromkeys([*row.get("issues", []), "not_authorized_in_original_plan"]))
+        allowed = [sid for sid, row in effective["strategies"].items() if row.get("plan_permitted")]
+        effective["eligible_strategy_ids"] = allowed
+        qualified_mode = "facts_only" if not effective.get("core_ready") else "decision" if allowed else "observation"
+        mode = min((mode, qualified_mode), key=modes.index)
+        effective["publication_mode"] = mode
+        payload["data_quality"] = {
+            **_dict(payload.get("data_quality")), "strategy_qualification": effective,
+            "publication_mode": mode,
+        }
+        payload["publication_mode"] = mode
+        payload["market_state"] = {**_dict(payload.get("market_state")), "publication_mode": mode}
     payload["candidate_funnel"] = decision.get("candidate_funnel") or {}
     references = []
     for row in decision.get("candidates") or []:

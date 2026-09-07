@@ -61,6 +61,7 @@ from review_metrics import build_progression_chain, build_daily_delta_snapshot
 from market_thesis import build_market_thesis, summarize_phase_resonance
 from scenario_plan import build_scenario_plans
 from scenario_posterior import build_scenario_posterior_timeline
+from strategy_qualification import descriptive_statistics, load_validation_records, qualify_strategies, build_strategy_event_input
 from market_snapshot import (
     append_phase_snapshot_once,
     build_phase_snapshot,
@@ -107,7 +108,7 @@ from paths import (
     ZT_CACHE_FILE, PRICE_CACHE, INDUSTRY_CACHE,
     SENTIMENT_CACHE, CLS_PLATE_CACHE, OUTPUT_HTML,
     SITE_DIR, SITE_URL, SECURITY_MASTER_CACHE, UNIVERSE_CACHE,
-    PREDICTION_HISTORY, DAILY_SNAPSHOT_DIR, PHASE_SNAPSHOT_HISTORY, AUDIT_DIR, CALENDAR_CACHE, LIMIT_EVENT_SNAPSHOT_DIR,
+    PREDICTION_HISTORY, DAILY_SNAPSHOT_DIR, PHASE_SNAPSHOT_HISTORY, AUDIT_DIR, CALENDAR_CACHE, LIMIT_EVENT_SNAPSHOT_DIR, STRATEGY_VALIDATION_FILE,
 )
 CACHE_DIR = DATA_DIR  # 向后兼容: 旧代码引用 CACHE_DIR 的地方仍指向数据目录
 
@@ -6238,14 +6239,14 @@ def _main_impl():
     )
     _modules = {
         'universe': build_module_quality(
-            'universe', total=_universe_total, covered=_universe_covered,
+            'universe', report_date=_report_date, total=_universe_total, covered=_universe_covered,
             source=market_meta.get('source', 'security_master'),
             source_timestamp=max((row.get('updated_at', '') for row in market_meta.get('records', [])), default=''),
             missing_fields=market_meta.get('missing_fields', []), errors=market_meta.get('errors', []),
             lineage={'cache': SECURITY_MASTER_CACHE, 'market_scope': '沪深北全A'},
         ),
         'price_raw': build_module_quality(
-            'price_raw', total=_price_total, covered=_price_raw_covered,
+            'price_raw', report_date=_report_date, total=_price_total, covered=_price_raw_covered,
             source=_price_meta.get('primary_source', 'price_cache_raw'),
             source_timestamp=_report_date,
             errors=[] if _price_raw_covered else ['报告日 raw 价格缓存无有效记录'],
@@ -6258,7 +6259,7 @@ def _main_impl():
             },
         ),
         'price_qfq': build_module_quality(
-            'price_qfq', total=_price_total, covered=_price_qfq_covered,
+            'price_qfq', report_date=_report_date, total=_price_total, covered=_price_qfq_covered,
             source='price_cache_qfq', source_timestamp=_report_date, critical=False,
             errors=[] if _price_qfq_covered else ['报告日 qfq 价格缓存无有效记录'],
             missing_fields=[] if _price_qfq_covered >= _price_total else ['close_qfq'],
@@ -6269,7 +6270,7 @@ def _main_impl():
             },
         ),
         'breadth': build_module_quality(
-            'breadth', total=_universe_total,
+            'breadth', report_date=_report_date, total=_universe_total,
             covered=advance_decline.get('market_covered', 0),
             source=advance_decline.get('primary_source', ''),
             source_timestamp=advance_decline.get('source_timestamp', ''),
@@ -6290,7 +6291,7 @@ def _main_impl():
             },
         ),
         'limit_pool': build_module_quality(
-            'limit_pool', total=_limit_total, covered=_limit_count,
+            'limit_pool', report_date=_report_date, total=_limit_total, covered=_limit_count,
             source=_limit_source, source_timestamp=_report_date,
             errors=_limit_errors,
             lineage={
@@ -6300,7 +6301,7 @@ def _main_impl():
             },
         ),
         'echelon': build_module_quality(
-            'echelon', total=max(_limit_count, 1), covered=len(_current_echelon_rows),
+            'echelon', report_date=_report_date, total=max(_limit_count, 1), covered=len(_current_echelon_rows),
             source=f"{_limit_source}+CLS_attribution", source_timestamp=_report_date,
             errors=[] if _current_echelon_rows else ['连板梯队不可用'], critical=False,
             lineage={
@@ -6309,7 +6310,7 @@ def _main_impl():
             },
         ),
         'sector': build_module_quality(
-            'sector', total=max(_limit_count, 1), covered=_sector_covered,
+            'sector', report_date=_report_date, total=max(_limit_count, 1), covered=_sector_covered,
             source='CLS+Eastmoney concepts', source_timestamp=_report_date, critical=False,
             missing_fields=[] if _sector_covered == _limit_count else ['部分涨停股缺少主线归因'],
             lineage={'reconciliation': _limit_lineage},
@@ -6340,9 +6341,9 @@ def _main_impl():
         'freshness_reason': _legacy_quality.get('freshness_reason', ''),
     })
     _report_quality['market_scope'] = '沪深北全A'
-    _report_quality['historical_samples'] = advance_decline.get(
-        'historical_samples', (_report_timing or {}).get('historical_samples', 0)
-    )
+    _report_quality['descriptive_statistics'] = descriptive_statistics(_report_timing)
+    # Descriptive timing samples are not strategy-authorization evidence.
+    _report_quality['historical_samples'] = None
     _report_quality['errors'] = list(dict.fromkeys(
         list(_report_quality.get('errors', [])) + list(_legacy_quality.get('errors', []))
     ))
@@ -6653,20 +6654,38 @@ def _main_impl():
         threshold_adjustments=_calibration_rows,
         candidate_funnel=_candidate_funnel,
     )
+    _strategy_event_metrics = build_strategy_event_input(_limit_event_snapshot, report_date=_report_date)
+    _validation_input = load_validation_records(STRATEGY_VALIDATION_FILE)
+    _strategy_qualification = qualify_strategies(
+        _scenario_plans, quality=_report_quality, validation_records=_validation_input['records'],
+        event_metrics=_strategy_event_metrics, report_date=_report_date, target_trade_date=_target_trade_date,
+    )
+    _strategy_qualification['validation_input_status'] = _validation_input['status']
+    _strategy_qualification['validation_input_issues'] = _validation_input['issues']
+    _report_quality['strategy_qualification'] = _strategy_qualification
+    _report_quality['publication_mode'] = _strategy_qualification['publication_mode']
+    _report_market_state = build_market_state(_report_quality, scene=(_report_timing or {}).get('scene'))
+    _effective_mode = resolve_publication_mode(_strategy_qualification['publication_mode'],
+                                              quality=_report_quality, market_state=_report_market_state)
+    _policy = ReportPolicy.from_mode(_effective_mode)
+    _report_quality['allow_strong_conclusion'] = _effective_mode == 'decision'
+
     # Pin a prediction revision to its facts, rules, candidate funnel and target.
     # A rebuilt forecast must not inherit a different revision's confirmations.
     _facts_fingerprint = hashlib.sha256(
         json.dumps({'facts': _ai_facts, 'plans': [p.to_dict() for p in _scenario_plans],
                     'candidate_funnel_fingerprint': _candidate_funnel['fingerprint'],
-                    'target_trade_date': _target_trade_date, 'publication_mode': _policy.mode},
+                    'target_trade_date': _target_trade_date, 'publication_mode': _policy.mode,
+                    'strategy_qualification': _strategy_qualification},
                    ensure_ascii=False, sort_keys=True, default=str).encode('utf-8')
     ).hexdigest()
-    _prediction_version = 'v3-recap-closure'
+    _prediction_version = 'v4-strategy-qualification'
     _current_prediction_id = f'{_report_date}:close:{_prediction_version}:{_facts_fingerprint[:12]}'
     _phase_snapshots = load_phase_snapshots(PHASE_SNAPSHOT_HISTORY, report_date=_report_date)
     _scenario_posterior = build_scenario_posterior_timeline(
         _scenario_plans, _phase_snapshots, report_date=_report_date, trade_date=_target_trade_date,
         prediction_id=_current_prediction_id,
+        eligible_strategy_ids=_strategy_qualification['eligible_strategy_ids'],
     )
     _phase_snapshots = [row for row in _phase_snapshots if row.get('phase') == 'close'
                         or (row.get('source_lineage') or {}).get('prediction_id') == _current_prediction_id]
@@ -6741,6 +6760,7 @@ def _main_impl():
             'market_state': _report_market_state,
             'candidate_funnel': _candidate_funnel,
             'limit_event_snapshot': _limit_event_snapshot,
+            'strategy_event_metrics': _strategy_event_metrics,
             'market_snapshot': _current_snapshot,
             'progression_chain': _progression_chain,
             'ladder_metrics': _ladder_metrics,

@@ -224,6 +224,7 @@ def _evidence_for_plan(
 def build_scenario_posterior_timeline(
     plans: Iterable[Any], snapshots: Iterable[dict[str, Any]],
     *, report_date: str | None = None, trade_date: str | None = None, prediction_id: str | None = None,
+    eligible_strategy_ids: Iterable[str] | None = None,
 ) -> dict[str, Any]:
     """按 close → auction → 9:35 → 10:00 → afternoon 更新场景后验。
 
@@ -271,6 +272,7 @@ def build_scenario_posterior_timeline(
     priors = _prior_probabilities(plan_rows)
     weights = dict(priors or {str(row["scenario_id"]): 1.0 for row in plan_rows})
     timeline: list[dict[str, Any]] = []
+    allowed = set(eligible_strategy_ids) if eligible_strategy_ids is not None else None
     previous_top: str | None = None
     previous_active: str | None = None
     invalidated: dict[str, list[str]] = {}
@@ -330,13 +332,15 @@ def build_scenario_posterior_timeline(
         total = sum(weights.values())
         top = max(weights, key=weights.get) if weights else None
         top_row = next((row for row in phase_rows if row["scenario_id"] == top), {})
-        valid = [row for row in phase_rows if row["state"] != "invalidated"]
+        applicable = [row for row in phase_rows if allowed is None or row["scenario_id"] in allowed]
+        valid = [row for row in applicable if row["state"] != "invalidated"]
         confirmed = [row for row in valid if row["state"] == "supported"]
         active = max(valid, key=lambda row: weights[row["scenario_id"]])["scenario_id"] if valid and phase != "close" else None
         decision = max(confirmed, key=lambda row: weights[row["scenario_id"]])["scenario_id"] if confirmed else None
         scenario_status = (
             "baseline_only" if phase == "close" else
-            "no_valid_scenario" if phase_rows and not valid else
+            "no_valid_scenario" if applicable and not valid else
+            "strategy_unavailable" if allowed is not None and not applicable else
             "active" if decision else "awaiting_confirmation"
         )
         transition_from = previous_top if previous_top and top != previous_top else None
@@ -355,6 +359,8 @@ def build_scenario_posterior_timeline(
             "top_ranked_scenario_state": top_row.get("state"),
             "active_scenario_id": active,
             "decision_scenario_id": decision,
+            "plan_scenario_id": max(applicable, key=lambda row: weights[row["scenario_id"]])["scenario_id"] if applicable and phase == "close" else active,
+            "eligible_strategy_ids": sorted(allowed) if allowed is not None else None,
             "scenario_status": scenario_status,
             "transition_from": transition_from,
             "active_transition_from": previous_active if active != previous_active else None,

@@ -9,7 +9,7 @@ from typing import Any
 from market_snapshot import append_phase_snapshot_once, build_phase_snapshot, load_phase_snapshots
 from scenario_posterior import build_scenario_posterior_timeline
 from data_sources.calendar_provider import CalendarProvider
-from paths import CALENDAR_CACHE
+from paths import CALENDAR_CACHE, STRATEGY_VALIDATION_FILE
 
 
 def _latest_prediction(history_path: str | Path, report_date: str) -> dict[str, Any] | None:
@@ -28,6 +28,87 @@ def _latest_prediction(history_path: str | Path, report_date: str) -> dict[str, 
     return latest
 
 
+def _replay_qualification(
+    context: dict[str, Any], plans: list, *, report_date: str,
+    target_trade_date: str, validation_path: str | Path,
+) -> dict[str, Any]:
+    """Intersect current evidence with the entire original permission envelope."""
+    from strategy_qualification import (
+        load_validation_records, qualify_strategies, refresh_strategy_qualification,
+        scoped_qualification,
+    )
+
+    quality = context.get("data_quality")
+    quality = quality if isinstance(quality, dict) else {}
+    original = scoped_qualification(quality) or {}
+    # Check the old dates/rules/outcome before fresh evidence can replace them.
+    pinned = refresh_strategy_qualification(
+        quality, plans, report_date=report_date, target_trade_date=target_trade_date,
+        event_metrics=context.get("event_metrics"),
+    ) or {}
+    context_pinned = refresh_strategy_qualification(
+        quality, context.get("scenario_plans") or [], report_date=report_date,
+        target_trade_date=target_trade_date, event_metrics=context.get("event_metrics"),
+    ) or {}
+    records = load_validation_records(validation_path)["records"]
+    current = qualify_strategies(
+        plans, quality=quality, validation_records=records,
+        event_metrics=context.get("event_metrics"), report_date=report_date,
+        target_trade_date=target_trade_date,
+    )
+
+    modes = ("facts_only", "observation", "decision")
+    state = context.get("market_state")
+    state = state if isinstance(state, dict) else {}
+    ceilings = [str(layer.get("publication_mode") or "").strip().lower()
+                for layer in (context, quality, state, original)]
+    ceiling = min((mode for mode in ceilings if mode in modes), key=modes.index, default="observation")
+    envelope_issues = []
+    if not original or original.get("publication_mode") != "decision":
+        envelope_issues.append("not_authorized_in_original_plan")
+    if original and original.get("core_ready") is not True:
+        envelope_issues.append("original_core_not_ready")
+        ceiling = "facts_only"
+    if ceiling != "decision":
+        envelope_issues.append("original_publication_mode_" + ceiling)
+    if (context.get("date_str") != report_date
+            or context.get("next_trade_date") != target_trade_date):
+        envelope_issues.append("original_prediction_dates_changed")
+
+    original_rows = original.get("strategies") or {}
+    original_ids = original.get("eligible_strategy_ids") or []
+    for sid, fresh in current["strategies"].items():
+        previous = original_rows.get(sid)
+        previous = previous if isinstance(previous, dict) else {}
+        bound = (pinned.get("strategies") or {}).get(sid, {})
+        context_bound = (context_pinned.get("strategies") or {}).get(sid, {})
+        issues = list(envelope_issues)
+        if (sid not in original_ids or previous.get("plan_permitted") is not True
+                or previous.get("status") != "eligible" or previous.get("strategy_id") != sid):
+            issues.append("not_authorized_in_original_plan")
+        if any(previous.get(key) != bound.get(key) for key in ("rule_version", "rule_fingerprint")):
+            issues.append("validation_rules_changed")
+        for checked in (bound, context_bound):
+            if not checked.get("plan_permitted"):
+                issues.extend(checked.get("issues") or ["original_plan_binding_unverified"])
+        if issues:
+            # A newly valid record must not certify an edited old plan. Retain
+            # the sanitized revoked original assessment when its binding fails.
+            revoked = next((row for row in (bound, context_bound)
+                            if row and not row.get("plan_permitted")), fresh)
+            row = {**revoked, "plan_permitted": False}
+            if row.get("status") == "eligible":
+                row["status"] = "unverified"
+            row["issues"] = list(dict.fromkeys([*row.get("issues", []), *fresh.get("issues", []), *issues]))
+            current["strategies"][sid] = row
+
+    allowed = [sid for sid, row in current["strategies"].items() if row["plan_permitted"]]
+    current["eligible_strategy_ids"] = allowed
+    mode = "facts_only" if not current["core_ready"] else "decision" if allowed else "observation"
+    current["publication_mode"] = min((ceiling, mode), key=modes.index)
+    return current
+
+
 def record_phase_observation(
     *, history_path: str | Path, phase_snapshot_path: str | Path,
     report_date: str, trade_date: str, phase: str, metrics: dict[str, Any],
@@ -35,6 +116,7 @@ def record_phase_observation(
     source_lineage: dict[str, Any] | None = None,
     quality: dict[str, Any] | None = None,
     calendar_cache: str | Path = CALENDAR_CACHE,
+    validation_path: str | Path | None = None,
 ) -> dict[str, Any]:
     prediction = _latest_prediction(history_path, report_date)
     if prediction is None:
@@ -60,10 +142,26 @@ def record_phase_observation(
     # Keep the report-day close; filtering everything by T+1 discards the baseline.
     rows = load_phase_snapshots(phase_snapshot_path, report_date=report_date)
     plans = prediction.get("scenario_plans") if isinstance(prediction.get("scenario_plans"), list) else []
-    posterior = build_scenario_posterior_timeline(plans, rows, report_date=report_date, trade_date=target_trade_date,
-                                                  prediction_id=prediction.get("prediction_id"))
-    result = {"snapshot": saved, "posterior": posterior, "prediction_id": prediction.get("prediction_id")}
     context = prediction.get("decision_context")
+    # No original scoped permission means no active/executable scenario, even
+    # when a legacy context has healthy modules and large descriptive counts.
+    allowed = []
+    if isinstance(context, dict) and context:
+        from copy import deepcopy
+        context = deepcopy(context)
+        scoped = _replay_qualification(
+            context, plans, report_date=report_date, target_trade_date=target_trade_date,
+            validation_path=validation_path or STRATEGY_VALIDATION_FILE,
+        )
+        allowed = scoped["eligible_strategy_ids"]
+        quality = context.get("data_quality")
+        quality = quality if isinstance(quality, dict) else {}
+        context["data_quality"] = {**quality, "strategy_qualification": scoped,
+                                   "publication_mode": scoped["publication_mode"]}
+        context["publication_mode"] = scoped["publication_mode"]
+    posterior = build_scenario_posterior_timeline(plans, rows, report_date=report_date, trade_date=target_trade_date,
+                                                  prediction_id=prediction.get("prediction_id"), eligible_strategy_ids=allowed)
+    result = {"snapshot": saved, "posterior": posterior, "prediction_id": prediction.get("prediction_id")}
     if isinstance(context, dict) and context:
         from decision_dashboard import build_today_decision
         from report_closure import persist_decision_review

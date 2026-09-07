@@ -21,14 +21,15 @@ from decision_dashboard import (build_dashboard_ctx, build_today_decision, write
                                 generate_dashboard_html, generate_dashboard_section, _action_plan_html)
 from decision_readiness import render_decision_readiness
 from limit_events import build_limit_event_snapshot, load_limit_event_snapshot
-from paths import CALENDAR_CACHE, LIMIT_EVENT_SNAPSHOT_DIR
+from paths import CALENDAR_CACHE, LIMIT_EVENT_SNAPSHOT_DIR, STRATEGY_VALIDATION_FILE
+from strategy_qualification import load_validation_records, qualify_strategies, build_strategy_event_input, scoped_qualification
 from recap_panels import (render_decision_changes, render_daily_journal, render_trade_history,
-                          render_limit_event_coverage, render_scenario_checkpoint)
+                          render_limit_event_coverage, render_scenario_checkpoint, render_strategy_qualification)
 from report_closure import persist_decision_review
 from scenario_posterior import build_scenario_posterior_timeline
 
 
-def build_preview(audit_path, output_dir, *, calendar_cache=CALENDAR_CACHE, history_path=None):
+def build_preview(audit_path, output_dir, *, calendar_cache=CALENDAR_CACHE, history_path=None, validation_path=None):
     audit_path, output = Path(audit_path).resolve(), Path(output_dir).resolve()
     audit = json.loads(audit_path.read_text(encoding="utf-8-sig"))
     context = deepcopy(audit["context"])
@@ -36,17 +37,31 @@ def build_preview(audit_path, output_dir, *, calendar_cache=CALENDAR_CACHE, hist
     output.mkdir(parents=True, exist_ok=True)
     target = CalendarProvider(cache_path=calendar_cache).cached_next_trading_day(report_date)
     context["target_trade_date"] = target
-    context["scenario_posterior"] = build_scenario_posterior_timeline(
-        context.get("scenario_plans") or [], context.get("phase_snapshots") or [],
-        report_date=report_date, trade_date=target,
-        prediction_id=(context.get("scenario_posterior") or {}).get("prediction_id") or "unbound-preview",
-    )
     facts = context.setdefault("facts", {})
     snapshot = facts.get("market_snapshot") or {}
     events = load_limit_event_snapshot(LIMIT_EVENT_SNAPSHOT_DIR, report_date)
     if events is None:
-        events = build_limit_event_snapshot(snapshot.get("limit_pool_rows") or [], report_date, source="historical_audit")
+        events = facts.get("limit_event_snapshot") or build_limit_event_snapshot(snapshot.get("limit_pool_rows") or [], report_date, source="historical_audit")
     facts["limit_event_snapshot"] = events
+    scoped = None
+    if validation_path is not None or scoped_qualification(context.get("quality")) is None:
+        # An old decision badge/count is not independent authorization. Without
+        # explicit evidence, annotate legacy previews as unverified, not approved.
+        loaded = load_validation_records(validation_path) if validation_path is not None else {"records": []}
+        event_input = facts.get("strategy_event_metrics") or build_strategy_event_input(events, report_date=report_date)
+        facts["strategy_event_metrics"] = event_input
+        scoped = qualify_strategies(context.get("scenario_plans") or [], quality=context.get("quality") or {},
+            validation_records=loaded["records"], event_metrics=event_input,
+            report_date=report_date, target_trade_date=target)
+        context["quality"]["strategy_qualification"] = scoped
+        context["quality"]["publication_mode"] = scoped["publication_mode"]
+        context["publication_mode"] = scoped["publication_mode"]
+    context["scenario_posterior"] = build_scenario_posterior_timeline(
+        context.get("scenario_plans") or [], context.get("phase_snapshots") or [],
+        report_date=report_date, trade_date=target,
+        prediction_id=(context.get("scenario_posterior") or {}).get("prediction_id") or "unbound-preview",
+        eligible_strategy_ids=scoped["eligible_strategy_ids"] if scoped is not None else None,
+    )
     ctx = build_dashboard_ctx(report_date=report_date, report_context=context, next_trade_date=target)
     for field, source in (("zt", "limit_up"), ("dt", "limit_down"), ("curr_h", "max_height"), ("breadth_ratio", "breadth_ratio")):
         if snapshot.get(source) is not None:
@@ -59,6 +74,7 @@ def build_preview(audit_path, output_dir, *, calendar_cache=CALENDAR_CACHE, hist
         else:
             ctx.pop(field, None)
     decision = build_today_decision(ctx)
+    effective_qualification = decision.get("strategy_qualification")
     journal = output / f"preview_journal_{report_date}.jsonl"
     if journal == audit_path or (history_path and journal == Path(history_path).resolve()):
         raise ValueError("preview journal cannot overwrite an input")
@@ -76,7 +92,7 @@ def build_preview(audit_path, output_dir, *, calendar_cache=CALENDAR_CACHE, hist
     embedded = generate_dashboard_section(ctx)
     (output / f"dashboard_{report_date}.html").write_text(full, encoding="utf-8")
     (output / f"embedded_{report_date}.html").write_text(embedded, encoding="utf-8")
-    panels = (render_decision_readiness(decision["readiness"]) + render_scenario_checkpoint(ctx, decision["readiness"])
+    panels = (render_decision_readiness(decision["readiness"]) + render_strategy_qualification({"strategy_qualification": effective_qualification}) + render_scenario_checkpoint(ctx, decision["readiness"])
               + render_decision_changes(review["decision_changes"]) + _action_plan_html(decision["action_plan"])
               + render_limit_event_coverage(events) + render_daily_journal(ctx) + render_trade_history(ctx))
     compact = ('<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
@@ -92,6 +108,8 @@ def build_preview(audit_path, output_dir, *, calendar_cache=CALENDAR_CACHE, hist
         "preview_only": True, "source_publication_mode": audit["context"].get("publication_mode"),
         "publication_mode": decision["readiness"]["publication_mode"], "readiness": decision["readiness"],
         "quality_unchanged": audit["context"]["quality"] == context["quality"],
+        "core_modules_unchanged": audit["context"]["quality"].get("modules") == context["quality"].get("modules"),
+        "strategy_qualification": effective_qualification,
         "candidate_funnel_fingerprint": decision["candidate_funnel"]["fingerprint"],
         "candidate_codes": [row["code"] for row in decision["candidates"]],
         "source_candidate_funnel_fingerprint": (facts.get("candidate_funnel") or {}).get("fingerprint"),
@@ -106,9 +124,10 @@ def main():
     parser.add_argument("--audit", required=True)
     parser.add_argument("--output-dir", default=str(ROOT / "output" / "recap_validation"))
     parser.add_argument("--calendar-cache", default=CALENDAR_CACHE)
+    parser.add_argument("--validation-file", help="可选显式验证输入；缺失时也可展示新的逐策略未验证原因")
     parser.add_argument("--history", help="可选的只读历史来源；复制至预览目录后才追加模拟记录")
     args = parser.parse_args()
-    result = build_preview(args.audit, args.output_dir, calendar_cache=args.calendar_cache, history_path=args.history)
+    result = build_preview(args.audit, args.output_dir, calendar_cache=args.calendar_cache, history_path=args.history, validation_path=args.validation_file)
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 

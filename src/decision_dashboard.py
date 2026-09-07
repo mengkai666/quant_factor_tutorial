@@ -42,8 +42,9 @@ from decision_readiness import build_decision_readiness, render_decision_readine
 from execution_contract import build_execution_contract
 from candidate_funnel import build_candidate_funnel, matches_mainline
 from scenario_posterior import scenario_selection
+from strategy_qualification import scoped_qualification, rule_fingerprint, refresh_strategy_qualification
 from recap_panels import (render_decision_changes, render_daily_journal, render_trade_history,
-                          render_scenario_checkpoint, render_limit_event_coverage)
+                          render_scenario_checkpoint, render_limit_event_coverage, render_strategy_qualification)
 from report_logic import (
     assess_data_quality,
     build_market_state,
@@ -175,7 +176,8 @@ def build_dashboard_ctx(timing=None, advance_decline=None, sentiment_df=None,
     # 旧调用方没有该字段时保持兼容；生产入口会显式提供真实前缀集合.
     if 'market_prefixes' in advance_decline:
         quality_args['market_prefixes'] = advance_decline.get('market_prefixes') or ()
-    historical_samples = advance_decline.get('historical_samples', timing.get('historical_samples', 0))
+    historical_samples = advance_decline.get('historical_samples', 0)
+    descriptive_sample_size = timing.get('win_rate_sample_size', 0)
     historical_stats = advance_decline.get('historical_stats', timing.get('historical_stats'))
     if unified_context:
         quality = dict(unified_context.get('quality') or {})
@@ -355,7 +357,7 @@ def build_dashboard_ctx(timing=None, advance_decline=None, sentiment_df=None,
         'market_state': market_state,
         'historical_samples': historical_samples,
         'historical_stats': historical_stats,
-        'win_rate_sample_size': timing.get('win_rate_sample_size', 0),
+        'win_rate_sample_size': descriptive_sample_size,
         'win_rate_confidence_interval': timing.get('win_rate_confidence_interval'),
         'scenario_probabilities': scenario_probabilities,
         'scenarios': scenarios,
@@ -378,6 +380,7 @@ def build_dashboard_ctx(timing=None, advance_decline=None, sentiment_df=None,
         'phase_snapshots': unified_context.get('phase_snapshots', []),
         'lineage': unified_context.get('lineage', {}),
         'candidate_funnel': facts.get('candidate_funnel'),
+        'event_metrics': facts.get('strategy_event_metrics', facts.get('ladder_metrics', {})),
         'progression_chain': (unified_context.get('facts') or {}).get('progression_chain', {}),
         'price_df': price_df,
         'holdings': holdings,
@@ -413,10 +416,23 @@ def _echelon_action_rows(ctx: dict) -> list[dict[str, Any]]:
     return list(_candidate_funnel(ctx)['observations'])
 
 
+def _refresh_scoped_context(ctx: dict) -> dict:
+    quality = ctx.get('data_quality') if isinstance(ctx.get('data_quality'), dict) else {}
+    if scoped_qualification(quality) is None:
+        return ctx
+    refreshed = refresh_strategy_qualification(quality, ctx.get('scenario_plans') or [],
+        report_date=str(ctx.get('date_str') or ''), target_trade_date=ctx.get('next_trade_date'),
+        event_metrics=ctx.get('event_metrics'))
+    quality = {**quality, 'strategy_qualification': refreshed}
+    return {**ctx, 'data_quality': quality}
+
+
 def _build_action_plan(ctx: dict, judgement: dict | None = None) -> dict[str, Any]:
     """从当日事实生成有限仓位与条件操作，不依赖历史概率。"""
+    ctx = _refresh_scoped_context(ctx)
     state = ctx.get('market_state') if isinstance(ctx.get('market_state'), dict) else {}
-    mode = str(ctx.get('publication_mode') or state.get('publication_mode') or 'observation').lower()
+    mode = resolve_publication_mode(ctx.get('publication_mode') or state.get('publication_mode'),
+                                    quality=ctx.get('data_quality'), market_state=state)
     if mode == 'facts_only':
         return {
             'position': '空仓',
@@ -429,7 +445,13 @@ def _build_action_plan(ctx: dict, judgement: dict | None = None) -> dict[str, An
 
     rows = _echelon_action_rows(ctx)
     if not rows:
+        scope = scoped_qualification(ctx.get('data_quality'))
+        ids = (scope or {}).get('eligible_strategy_ids') or list(((scope or {}).get('strategies') or {}).keys())
+        diagnostic_id = ids[0] if ids else None
         return {
+            'strategy_id': diagnostic_id,
+            'strategy_qualification': ((scope or {}).get('strategies') or {}).get(diagnostic_id),
+            'strategy_scope_enabled': scope is not None,
             'position': '0 成',
             'posture': '无合格标的',
             'position_source': 'no_candidates',
@@ -448,10 +470,24 @@ def _build_action_plan(ctx: dict, judgement: dict | None = None) -> dict[str, An
     latest_phase = timeline[-1] if timeline and isinstance(timeline[-1], dict) else {}
     selection = scenario_selection(latest_phase)
     active_scenario_id = selection['scenario_id']
+    scoped = scoped_qualification(ctx.get('data_quality'))
+    strategy_id = active_scenario_id
+    if scoped is not None and not strategy_id and latest_phase.get('phase') in {None, '', 'close'}:
+        strategy_id = str(latest_phase.get('plan_scenario_id') or '')
+        if not strategy_id:
+            eligible = set(scoped.get('eligible_strategy_ids') or [])
+            strategy_id = next((str(p.get('scenario_id')) for p in scenario_plans
+                                if isinstance(p, dict) and p.get('scenario_id') in eligible), '')
+    if scoped is not None and not strategy_id:
+        # A diagnostic strategy ID is not an active signal. Preserve the
+        # already-validated strategy's reason even after all signals invalidate.
+        preferred = scoped.get('eligible_strategy_ids') or []
+        strategy_id = str(preferred[0]) if preferred else next((str(p.get('scenario_id')) for p in scenario_plans if isinstance(p, dict)), '')
+    qualification = (scoped.get('strategies') or {}).get(strategy_id, {}) if scoped is not None else None
     scenario_state = str(selection['row'].get('state') or 'neutral').lower()
     active_plan = next((
         plan for plan in scenario_plans
-        if isinstance(plan, dict) and str(plan.get('scenario_id') or '') == active_scenario_id
+        if isinstance(plan, dict) and str(plan.get('scenario_id') or '') == (strategy_id or active_scenario_id)
     ), None)
     scenario_candidate_codes = None
     if active_plan is not None and 'trade_candidates' in active_plan:
@@ -558,7 +594,9 @@ def _build_action_plan(ctx: dict, judgement: dict | None = None) -> dict[str, An
         str(position or '').strip() in {'空仓', '0成', '0 成'}
         or re.fullmatch(r'0(?:\.0+)?\s*成', str(position or '').strip())
     )
-    execution_allowed = mode == 'decision' and not zero_position and posture != '场景失效'
+    strategy_permitted = (qualification is None or bool(qualification.get('plan_permitted') and active_plan
+                          and qualification.get('rule_fingerprint') == rule_fingerprint(active_plan)))
+    execution_allowed = mode == 'decision' and strategy_permitted and not zero_position and posture != '场景失效'
 
     groups_out = []
     for role in ('attack', 'confirm', 'risk'):
@@ -567,6 +605,9 @@ def _build_action_plan(ctx: dict, judgement: dict | None = None) -> dict[str, An
         for row in [item for item in rows if item['role'] == role]:
             action = spec['action']
             trigger = spec['trigger']
+            if scoped is not None and strategy_id == 'selective_mainline_hold' and role != 'risk':
+                action = '核心强度与换手确认后进入条件计划'
+                trigger = '核心强于市场、换手确认且未跌破竞价低点；逐项验证，不依赖全市场回封率'
             if role in {'attack', 'confirm'} and not execution_allowed:
                 action = '仅观察，不下单'
                 trigger = f'满足观察条件后进入确认名单：{trigger}'
@@ -593,6 +634,9 @@ def _build_action_plan(ctx: dict, judgement: dict | None = None) -> dict[str, An
         'core_action': core_action,
         'position_source': position_source,
         'active_scenario_id': active_scenario_id or None,
+        'strategy_id': strategy_id or None,
+        'strategy_qualification': qualification,
+        'strategy_scope_enabled': scoped is not None,
         'decision_scenario_id': latest_phase.get('decision_scenario_id'),
         'scenario_status': latest_phase.get('scenario_status'),
         'execution_allowed': execution_allowed,
@@ -616,7 +660,10 @@ def build_today_decision(
     ctx: dict, action_plan: dict | None = None, judgement: dict | None = None,
 ) -> dict[str, Any]:
     '''将完整看板压缩为盘前可执行的三项检查清单。'''
-    plan = action_plan or _build_action_plan(ctx, judgement)
+    ctx = _refresh_scoped_context(ctx)
+    # In scoped mode only the canonical current strategy/funnel can create a
+    # plan; a supplied legacy plan cannot borrow another strategy's permission.
+    plan = _build_action_plan(ctx, judgement) if scoped_qualification(ctx.get('data_quality')) is not None else action_plan or _build_action_plan(ctx, judgement)
     rows = _flatten_action_plan_rows(plan)
     actionable = [row for row in rows if row.get('role') in {'attack', 'confirm'}]
     risk_rows = [row for row in rows if row.get('role') == 'risk']
@@ -755,6 +802,9 @@ def build_today_decision(
         'action_plan': plan,
         'priority': priority,
         'readiness': readiness,
+        # Replay must persist this sanitized, refreshed assessment, not ctx's
+        # pre-render authorization (which may have just been revoked).
+        'strategy_qualification': scoped_qualification(ctx.get('data_quality')),
     }
 
 
@@ -3007,6 +3057,7 @@ def _stance_detail_html(ctx: dict, prefix: str = '') -> str:
 
 def generate_dashboard_html(ctx: dict) -> str:
     """把 ctx 渲染成一份完整的看板 HTML (single-file, 无外部依赖)."""
+    ctx = _refresh_scoped_context(ctx)
     # 数据取值 + 兜底
     date_str = ctx.get('date_str') or datetime.now().strftime('%Y-%m-%d')
     state = ctx.get('market_state') if isinstance(ctx.get('market_state'), dict) else build_market_state(ctx.get('data_quality'))
@@ -3104,6 +3155,7 @@ def generate_dashboard_html(ctx: dict) -> str:
     today_decision = build_today_decision(ctx, action_plan)
     action_plan = today_decision['action_plan']
     readiness_html = render_decision_readiness(today_decision['readiness'])
+    strategy_qualification_html = render_strategy_qualification(ctx.get('data_quality'))
     scenario_checkpoint_html = '' if blocked else render_scenario_checkpoint(ctx, today_decision['readiness'])
     decision_changes_html = render_decision_changes(ctx.get('decision_changes'))
     limit_event_html = render_limit_event_coverage(ctx.get('limit_event_snapshot'))
@@ -3527,6 +3579,7 @@ def generate_dashboard_html(ctx: dict) -> str:
   </div>
 
   {readiness_html}
+  {strategy_qualification_html}
   {scenario_checkpoint_html}
   {decision_changes_html}
 
@@ -3595,6 +3648,7 @@ def generate_dashboard_section(ctx: dict) -> str:
     .card / .hero / .grid 等类名冲突. 返回一段可以直接插入主报告 body 的
     片段 (含 <style>...</style> + <section class="dbd-wrap">...</section>).
     """
+    ctx = _refresh_scoped_context(ctx)
     date_str = ctx.get('date_str') or datetime.now().strftime('%Y-%m-%d')
     state = ctx.get('market_state') if isinstance(ctx.get('market_state'), dict) else build_market_state(ctx.get('data_quality'))
     policy = _publication_policy(ctx)
@@ -3758,6 +3812,7 @@ def generate_dashboard_section(ctx: dict) -> str:
     today_decision = build_today_decision(ctx, action_plan)
     action_plan = today_decision['action_plan']
     readiness_html = render_decision_readiness(today_decision['readiness'])
+    strategy_qualification_html = render_strategy_qualification(ctx.get('data_quality'))
     scenario_checkpoint_html = '' if blocked else render_scenario_checkpoint(ctx, today_decision['readiness'])
     decision_changes_html = render_decision_changes(ctx.get('decision_changes'))
     limit_event_html = render_limit_event_coverage(ctx.get('limit_event_snapshot'))
@@ -4085,6 +4140,7 @@ def generate_dashboard_section(ctx: dict) -> str:
   </div>
 
   {readiness_html}
+  {strategy_qualification_html}
   {scenario_checkpoint_html}
   {decision_changes_html}
 
