@@ -2,7 +2,7 @@
 以最初“下一交易日行动单”方案为总纲，续接逐策略资格收尾。
 总纲与验收：docs/superpowers/plans/2026-09-08-report-actionability-continuation.md
 具体设计/实现：docs/superpowers/specs/2026-09-07-strategy-qualification.md、docs/superpowers/plans/2026-09-07-strategy-qualification.md
-当前：边界回归与集成验收 in_progress；提交同步 pending。
+当前：本轮实现、回归、独立审查 complete；代码与缓存已同步master。最终文档提交后再核验SHA。补充浏览器视觉检查受URL策略限制，未冒充完成。
 
 ---
 # 既有历史计划（保留）
