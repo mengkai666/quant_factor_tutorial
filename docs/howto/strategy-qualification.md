@@ -77,4 +77,4 @@ python tools/check_strategy_qualification.py --audit output/audit/2026-09-04.jso
 python tools/preview_recap_report.py --audit output/audit/2026-09-04.json --validation-file data/strategy_validation.json --output-dir output/strategy_qualification_validation/preview
 ```
 
-只在预览目录写HTML、CSV和模拟日志，不改正式行情、历史决策或验证文件。没有真实验证资料的历史报告仍会观察，页面会说明具体原因；测试中的合格记录仅是夹具，不会复制到生产文件。
+只在预览目录写HTML、CSV和模拟日志，不改正式行情、历史决策或验证文件。 默认预览遇到没有逐策略资格的旧审计时，也会明确标记未验证，不将旧decision徽标或历史样本数当作授权；不会隐式读取并批准新的验证资料。没有真实验证资料的历史报告仍会观察，页面会说明具体原因；测试中的合格记录仅是夹具，不会复制到生产文件。

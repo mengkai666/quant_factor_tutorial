@@ -160,7 +160,15 @@ def build_decision_replay_context(ctx: dict, decision: dict) -> dict[str, Any]:
             "publication_mode": mode,
         }
         payload["publication_mode"] = mode
-        payload["market_state"] = {**_dict(payload.get("market_state")), "publication_mode": mode}
+        state = {**_dict(payload.get("market_state")), "publication_mode": mode}
+        # These are diagnostic mirrors of the authoritative effective quality,
+        # not additional copies of the old private evidence. Preserve the
+        # original scalar ceiling above before replacing either mirror.
+        if "quality" in state:
+            state["quality"] = payload["data_quality"]
+        if "strategy_qualification" in state:
+            state["strategy_qualification"] = effective
+        payload["market_state"] = state
     payload["candidate_funnel"] = decision.get("candidate_funnel") or {}
     references = []
     for row in decision.get("candidates") or []:

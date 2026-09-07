@@ -264,3 +264,28 @@ def test_default_preview_does_not_treat_legacy_counts_as_strategy_approval(tmp_p
     assert result["readiness"]["strategy"]["status"] == "unverified"
     assert not result["readiness"]["plan_permitted"]
     assert result["strategy_qualification"]["eligible_strategy_ids"] == []
+
+
+@pytest.mark.parametrize("field", ["source", "evidence_ref"])
+def test_replay_sanitizes_real_market_state_qualification_mirrors(field):
+    from decision_dashboard import build_today_decision
+    from report_closure import build_decision_replay_context
+    from report_logic import build_market_state
+    ctx = context()
+    q = ctx["data_quality"]
+    scoped = q["strategy_qualification"]
+    row = scoped["strategies"]["selective_mainline_hold"]
+    row["validation"][field] = {"samples": [{"sample_id": "PRIVATE_MARKET_STATE_SAMPLE", "net_return": .01}]}
+    row["validation"]["status"] = "unverified"
+    row.update(status="unverified", plan_permitted=False)
+    scoped.update(eligible_strategy_ids=[], publication_mode="observation")
+    q["publication_mode"] = ctx["publication_mode"] = "observation"
+    ctx["market_state"] = build_market_state(q)
+    before = deepcopy(ctx)
+    decision = build_today_decision(ctx)
+    replay = build_decision_replay_context(ctx, decision)
+    assert "PRIVATE_MARKET_STATE_SAMPLE" not in json.dumps(replay)
+    assert replay["market_state"]["quality"] == replay["data_quality"]
+    assert replay["market_state"]["strategy_qualification"] == replay["data_quality"]["strategy_qualification"]
+    assert ctx == before
+    assert not decision["readiness"]["plan_permitted"]
