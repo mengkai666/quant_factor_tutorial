@@ -808,8 +808,11 @@ def build_today_decision(
     }
 
 
-def _today_three_html(ctx: dict, action_plan: dict, prefix: str = '') -> str:
-    decision = build_today_decision(ctx, action_plan=action_plan)
+def _today_three_html(ctx: dict, action_plan: dict, prefix: str = '',
+                      decision: dict | None = None) -> str:
+    # 调用方几乎总是刚算完 today_decision; 透传进来就不必用同一份 ctx/plan 再算一遍。
+    # 与 build_today_focus_rows 的 `decision=` 参数同一套约定。
+    decision = decision or build_today_decision(ctx, action_plan=action_plan)
     cards = []
     accents = {'market_gate': '#f0b429', 'mainline': '#58a6ff', 'risk_gate': '#f85149'}
     for item in decision['watch_items']:
@@ -854,6 +857,16 @@ def build_today_focus_rows(ctx: dict, action_plan: dict | None = None, *, decisi
         executable = bool(row.get('execution_allowed') and decision['execution_allowed'])
         readiness = decision['readiness']
         permitted = bool(row.get('execution_allowed') and readiness['plan_permitted'])
+        name_str = str(row.get('name') or '')
+        if role == 'risk':
+            tactic_label = '战法 E: 接力退潮空间防守'
+        elif any(k in name_str for k in ['旭创', '易盛', '富联', '曙光', '科技', '讯飞', '中芯', '华创', '恒瑞', '药明']):
+            tactic_label = '铁律 4: 人气容量龙反包律'
+        elif 'attack' in role.lower() or '卡位' in role or '身位' in role:
+            tactic_label = '铁律 3: 双子星卡位生死律'
+        else:
+            tactic_label = '铁律 2: 龙头梯队接力律'
+
         rows.append({
             '报告日期': decision['report_date'],
             '股票': str(row.get('name') or ''),
@@ -861,6 +874,7 @@ def build_today_focus_rows(ctx: dict, action_plan: dict | None = None, *, decisi
             '板块': str(row.get('sector') or '题材待确认'),
             '角色': role_labels.get(role, role or '观察'),
             '策略池': f'【{role_labels.get(role, role or "观察")}】',
+            '匹配战法': tactic_label,
             '可执行': '是' if executable else '否',
             '优先级': {'primary': '首选', 'alternate': '备选'}.get(str(row.get('priority') or ''), '观察'),
             '条件计划许可': '是' if permitted else '否',
@@ -902,7 +916,7 @@ def build_today_focus_rows(ctx: dict, action_plan: dict | None = None, *, decisi
 def write_today_focus_pool(ctx: dict, output_path: Any, action_plan: dict | None = None, *, decision: dict | None = None) -> int:
     '''原子写出与“明日执行计划”同源的股票池，空结果也覆盖旧文件。'''
     fieldnames = [
-        '报告日期', '股票', '代码', '板块', '角色', '策略池', '可执行', '操作',
+        '报告日期', '股票', '代码', '板块', '角色', '策略池', '匹配战法', '可执行', '操作',
         '触发条件', '失效条件', '入场条件', '防守位', '建议仓位', '默认动作',
         '数据状态', '数据来源', 'code', 'name', 'market', 'tradeable',
         '优先级', '条件计划许可', '数据资格', '策略资格', '信号状态', '操作结论',
@@ -1415,8 +1429,21 @@ def _scen_card(s: dict) -> str:
     hide_stat = bool(s.get('hide_stat')) or compact_public
     stat_html = '' if hide_stat else f'<div class="scen-stat">{_esc(_scenario_stat_text(s))}</div>'
     items_html = '' if not items else f'<ul>{items}</ul>'
+
+    s_name = str(s.get("name") or "")
+    s_id = str(s.get("scenario_id") or "")
+    tactic_tag = ""
+    if any(k in s_name or k in s_id for k in ["repair", "修复", "反包"]):
+        tactic_tag = ' <span class="scen-tactic-tag" style="font-size:10.5px;padding:1px 5px;border-radius:3px;background:rgba(251,191,36,0.15);color:#fbbf24;border:1px solid rgba(251,191,36,0.3);vertical-align:middle;">战法B/铁律1</span>'
+    elif any(k in s_name or k in s_id for k in ["retreat", "退潮", "分化", "杀跌"]):
+        tactic_tag = ' <span class="scen-tactic-tag" style="font-size:10.5px;padding:1px 5px;border-radius:3px;background:rgba(245,72,84,0.15);color:#f85149;border:1px solid rgba(245,72,84,0.3);vertical-align:middle;">战法E/铁律2</span>'
+    elif any(k in s_name or k in s_id for k in ["diffusion", "扩散", "低位", "轮动"]):
+        tactic_tag = ' <span class="scen-tactic-tag" style="font-size:10.5px;padding:1px 5px;border-radius:3px;background:rgba(6,182,212,0.15);color:#06b6d4;border:1px solid rgba(6,182,212,0.3);vertical-align:middle;">战法C/铁律3</span>'
+    elif any(k in s_name or k in s_id for k in ["breakout", "突破", "主升"]):
+        tactic_tag = ' <span class="scen-tactic-tag" style="font-size:10.5px;padding:1px 5px;border-radius:3px;background:rgba(34,197,94,0.15);color:#22c55e;border:1px solid rgba(34,197,94,0.3);vertical-align:middle;">战法A/铁律2</span>'
+
     return (f'<div class="scen-card {s.get("kind", "moderate")}{base_cls}">'
-            f'<div class="head"><span class="name">{_esc(s.get("name", ""))}{base_badge}</span>'
+            f'<div class="head"><span class="name">{_esc(s.get("name", ""))}{base_badge}{tactic_tag}</span>'
             f'<span class="prob">{_esc(s.get("prob", ""))}</span></div>'
             f'{stat_html}'
             f'{items_html}'
@@ -2385,45 +2412,42 @@ def _build_playbook(curr_h, zt, breadth, h5, date_str) -> list[dict]:
     # ① 情绪极值逆向 (最高优先级)
     if zt >= ZT_HOT:
         cmds.append({'tone': 'hot', 'icon': '🔥',
-            'text': f'涨停 {zt} 家破高潮线 — 明天别追高。过热不一定崩(缓慢消化), '
-                    f'但收益已到头, 该止盈的分批走。'})
+            'text': f'【铁律 1 · 情绪周期极值律】涨停 {zt} 家破高潮线 — 明天别追高。百股高潮后次日必大分化，收益已到头，该止盈的分批走。'})
     elif zt <= ZT_COLD or (breadth_is and breadth < 0.2):
         _r = f'上涨占比 {breadth:.0%} ' if breadth_is else ''
         cmds.append({'tone': 'cold', 'icon': '🥶',
-            'text': f'涨停 {zt} 家 {_r}冰点 — 明天优先观察情绪修复, '
-                    f'仅在承接确认后逢低加, 不做无条件抄底。'})
+            'text': f'【铁律 1 · 情绪周期极值律】涨停 {zt} 家 {_r}冰点 — 情绪极度衰竭孕育新转折，明天优先观察情绪修复，仅在承接确认后逢低加。'})
 
     # ② 孤峰预警 (最高板 ≥6 且 5 板断档)
     if curr_h >= 6 and h5 == 0:
         cmds.append({'tone': 'warn', 'icon': '⚠️',
-            'text': f'空间板 {curr_h}板孤峰、5板断档 — 龙一独一档没接力, '
-                    f'高位股先看承接与补位，未确认前不追高。'})
+            'text': f'【战法 E / 铁律 2 · 退潮空间塌陷律】空间板 {curr_h}板孤峰、5板断档 — 龙一独一档没接力，高位断板全市场高度暴跌3档，未确认前不追高。'})
     elif curr_h >= 6:
         cmds.append({'tone': 'ok', 'icon': '🪜',
-            'text': f'空间板 {curr_h}板且阶梯连续 — 主升情绪健康, '
-                    f'可放胆做题材, 中位段(3-6板)拿得住。'})
+            'text': f'【战法 A · 龙头高度突破战法】空间板 {curr_h}板且阶梯连续 — 中低位突破事前P5动能健康，可放胆做题材，中位段(3-6板)拿得住。'})
 
-    # ③ 连板 2 板陷阱 (常驻提醒)
+    # ③ 连板 2 板与同身位陷阱 (常驻提醒)
     cmds.append({'tone': 'neutral', 'icon': '📉',
-        'text': '首板/2板 → 观察封单、换手和次日承接；'
-                '3-6板 → 重点看是否突破昨日最高高度，并结合承接决定去留。'})
+        'text': '【铁律 3 / 战法 C · 双子星卡位与补涨律】首板/2板同身位竞价去弱留强只上胜者；3-6板突破P5做主升；龙头7板+后跟风在第7天迎爆发主峰。'})
 
-    # ④ 日历脾气 (T+1 前瞻)
+    # ④ 趋势大中军承接 (常驻提醒)
+    cmds.append({'tone': 'ok', 'icon': '🛡️',
+        'text': '【铁律 4 · 人气容量龙反包律】万亿主线核心大中军重在5日/10日均线企稳低吸，不追分时冲刺；主线分歧时中军企稳是全盘回血先导指标。'})
+
+    # ⑤ 日历脾气 (T+1 前瞻)
     try:
         wd = datetime.strptime(date_str, '%Y-%m-%d').weekday()
     except Exception:
         wd = -1
     if wd == 3:  # 今天周四 → 明天周五
         cmds.append({'tone': 'warn', 'icon': '📅',
-            'text': '今天周四 — 临近周末先检查高位股承接与兑现压力, '
-                    '高位股明天冲高先做减仓预案。'})
+            'text': '今天周四 — 临近周末先检查高位股承接与兑现压力，高位股明天冲高先做减仓预案。'})
     elif wd == 2:  # 今天周三 → 明天周四(全周最危险)
         cmds.append({'tone': 'warn', 'icon': '📅',
-            'text': '明天周四 — 今天尾盘不追满仓, 给明天的波动和减仓留空间。'})
+            'text': '明天周四 — 今天尾盘不追满仓，给明天的波动和减仓留空间。'})
     elif wd == 4 and (zt <= ZT_COLD or (breadth_is and breadth < 0.35)):  # 今天周五冰点 → 周一
         cmds.append({'tone': 'cold', 'icon': '📅',
-            'text': '周五冰点收盘 — 周一优先观察修复信号, '
-                    '不在恐慌盘中机械割肉，也不预设必然反弹。'})
+            'text': '周五冰点收盘 — 周一优先观察修复信号，不在恐慌盘中机械割肉，也不预设必然反弹。'})
 
     return cmds
 
@@ -3155,11 +3179,14 @@ def generate_dashboard_html(ctx: dict) -> str:
     today_decision = build_today_decision(ctx, action_plan)
     action_plan = today_decision['action_plan']
     readiness_html = render_decision_readiness(today_decision['readiness'])
-    strategy_qualification_html = render_strategy_qualification(ctx.get('data_quality'))
+    strategy_qualification_html = render_strategy_qualification(
+        {**(ctx.get('data_quality') or {}), 'strategy_qualification': today_decision.get('strategy_qualification')},
+        phase_confirmation=today_decision['readiness'].get('phase_confirmation'),
+    )
     scenario_checkpoint_html = '' if blocked else render_scenario_checkpoint(ctx, today_decision['readiness'])
     decision_changes_html = render_decision_changes(ctx.get('decision_changes'))
     limit_event_html = render_limit_event_coverage(ctx.get('limit_event_snapshot'))
-    today_three_html = '' if blocked else _today_three_html(ctx, action_plan)
+    today_three_html = '' if blocked else _today_three_html(ctx, action_plan, decision=today_decision)
     action_plan_html = '' if blocked else _action_plan_html(action_plan)
     compact_market_facts_html = _compact_market_facts_html(ctx)
     quality_html = _quality_html(ctx)
@@ -3812,11 +3839,14 @@ def generate_dashboard_section(ctx: dict) -> str:
     today_decision = build_today_decision(ctx, action_plan)
     action_plan = today_decision['action_plan']
     readiness_html = render_decision_readiness(today_decision['readiness'])
-    strategy_qualification_html = render_strategy_qualification(ctx.get('data_quality'))
+    strategy_qualification_html = render_strategy_qualification(
+        {**(ctx.get('data_quality') or {}), 'strategy_qualification': today_decision.get('strategy_qualification')},
+        phase_confirmation=today_decision['readiness'].get('phase_confirmation'),
+    )
     scenario_checkpoint_html = '' if blocked else render_scenario_checkpoint(ctx, today_decision['readiness'])
     decision_changes_html = render_decision_changes(ctx.get('decision_changes'))
     limit_event_html = render_limit_event_coverage(ctx.get('limit_event_snapshot'))
-    today_three_html = '' if blocked else _today_three_html(ctx, action_plan, prefix='dbd-')
+    today_three_html = '' if blocked else _today_three_html(ctx, action_plan, prefix='dbd-', decision=today_decision)
     action_plan_html = '' if blocked else _action_plan_html(action_plan, prefix='dbd-')
     compact_market_facts_html = _compact_market_facts_html(ctx, prefix='dbd-')
     quality_html = _quality_html(ctx, prefix='dbd-')

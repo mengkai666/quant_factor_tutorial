@@ -152,7 +152,7 @@ def build_decision_readiness(
         add_issue("strategy_validation", str(decision["status"]), scope="validation", label="策略资格验证",
                   recheck="完成既有策略资格校验，不能把条件性结论当作已验证策略。")
     if scoped is not None:
-        if not qualification or _dict(qualification.get("validation")).get("status") != "validated":
+        if not qualification or (qualification.get("status") != "research_only" and _dict(qualification.get("validation")).get("status") != "validated"):
             add_issue("strategy_validation", "unverified", scope="validation", label="策略独立验证",
                       recheck="提供匹配策略、规则指纹与结果口径的独立样本外验证，不以历史天数或市场命中率代替。")
         elif qualification.get("status") == "missing_dependency":
@@ -172,10 +172,10 @@ def build_decision_readiness(
     zero_position = position == "空仓" or bool(re.fullmatch(r"0(?:\.0+)?\s*成", position))
     qualification_missing = data_status != "ready" or bool(issues) or mode != "decision"
     if scoped is not None:
-        qualification_missing = data_status != "ready" or bool(issues) or (qualification or {}).get("status") not in {"eligible", "not_applicable"}
+        qualification_missing = data_status != "ready" or bool(issues) or (qualification or {}).get("status") not in {"eligible", "not_applicable", "research_only"}
     if qualification_missing:
         strategy_status = "unverified"
-    elif zero_position or not candidates or (qualification or {}).get("status") == "not_applicable":
+    elif zero_position or not candidates or (qualification or {}).get("status") in {"not_applicable", "research_only"}:
         strategy_status = "not_applicable"
     else:
         strategy_status = "applicable"
@@ -247,6 +247,9 @@ def build_decision_readiness(
         action_status, reason_code = "no_new_positions", "qualification_incomplete"
         names = "、".join(item["label"] for item in issues[:3])
         reason = f"基础行情可用，但{names or '策略资格'}尚未通过；这是判断资格不足，不等于市场没有机会。"
+    elif scoped is not None and (qualification or {}).get("status") == "research_only":
+        action_status, reason_code = "no_new_positions", "research_only"
+        reason = "本次仅形成研究/观察分支，不生成新增交易候选；这不是缺行情，也不能靠给观察分支补一份验证记录来解锁交易。"
     elif scoped is not None and (qualification or {}).get("status") == "not_applicable":
         action_status, reason_code = "no_new_positions", "strategy_not_applicable"
         reason = "策略验证已通过，但完整观测表明本次没有该策略所需的事件；这是不适用，不是数据缺失。"
@@ -286,7 +289,9 @@ def build_decision_readiness(
         reason = "现有门禁、候选与目标时点的规则确认已通过；只进入条件计划，不代表已成交。"
 
     recheck = [item["recheck"] for item in issues]
-    if reason_code == "strategy_not_applicable":
+    if reason_code == "research_only":
+        recheck.append("等待现有规则形成适用的交易分支，再核验该分支的数据、独立验证与真实盘中条件；不把研究名单当买入池。")
+    elif reason_code == "strategy_not_applicable":
         recheck.extend((qualification or {}).get("recheck_conditions") or ["等待真实适用事件出现，再按原策略与当前时点核验。"])
     elif reason_code == "market_no_trade":
         recheck.append("重新计算既有市场/仓位规则；只有规则允许非零仓位且候选合格时才重新评估。")

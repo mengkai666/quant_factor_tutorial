@@ -15,6 +15,8 @@ from pathlib import Path
 from statistics import NormalDist
 from typing import Any, Iterable
 
+from stock_code import infer_exchange
+
 
 _MARKET_PREFIXES_UNSET = object()
 
@@ -527,6 +529,37 @@ def _parse_date_only(value: Any):
         except ValueError:
             return None
     return None
+
+
+def build_freshness_note(report_date: Any, *, today: Any = None,
+                         trading_days: Iterable[Any] | None = None) -> str:
+    """报告相对当前时点的时效提示; 报告仍是最新一份时返回空串。
+
+    为什么要这个: 报告会被归档进 `site/reports/{date}.html` 并邮件转发, 但页面只写
+    绝对日期 —— "三天前那份"和"今天刚出的那份"在读者眼里长得一模一样。
+
+    为什么按**交易日**而不是自然日: 周五的收盘报告在周六、周日读都仍然是最新一份,
+    按自然日算会在每个周末误报过期, 一个每周末都红的提示等于没有提示。没有交易日历时
+    退回自然日, 并在文案里说明口径 —— 宁可说清"我不知道过了几个交易日", 也不要拿
+    自然日冒充交易日。
+    """
+    report = _parse_date_only(report_date)
+    if report is None:
+        return ''
+    current = _parse_date_only(today) or datetime.now().date()
+    if report >= current:
+        return ''
+    iso = report.isoformat()
+    calendar = [day for day in (_parse_date_only(item) for item in (trading_days or [])) if day]
+    if calendar:
+        elapsed = sum(1 for day in calendar if report < day <= current)
+        if elapsed == 0:
+            return ''
+        return f'本报告数据截止 {iso}，之后已过 {elapsed} 个交易日，请以最新报告为准。'
+    days = (current - report).days
+    if days <= 0:
+        return ''
+    return f'本报告数据截止 {iso}，距今天 {days} 个自然日（日历不可用，按自然日计）。'
 
 
 
@@ -1310,7 +1343,7 @@ def compute_ladder_metrics(
         event_counts["broken"] += int(broken is True)
         event_counts["reclosed"] += int(reclosed_input is True)
         event_counts["reclosed_known_on_broken"] += int(broken is True and reclosed_input is not None)
-        event_counts["inconsistent_rows"] += int((attempted is False and broken is True) or (broken is False and reclosed_input is True))
+        event_counts["inconsistent_rows"] += int(bool(item.get("event_fact_conflicts")) or (attempted is False and broken is True) or (broken is False and reclosed_input is True))
         if attempted is True and broken is not None:
             bomb_total += 1
             if broken is True:
@@ -2088,12 +2121,14 @@ def _normalize_stock_code_text(text: str) -> str:
         return ""
     digits = digits[-6:].zfill(6)
     if not market:
-        if digits.startswith(("920", "430", "830", "870", "400")):
-            market = "bj"
-        elif digits.startswith(("600", "601", "603", "605", "688", "689")):
-            market = "sh"
-        else:
-            market = "sz"
+        # 交易所归属的唯一真源在 src/stock_code.py。这里原来自己写了一份代码段判据,
+        # 与 data_sources/models.py 的那份不一致 —— 5xxxxx(沪市基金) / 900xxx(沪市
+        # B股) / 83xxxx·87xxxx·88xxxx(北交所存量段) 会被判成深市。已收敛到同一份。
+        market = infer_exchange(digits)
+        if not market:
+            # 无法确定的段 (如 7xxxxx 配股/申购): 按本函数"不认识就留空"的既有约定
+            # 返回空串 —— 既不猜成深市, 也不返回一个没有交易所前缀的裸码。
+            return ""
     return f"{market}{digits}"
 
 

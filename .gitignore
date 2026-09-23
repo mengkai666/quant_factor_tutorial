@@ -24,6 +24,13 @@ data/trading_calendar_cache.csv
 data/price_gap_negative_cache.csv
 data/limit_pool_cache_meta.csv
 data/market_data_quality.json
+data/baostock_bars/
+data/baostock_close_long.csv
+data/baostock_fetch_status.csv
+data/baostock_limit_history.csv
+data/baostock_suspension.csv
+data/baostock_universe_pit.csv
+data/raw_ohlc_slices/
 
 # === 运行时生成的输出/报告 ===
 # output/ 整目录为运行时产物 (报告/图表/回测CSV/日志), 零跟踪文件, 不入 master
@@ -41,17 +48,17 @@ docs/*.visual-check.*
 # === IDE / 编辑器 ===
 .vscode/
 .idea/
+.workbuddy/
+.workbuddy-ai/
 *.swp
 *.swo
 *~
 
-# === 系统文件 ===
-Thumbs.db
-.DS_Store
-
 # === 临时/调试文件 ===
 temp_*.py
 ai_*.txt
+scratch/
+scratch_*.py
 
 # === 打包归档 ===
 *.zip
@@ -96,6 +103,7 @@ run_*.log
 %SystemRoot%/
 .playwright-cli/
 ai_quant_trade/
+github缠论项目分析/
 # 别的任务在本目录里落下的 docx 提取残渣 (内容与本项目无关), 不入库
 source_extracted.*
 source_paragraphs.txt

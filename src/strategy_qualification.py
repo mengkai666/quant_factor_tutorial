@@ -337,7 +337,8 @@ def build_strategy_event_input(snapshot: dict | None, *, report_date: str) -> di
     strategies requiring the entire attempt population still remain blocked.
     """
     from report_logic import compute_ladder_metrics
-    snap = _dict(snapshot)
+    from event_facts import resolve_limit_event_facts
+    snap = resolve_limit_event_facts(snapshot)
     rows = [deepcopy(row) for row in snap.get("records") or [] if isinstance(row, dict)]
     current = [row for row in rows if row.get("trade_date") == report_date]
     metrics = compute_ladder_metrics(current)

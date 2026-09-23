@@ -169,6 +169,8 @@ def build_report_integrity(*, report_date: Any, market_date: Any,
 def validate_report_integrity(payload: Any, *, minimum_chinese_name_coverage: float = 90.0,
                               minimum_price_coverage: float = 90.0) -> dict[str, Any]:
     """Validate a payload and return it with ``ok=True`` or raise with all failures."""
+    if isinstance(payload, dict) and payload.get("schema") == "report-integrity/v2":
+        return _validate_research_report_integrity(payload)
     if not isinstance(payload, dict) or payload.get("schema") != "report-integrity/v1":
         raise ReportIntegrityError("缺少或无法识别报告完整性元数据")
     metrics = payload.get("metrics")
@@ -232,9 +234,8 @@ def render_report_integrity_metadata(payload: dict[str, Any]) -> str:
     return f'<script type="application/json" id="report-integrity">{text}</script>'
 
 
-def extract_report_integrity(path: Any) -> dict[str, Any]:
-    """Read integrity metadata from a rendered HTML report."""
-    source = Path(path).read_text(encoding="utf-8")
+def parse_report_integrity(source: str) -> dict[str, Any]:
+    """Read metadata from HTML without creating a temporary report file."""
     match = _METADATA_RE.search(source)
     if not match:
         raise ReportIntegrityError("最终 HTML 缺少 report-integrity 元数据")
@@ -250,3 +251,81 @@ def extract_report_integrity(path: Any) -> dict[str, Any]:
 def validate_rendered_report(path: Any, **kwargs: Any) -> dict[str, Any]:
     """Validate the exact HTML artifact that is about to be published."""
     return validate_report_integrity(extract_report_integrity(path), **kwargs)
+
+
+def build_research_report_integrity(brief: dict, *, quality=None) -> dict:
+    """Describe the actual research tables, without claiming legacy quadrants exist."""
+    import math
+    if not isinstance(brief, dict) or brief.get("schema_version") != "research-brief/v1":
+        raise ReportIntegrityError("研究简报契约无法识别")
+    sectors = brief.get("sectors")
+    recent = brief.get("recent")
+    if not isinstance(sectors, list) or not isinstance(recent, dict) or not isinstance(recent.get("stocks"), list):
+        raise ReportIntegrityError("研究简报缺少板块或多板股结构")
+    watch = []
+    for sector in sectors:
+        if not isinstance(sector, dict) or not isinstance(sector.get("stocks"), list):
+            raise ReportIntegrityError("板块个股结构无效")
+        watch.extend(sector["stocks"])
+    if not isinstance(recent.get("more_stocks", []), list):
+        raise ReportIntegrityError("近期多板补充记录必须为列表")
+    recent_rows = recent["stocks"] + recent.get("more_stocks", [])
+    all_rows = watch + recent_rows
+    bad_price = bad_identity = bad_date = 0
+    day = brief.get("report_date")
+    for row in all_rows:
+        if not isinstance(row, dict):
+            raise ReportIntegrityError("研究股票必须为结构化记录")
+        code, name = str(row.get("code") or ""), str(row.get("name") or "").strip()
+        bad_identity += int(not re.fullmatch(r"(?:sh|sz|bj)\d{6}", code) or not name or _CODE_RE.fullmatch(name) is not None)
+        bad_date += int(row.get("source_date") != day)
+        try:
+            price = float(row.get("close"))
+            valid = not isinstance(row.get("close"), bool) and math.isfinite(price) and price > 0
+        except (ValueError, TypeError, OverflowError):
+            valid = False
+        bad_price += int(not valid)
+    duplicate_count = sum(len(rows) - len({r.get("code") for r in rows}) for rows in (watch, recent_rows))
+    blocked = quality.get("critical_blocked") or [] if isinstance(quality, dict) else []
+    if not isinstance(blocked, list) or any(not isinstance(x, str) for x in blocked):
+        raise ReportIntegrityError("核心数据状态格式无效")
+    return {"schema":"report-integrity/v2", "layout":"multi-sector-research",
+            "purpose":brief.get("purpose"), "report_date":day, "market_date":day,
+            "metrics":{"sector_count":len(sectors), "watchlist_rows":len(watch), "recent_rows":len(recent_rows),
+                "invalid_price_rows":bad_price, "invalid_identity_rows":bad_identity,
+                "wrong_date_rows":bad_date, "duplicate_rows":duplicate_count,
+                "authoritative_count":(brief.get("provenance") or {}).get("authoritative_count"),
+                "market_limit_up":(brief.get("market") or {}).get("limit_up"), "critical_blocked":list(blocked)}}
+
+
+def _validate_research_report_integrity(payload: dict) -> dict:
+    from datetime import date
+    if payload.get("layout") != "multi-sector-research" or payload.get("purpose") != "research_observation":
+        raise ReportIntegrityError("研究报告用途或布局无效")
+    try:
+        day = date.fromisoformat(str(payload.get("report_date"))).isoformat()
+        market_day = date.fromisoformat(str(payload.get("market_date"))).isoformat()
+    except (TypeError, ValueError) as exc:
+        raise ReportIntegrityError("研究报告日期无效") from exc
+    if day != market_day:
+        raise ReportIntegrityError("研究报告与行情日期不一致")
+    metrics = payload.get("metrics")
+    if not isinstance(metrics, dict):
+        raise ReportIntegrityError("研究报告缺少完整性指标")
+    required = ("sector_count", "watchlist_rows", "recent_rows", "invalid_price_rows", "invalid_identity_rows",
+                "wrong_date_rows", "duplicate_rows", "authoritative_count", "market_limit_up")
+    if any(isinstance(metrics.get(k), bool) or not isinstance(metrics.get(k), int) or metrics[k] < 0 for k in required):
+        raise ReportIntegrityError("研究报告计数必须为非负整数")
+    if metrics["authoritative_count"] != metrics["market_limit_up"]:
+        raise ReportIntegrityError("研究报告权威成员数与涨停数不一致")
+    failed = [k for k in ("invalid_price_rows", "invalid_identity_rows", "wrong_date_rows", "duplicate_rows") if metrics[k]]
+    blocked = metrics.get("critical_blocked")
+    if not isinstance(blocked, list) or any(not isinstance(x, str) for x in blocked):
+        raise ReportIntegrityError("研究报告核心数据状态无效")
+    if failed or blocked:
+        raise ReportIntegrityError("研究报告真实性校验失败: " + ", ".join(failed + blocked))
+    return {**payload, "metrics":dict(metrics), "ok":True}
+
+def extract_report_integrity(path: Any) -> dict[str, Any]:
+    """Read integrity metadata from a rendered HTML report."""
+    return parse_report_integrity(Path(path).read_text(encoding="utf-8"))

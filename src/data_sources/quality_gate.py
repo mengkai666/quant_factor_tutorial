@@ -125,6 +125,12 @@ class DataQualityError(RuntimeError):
 
 class MarketDataQualityGate:
     VALID_TRADE_STATUS = {"traded", "suspended", "not_listed", "missing"}
+    # ⚠️ ZERO **故意不在这里**。ZERO 只由 limit_pool / plates 两处产生, 语义是
+    # "源答复了, 这天确实没有这只池子" —— 跌停池在平静日就是空的。把它当阻断会让
+    # 每个平静交易日都发不出报告, 而一个永远红的闸门等于没有闸门。
+    # 要拦的是"空/陈旧冒充当日", 判据用**源自己申报的日期**
+    # (见 limit_pool_provider._source_day_mismatch), 不是用"结果为空"。
+    # 回归保护: tests/test_quality_gate.py 里的两条 ZERO 语义用例。
     CRITICAL_FETCH_STATUS = {
         FetchStatus.PARTIAL, FetchStatus.FAILED, FetchStatus.STALE,
         FetchStatus.NOT_AVAILABLE,

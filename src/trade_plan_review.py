@@ -203,7 +203,7 @@ def _daily_status(plan: dict, ready: dict, decision: dict, *, has_candidates: bo
     if reason == "no_candidates" or action == "no_trade_no_candidate":
         return "no_trade_no_candidate"
     position = _text(plan.get("position"))
-    if (reason == "market_no_trade" or action == "no_trade_market_defensive"
+    if (reason in {"market_no_trade", "research_only"} or action == "no_trade_market_defensive"
             or position == "空仓" or re.fullmatch(r"0(?:\.0+)?\s*成", position)):
         return "no_trade_market_defensive"
     if not has_candidates or reason == "no_candidates" or action == "no_trade_no_candidate":

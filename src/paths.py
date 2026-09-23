@@ -40,7 +40,14 @@ else:
     # src/ 的上一级是仓库根
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-DATA_DIR = os.path.join(BASE_DIR, 'data')
+# 数据目录可被环境变量覆盖 —— **只给测试用**。
+# 为什么需要: 单测跑真实流水线时会顺手把生产缓存写掉(实测踩过三次: fetch_status.csv /
+# ths_sector_hist.json / cninfo 两个公告缓存), 而且缓存"覆盖不住请求日期"时会真的联网重拉。
+# 根因之一是缓存路径都是**模块级常量**(import 时绑定), 一个个 patch 极容易漏。
+# 有了这个覆盖, `tests/conftest.py` 只要在 import 被测模块之前把 data/ 拷到临时目录并设好
+# QF_DATA_DIR, 整套件就既不写生产数据也不发网络请求。
+# 生产路径不受影响: 不设这个变量时行为与原来完全一致。
+DATA_DIR = os.environ.get('QF_DATA_DIR') or os.path.join(BASE_DIR, 'data')
 OUTPUT_DIR = os.path.join(BASE_DIR, 'output')
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -61,7 +68,23 @@ PREDICTION_HISTORY = os.path.join(DATA_DIR, 'prediction_history.jsonl')
 DAILY_SNAPSHOT_DIR = os.path.join(DATA_DIR, 'report_daily_snapshots')
 PHASE_SNAPSHOT_HISTORY = os.path.join(DATA_DIR, 'market_phase_snapshots.jsonl')
 LIMIT_EVENT_SNAPSHOT_DIR = os.path.join(DATA_DIR, 'limit_events')
+RAW_BAR_CACHE_DIR = os.path.join(DATA_DIR, 'raw_ohlc_slices')
 STRATEGY_VALIDATION_FILE = os.path.join(DATA_DIR, 'strategy_validation.json')
+# === baostock 长历史日线 (逐股 gzip, 用于重建涨停/连板历史 + 停牌标记) ===
+# 存在的理由: 涨停池接口对历史日期返回 0 行 (见 memory zt-pool-api-no-history),
+# 想把样本从 10 个月拉长只能从 K 线重建涨停。baostock 的 preclose/isST/tradestatus
+# 三个字段刚好同时解决"涨停判据的分母""ST 的 5% 限制""假平盘"三件事。
+# 逐股一个 gz 文件 = 天然可续跑 (文件存在即已抓), 不会因为中断丢掉前面 4000 只。
+BAOSTOCK_BAR_DIR = os.path.join(DATA_DIR, 'baostock_bars')
+BAOSTOCK_FETCH_STATUS = os.path.join(DATA_DIR, 'baostock_fetch_status.csv')
+# 重建产物 (小表, 供研究模块直接读)
+BAOSTOCK_LIMIT_HISTORY = os.path.join(DATA_DIR, 'baostock_limit_history.csv')
+# 时点股票池 (逐季 all_stock 的并集)。stock_universe.csv 只有当前在册的票、退市行数
+# 为 0, 直接拿它重建长样本就是生存偏差 —— 那段时间退市/被并的票会被静默剔掉,
+# 而炒到高位的票恰好常在其中。all_stock 一次 30~70s, 所以结果必须缓存。
+BAOSTOCK_UNIVERSE_PIT = os.path.join(DATA_DIR, 'baostock_universe_pit.csv')
+BAOSTOCK_SUSPENSION = os.path.join(DATA_DIR, 'baostock_suspension.csv')
+BAOSTOCK_CLOSE_LONG = os.path.join(DATA_DIR, 'baostock_close_long.csv')
 AUDIT_DIR = os.path.join(DATA_DIR, 'report_audit')
 FETCH_STATUS_CACHE = os.path.join(DATA_DIR, 'fetch_status.csv')
 CALENDAR_CACHE = os.path.join(DATA_DIR, 'trading_calendar_cache.csv')

@@ -34,6 +34,7 @@ if sys.platform == 'win32':
 
 import pandas as pd
 from datetime import datetime, timedelta
+from web_assets import echarts_head_html
 from zoneinfo import ZoneInfo
 from data_sources.models import normalize_code
 
@@ -977,7 +978,7 @@ def generate_echarts_html(df, save_path='连板高度分析.html'):
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>短线情绪 — 市场高度</title>
-<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+{echarts_head_html()}
 <style>
 * {{ margin: 0; padding: 0; box-sizing: border-box; }}
 html, body {{ width: 100%; height: 100%; overflow: hidden; background: #000; }}

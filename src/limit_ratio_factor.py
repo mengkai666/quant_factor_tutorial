@@ -101,6 +101,19 @@ class MarketSentimentFactor:
             if not nums:
                 return None
 
+            # 接口**忽略 Day 参数**, 永远返回最近一个交易日的快照 —— 但它自己报了
+            # `date`, 必须拿这个字段与请求日比对。2026-09-12 实测: 请求 2026-09-10
+            # 和请求 2026-07-15 返回的是同一份 date=2026-09-11、nums 逐字段相同的
+            # 数据。原实现把**请求日**直接写进 "date", 于是调用方 `api_date == d`
+            # 的陈旧判据成了自证循环, 永远成立。
+            # 拒掉之后由价格缓存算出的 A/D (src/ad_breadth.py 口径) 兜底; 拿别的日子
+            # 的涨跌家数冒充历史, 会直接污染情绪指数/择时信号/回测的共同输入。
+            reported = str(res_json.get("date") or "").strip()[:10]
+            requested = str(day or "").strip()[:10]
+            if reported and requested and reported != requested:
+                print(f"  ⚠️ LongHu 快照日期 {reported} ≠ 请求日 {requested}, 丢弃该快照")
+                return None
+
             def _count(key):
                 value = nums.get(key)
                 if value in (None, ""):
@@ -116,7 +129,9 @@ class MarketSentimentFactor:
                 return None
             total = up + down
             return {
-                "date": day.replace('-', ''),
+                # 结果里的日期来自源自己申报的字段 (若源没给, 才回落到请求日),
+                # 紧凑格式与既有消费方保持一致。
+                "date": (reported.replace('-', '') if reported else day.replace('-', '')),
                 "up": up,
                 "down": down,
                 "flat": None,
