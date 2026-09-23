@@ -7,6 +7,8 @@ from functools import lru_cache
 import re
 from typing import Any
 
+from stock_code import infer_exchange
+
 
 _CANONICAL_RE = re.compile(r"^(sh|sz|bj)(\d{6})$", re.IGNORECASE)
 _PREFIXED_RE = re.compile(r"^(sh|sz|bj)[.](\d{6})$", re.IGNORECASE)
@@ -35,13 +37,10 @@ def _canonical_code(text: str) -> tuple[str | None, str | None]:
 
     if not re.fullmatch(r"\d{6}", text):
         return None, "unsupported"
-    if text.startswith(("4", "8")) or text.startswith("92"):
-        exchange = "bj"
-    elif text.startswith(("5", "6", "9")):
-        exchange = "sh"
-    elif text.startswith(("0", "1", "2", "3")):
-        exchange = "sz"
-    else:
+    # 交易所归属的唯一真源在 src/stock_code.py: 这里原来自己写了一份代码段判据,
+    # 与 report_logic 的那份不一致 (5xxxxx / 900xxx / 83xxxx 归属不同), 已收敛。
+    exchange = infer_exchange(text)
+    if exchange is None:
         return None, "exchange"
     return exchange + text, None
 

@@ -21,7 +21,8 @@ from decision_dashboard import (build_dashboard_ctx, build_today_decision, write
                                 generate_dashboard_html, generate_dashboard_section, _action_plan_html)
 from decision_readiness import render_decision_readiness
 from limit_events import build_limit_event_snapshot, load_limit_event_snapshot
-from paths import CALENDAR_CACHE, LIMIT_EVENT_SNAPSHOT_DIR, STRATEGY_VALIDATION_FILE
+from event_inputs import prepare_limit_event_facts, select_event_observations
+from paths import CALENDAR_CACHE, LIMIT_EVENT_SNAPSHOT_DIR, RAW_BAR_CACHE_DIR, STRATEGY_VALIDATION_FILE
 from strategy_qualification import load_validation_records, qualify_strategies, build_strategy_event_input, scoped_qualification
 from recap_panels import (render_decision_changes, render_daily_journal, render_trade_history,
                           render_limit_event_coverage, render_scenario_checkpoint, render_strategy_qualification)
@@ -40,16 +41,25 @@ def build_preview(audit_path, output_dir, *, calendar_cache=CALENDAR_CACHE, hist
     facts = context.setdefault("facts", {})
     snapshot = facts.get("market_snapshot") or {}
     events = load_limit_event_snapshot(LIMIT_EVENT_SNAPSHOT_DIR, report_date)
-    if events is None:
-        events = facts.get("limit_event_snapshot") or build_limit_event_snapshot(snapshot.get("limit_pool_rows") or [], report_date, source="historical_audit")
+    audited_events = facts.get("limit_event_snapshot")
+    if isinstance(audited_events, dict) and audited_events.get("trade_date") == report_date:
+        # The audit owns its membership and any embedded derivation evidence.
+        # An archive can enrich compatible observations, not replace that pool.
+        events = select_event_observations(audited_events, events, preserve_existing_members=True)
+    elif events is None:
+        events = build_limit_event_snapshot(snapshot.get("limit_pool_rows") or [], report_date, source="historical_audit")
+    # Rebuild consumer facts from retained observations and cache-only raw bars.
+    # A persisted zero-coverage summary is not newer evidence, and this must
+    # never trigger network collection or write back to the source audit.
+    events = prepare_limit_event_facts(events, cache_dir=RAW_BAR_CACHE_DIR)["snapshot"]
     facts["limit_event_snapshot"] = events
+    event_input = build_strategy_event_input(events, report_date=report_date)
+    facts["strategy_event_metrics"] = event_input
     scoped = None
     if validation_path is not None or scoped_qualification(context.get("quality")) is None:
         # An old decision badge/count is not independent authorization. Without
         # explicit evidence, annotate legacy previews as unverified, not approved.
         loaded = load_validation_records(validation_path) if validation_path is not None else {"records": []}
-        event_input = facts.get("strategy_event_metrics") or build_strategy_event_input(events, report_date=report_date)
-        facts["strategy_event_metrics"] = event_input
         scoped = qualify_strategies(context.get("scenario_plans") or [], quality=context.get("quality") or {},
             validation_records=loaded["records"], event_metrics=event_input,
             report_date=report_date, target_trade_date=target)
@@ -92,7 +102,7 @@ def build_preview(audit_path, output_dir, *, calendar_cache=CALENDAR_CACHE, hist
     embedded = generate_dashboard_section(ctx)
     (output / f"dashboard_{report_date}.html").write_text(full, encoding="utf-8")
     (output / f"embedded_{report_date}.html").write_text(embedded, encoding="utf-8")
-    panels = (render_decision_readiness(decision["readiness"]) + render_strategy_qualification({"strategy_qualification": effective_qualification}) + render_scenario_checkpoint(ctx, decision["readiness"])
+    panels = (render_decision_readiness(decision["readiness"]) + render_strategy_qualification({**context.get("quality", {}), "strategy_qualification": effective_qualification}, phase_confirmation=decision["readiness"].get("phase_confirmation")) + render_scenario_checkpoint(ctx, decision["readiness"])
               + render_decision_changes(review["decision_changes"]) + _action_plan_html(decision["action_plan"])
               + render_limit_event_coverage(events) + render_daily_journal(ctx) + render_trade_history(ctx))
     compact = ('<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'

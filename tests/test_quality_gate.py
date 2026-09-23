@@ -214,3 +214,38 @@ def test_quality_gate_checks_limit_pool_rows_and_plate_attribution():
     assert "limit_pool_duplicate" in {issue.code for issue in report.critical}
     assert "limit_pool_count" in {issue.code for issue in report.critical}
     assert "fetch_status" in {issue.code for issue in report.warnings}
+
+
+def test_empty_limit_pool_on_the_requested_day_does_not_block_publication():
+    """平静交易日的空涨停池是**合法结果**, 不是抓取失败。
+
+    这条是防回归的: 2026-09-12 复盘时曾提出"把 ZERO 纳入核心阻断", 但核实后
+    ZERO 只由 limit_pool / plates 两处产生, 而它们返回空的语义是"源答了, 这天
+    确实没有这只池子"(跌停池在平静日就是空的)。把 ZERO 当阻断会让每个平静
+    交易日都发不出报告 —— 一个永远红的闸门等于没有闸门。
+
+    真正要拦的是"空/陈旧冒充当日", 那个用源自己申报的日期判 (见
+    tests/test_limit_pool_source_day.py), 不是用"空"这个结果判。
+    """
+    empty_pool = FetchResult.zero(
+        dataset="limit_pool", date="2026-08-05", source="fixture",
+        scope="SH,SZ,BJ",
+    )
+
+    report = MarketDataQualityGate().validate(
+        _universe(), _prices(), "2026-08-05", [empty_pool]
+    )
+
+    assert report.ok, f"平静日被误判为不可发布: {report.critical}"
+    assert not [issue for issue in report.critical if issue.code == "fetch_status"]
+
+
+def test_zero_is_deliberately_outside_the_critical_fetch_status_set():
+    """把 ZERO 加进阻断集合之前, 先读这段理由和上面的用例。"""
+    from data_sources.models import FetchStatus
+
+    assert FetchStatus.ZERO not in MarketDataQualityGate.CRITICAL_FETCH_STATUS
+    # 真正的失败语义必须仍在集合里。
+    assert {FetchStatus.PARTIAL, FetchStatus.FAILED,
+            FetchStatus.STALE, FetchStatus.NOT_AVAILABLE} <= \
+        MarketDataQualityGate.CRITICAL_FETCH_STATUS

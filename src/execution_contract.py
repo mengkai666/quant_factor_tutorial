@@ -42,9 +42,41 @@ def _number(value: Any) -> float | None:
     return result if result == result else None
 
 
+_CODE_COLUMNS = ("code", "代码")
+_DATE_COLUMNS = ("date", "日期")
+_CLOSE_COLUMNS = ("close_raw",)
+
+
+def _target_day_frame(price_df: Any, target: str) -> Any:
+    """把价格表**先按报告日切片**再往下游传。
+
+    为什么不直接交给 `_as_rows` 做整表 `to_dict("records")`:
+        生产里的价量表是 100 万行 × 8 列的全市场价格缓存, 而这里只要报告日当天
+        那十几只股票的一列收盘价。整表 materialize 的代价是秒级的, 而且渲染层每张
+        卡片都会重建一次决策 —— 2026-09-12 cProfile: `_exact_raw_closes` 被
+        `build_execution_contract` 调用 5 次, 合计 83.5s, 其中 pandas `to_dict`
+        占 29.8s。按日切片是向量化操作, 把它换成毫秒级。
+
+    语义上与原实现完全一致: 下游仍按 (code, date, close_raw) 逐行判定, 切片只是
+    提前丢掉必然被 `date != target` 过滤掉的行。非 DataFrame / 缺日期列 / 切片
+    抛错都原样退回原对象, 不会因为优化而丢数据。
+    """
+    columns = getattr(price_df, "columns", None)
+    if columns is None or not target or not hasattr(price_df, "loc"):
+        return price_df
+    date_col = next((name for name in _DATE_COLUMNS if name in columns), None)
+    if date_col is None:
+        return price_df
+    try:
+        day = price_df[date_col].astype(str).str.slice(0, 10)
+        return price_df.loc[day == target]
+    except Exception:
+        return price_df
+
+
 def _exact_raw_closes(price_df: Any, report_date: str | None) -> dict[str, dict[str, Any]]:
-    rows = _as_rows(price_df)
     target = str(report_date or "")[:10]
+    rows = _as_rows(_target_day_frame(price_df, target))
     result: dict[str, dict[str, Any]] = {}
     for row in rows:
         code = _code(row.get("code", row.get("代码")))

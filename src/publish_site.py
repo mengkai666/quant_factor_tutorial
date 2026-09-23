@@ -18,7 +18,9 @@ import os
 import re
 import shutil
 from datetime import datetime
-from report_integrity import validate_rendered_report
+from pathlib import Path
+from report_integrity import validate_rendered_report, parse_report_integrity, validate_report_integrity, ReportIntegrityError
+from research_subpages import add_research_entry, add_research_parent, remove_research_entry
 
 
 def _fmt_date(d):
@@ -80,12 +82,22 @@ def _scan_reports(reports_dir, max_date=None):
     return items
 
 
+def _same_report_content(left, right):
+    """Allow only the owned navigation block to differ across directory depths."""
+    if left == right:
+        return True
+    try:
+        return remove_research_entry(left.decode('utf-8')) == remove_research_entry(right.decode('utf-8'))
+    except UnicodeError:
+        return False
+
+
 def resolve_generated_report_date(output_html, reports_dir, run_date=None):
     """返回本次运行实际生成的、最接近运行日的报告日期。
 
     运行日不一定是交易日，数据源也可能暂时只能返回最近一个已完成交易日。
     因此发布校验不能直接把自然日拼成 ``reports/YYYY-MM-DD.html``；必须在
-    ``reports_dir`` 中寻找与当前生成文件内容完全一致的真实归档，并且排除
+    ``reports_dir`` 中寻找与当前生成文件业务内容一致的真实归档（仅忽略本模块导航差异），并且排除
     运行日之后的未来归档。找不到匹配归档时返回 ``None``，绝不伪造日期。
     """
     output_path = os.fspath(output_html)
@@ -107,7 +119,7 @@ def resolve_generated_report_date(output_html, reports_dir, run_date=None):
         candidate = os.path.join(reports_path, f'{embedded_date}.html')
         try:
             with open(candidate, 'rb') as archived:
-                return embedded_date if archived.read() == output_bytes else None
+                return embedded_date if _same_report_content(archived.read(), output_bytes) else None
         except OSError:
             return None
 
@@ -115,7 +127,7 @@ def resolve_generated_report_date(output_html, reports_dir, run_date=None):
         candidate = os.path.join(reports_path, filename)
         try:
             with open(candidate, 'rb') as archived:
-                if archived.read() == output_bytes:
+                if _same_report_content(archived.read(), output_bytes):
                     return date_str
         except OSError:
             continue
@@ -219,7 +231,17 @@ def _render_dragon_entry(dragon_date):
   </a>'''
 
 
-def _render_index(reports, updated_at, summary=None, dashboard_date=None, dragon_date=None):
+def _render_research_entry(research_date):
+    if not research_date:
+        return ''
+    day = _esc(research_date)
+    return (f'<div class="verdict" style="margin:16px 0;padding:18px;border:1px solid #30363d;border-radius:12px">'
+            f'<a href="research_briefs/research_brief_{day}.html" style="color:#58a6ff;text-decoration:none">'
+            f'<strong>多板块观察 →</strong><div style="margin-top:6px;font-size:13px">'
+            f'每板块3只重点股 · 近期多板轨迹 · {day}</div></a></div>')
+
+
+def _render_index(reports, updated_at, summary=None, dashboard_date=None, dragon_date=None, research_date=None):
     """生成首页 HTML。reports: [(date_str, filename)] 已按日期倒序。
 
     dashboard_date: 提供后在首页顶部插入"当日决策看板"卡片入口。
@@ -359,6 +381,7 @@ def _render_index(reports, updated_at, summary=None, dashboard_date=None, dragon
 
   {verdict_html}
 
+  {_render_research_entry(research_date)}
   {_render_dashboard_entry(dashboard_date)}
 
   {_render_dragon_entry(dragon_date)}
@@ -382,7 +405,7 @@ def _render_index(reports, updated_at, summary=None, dashboard_date=None, dragon
 
 
 def publish(output_html, site_dir, report_date=None, summary=None, dashboard_html=None,
-            dragon_html=None):
+            dragon_html=None, research_html=None):
     """把 output_html 归档进 site_dir 并重建首页。
 
     Args:
@@ -420,15 +443,61 @@ def publish(output_html, site_dir, report_date=None, summary=None, dashboard_htm
         except Exception:
             report_date = datetime.now()
 
+    date_str = _fmt_date(report_date)
+    # Every destination is known before writes; none may alias the input main page.
+    destinations = [Path(site_dir) / 'reports' / f'{date_str}.html',
+                    Path(site_dir) / 'latest.html', Path(site_dir) / 'index.html']
+    for enabled, directory, filename in (
+            (dashboard_html, 'dashboards', f'{date_str}.html'),
+            (dragon_html, 'dragon', f'{date_str}.html'),
+            (research_html is not None, 'research_briefs', f'research_brief_{date_str}.html')):
+        if enabled:
+            destinations.extend((Path(site_dir) / directory / filename, Path(site_dir) / directory / 'latest.html'))
+    if Path(output_html).resolve() in {p.resolve() for p in destinations}:
+        raise ReportIntegrityError('发布目标不能覆盖输入主报告')
+    research_date = None
+    child_document = None
+    update_research_latest = False
+    if research_html is not None:
+        metadata = validate_report_integrity(parse_report_integrity(research_html))
+        heading_date = _REPORT_DATE_META_RE.search(research_html)
+        if (metadata.get('schema') != 'report-integrity/v2'
+                or metadata.get('purpose') != 'research_observation'
+                or metadata.get('report_date') != date_str
+                or heading_date is None or heading_date.group(1) != date_str):
+            raise ReportIntegrityError('研究子页用途或日期与主报告不一致')
+        research_date = date_str
+        child_document = add_research_parent(research_html, f'../reports/{date_str}.html')
+        from research_brief_io import research_latest_update_allowed
+        update_research_latest = research_latest_update_allowed(
+            os.path.join(site_dir, "research_briefs", "latest.html"), date_str)
+
+    with open(output_html, 'r', encoding='utf-8', newline='') as source:
+        main_document = remove_research_entry(source.read())
+    from annual_height_view import package_annual_study
+    archived_document, latest_document = package_annual_study(
+        main_document, Path(output_html).parent, site_dir
+    )
+    if research_date:
+        child_name = f'research_brief_{date_str}.html'
+        archived_document = add_research_entry(archived_document, f'../research_briefs/{child_name}', report_date=date_str)
+        latest_document = add_research_entry(latest_document, f'research_briefs/{child_name}', report_date=date_str)
+
     reports_dir = os.path.join(site_dir, 'reports')
     os.makedirs(reports_dir, exist_ok=True)
-
-    date_str = _fmt_date(report_date)
     archived = os.path.join(reports_dir, f'{date_str}.html')
-    shutil.copyfile(output_html, archived)
+    with open(archived, 'w', encoding='utf-8', newline='') as target:
+        target.write(archived_document)
+    with open(os.path.join(site_dir, 'latest.html'), 'w', encoding='utf-8', newline='') as target:
+        target.write(latest_document)
 
-    # latest.html: 固定链接, 始终等于最新一期
-    shutil.copyfile(output_html, os.path.join(site_dir, 'latest.html'))
+    if research_date:
+        child_dir = os.path.join(site_dir, 'research_briefs')
+        os.makedirs(child_dir, exist_ok=True)
+        child_files = [f'research_brief_{date_str}.html'] + (['latest.html'] if update_research_latest else [])
+        for filename in child_files:
+            with open(os.path.join(child_dir, filename), 'w', encoding='utf-8', newline='') as target:
+                target.write(child_document)
 
     # === 决策看板归档 (方案 B 第 3 步) ===
     dashboard_date = None
@@ -465,7 +534,7 @@ def publish(output_html, site_dir, report_date=None, summary=None, dashboard_htm
     index_path = os.path.join(site_dir, 'index.html')
     with open(index_path, 'w', encoding='utf-8') as f:
         f.write(_render_index(reports, updated_at, summary, dashboard_date=dashboard_date,
-                              dragon_date=dragon_date))
+                              dragon_date=dragon_date, research_date=research_date))
 
     print(f"  [publish] 已归档 {date_str} → {archived}")
     print(f"  [publish] 首页已重建 ({len(reports)} 期) → {index_path}")

@@ -119,3 +119,98 @@ def test_unassigned_results_stay_visible_without_inventing_a_plan():
         "pnl_aggregation_status": "ambiguous"}}), "html.parser").get_text(" ", strip=True)
     assert "未归属" in text
     assert "unbound" in text
+
+
+def test_tactics_review_panel_renders_and_escapes():
+    from recap_panels import render_tactics_review_panel
+    # 1. Default render
+    html_default = render_tactics_review_panel()
+    assert "游资四大核心战法" in html_default or "四大临盘执行铁律" in html_default
+    assert "情绪周期极值律" in html_default
+    assert "双子星卡位生死律" in html_default
+    assert "华瓷股份" in html_default
+    assert "博通集成" in html_default
+    assert "中际旭创" in html_default
+    assert "sec-tactics" in html_default
+    # Verify quantitative strategies A-G
+    assert "战法 A" in html_default and "龙头高度突破战法" in html_default
+    assert "战法 B" in html_default and "龙头断板反包战法" in html_default
+    assert "战法 C" in html_default and "模仿补涨与板块扩散战法" in html_default
+    assert "战法 D" in html_default and "周期生命线与见峰预警战法" in html_default
+    assert "战法 E" in html_default and "接力换手防守与退潮空间塌陷战法" in html_default
+    assert "战法 F" in html_default and "真龙头四维基因指纹辨识战法" in html_default
+    assert "战法 G" in html_default and "严重异动监管与滑窗二波战法" in html_default
+
+    # 2. Custom data and escaping
+    custom_data = {
+        "report_date": "2026-09-22",
+        "target_date": "2026-09-23",
+        "status_summary": {
+            "tactical_stance": "<script>alert(1)</script>",
+            "stance_color": "#d29922",
+        },
+        "tactics_system": [{
+            "id": "t1", "name": "测试战法", "sub_title": "测试副标题", "tag": "测试",
+            "color": "#ff0000", "principle": "测试原理", "rule": "测试规则",
+        }],
+    }
+    html_custom = render_tactics_review_panel(custom_data)
+    assert "<script>alert(1)</script>" not in html_custom
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html_custom
+    assert "测试战法" in html_custom
+
+
+def test_build_tactics_data_from_report_dynamic():
+    from recap_panels import build_tactics_data_from_report, render_tactics_review_panel
+    ctx = {
+        "report_date": "2026-09-21",
+        "target_trade_date": "2026-09-22",
+        "market_thesis": {
+            "breadth_relay_state": {
+                "limit_up": 103,
+                "limit_down": 2,
+                "breadth_ratio": 0.835,
+                "promotion_rate": 0.269,
+            },
+            "core_conflict": {
+                "resolution_condition": "观察主线核心晋级与板块共振",
+            }
+        },
+        "today_decision": {
+            "action_plan": {"position": "2.5 成"},
+            "candidates": [
+                {"name": "博通集成", "code": "sh603068", "role": "attack_card", "trigger": "放量高开", "invalid": "跌破均线"},
+                {"name": "中际旭创", "code": "sz300308", "role": "capacity_core", "trigger": "均线低吸", "invalid": "破5日线"},
+            ]
+        },
+        "scenario_plans": [
+            {"scenario_id": "Branch_A", "name": "弱转强修复", "probability": "35%", "trigger_condition": "龙头开盘拉红", "action_plan": "试错2成"},
+            {"scenario_id": "Branch_B", "name": "退潮分化", "probability": "45%", "trigger_condition": "跌停激增", "action_plan": "防守0仓位"},
+        ]
+    }
+    echelon = [
+        {"height": "5连板", "count": 1, "stocks": ["华瓷股份"]},
+        {"height": "4连板", "count": 2, "stocks": ["内蒙新华", "世联行"]},
+        {"height": "2连板", "count": 3, "stocks": ["博通集成", "大亚圣象", "三羊马"]},
+    ]
+    data = build_tactics_data_from_report(ctx, echelon=echelon, report_date="2026-09-21")
+    assert data["report_date"] == "2026-09-21"
+    assert data["target_date"] == "2026-09-22"
+    assert "高潮后强分化淘汰期" in data["status_summary"]["cycle_stage"]
+    assert "华瓷股份" in data["status_summary"]["core_beacons"]
+    # Verify echelon mapping
+    echelon_rows = data["today_recap"]["echelon_breakdown"]
+    assert any("5连板 空间板" in r["tier"] and "战法A" in r["analysis"] for r in echelon_rows)
+    assert any("4连板 身位战" in r["tier"] and "双子星" in r["status"] for r in echelon_rows)
+    assert any("2连板 晋级区" in r["tier"] for r in echelon_rows)
+    # Verify candidate tactics assignment
+    targets = data["tomorrow_plan"]["focus_targets"]
+    assert any(t["name"] == "博通集成" and "双子星卡位" in t["tactic"] for t in targets)
+    assert any(t["name"] == "中际旭创" and "人气容量龙" in t["tactic"] for t in targets)
+    # Verify HTML rendering with this dynamic context
+    html_dyn = render_tactics_review_panel(context=ctx, echelon=echelon, report_date="2026-09-21")
+    assert "2026-09-21 对账 → 2026-09-22 操盘推演" in html_dyn
+    assert "华瓷股份" in html_dyn
+    assert "博通集成" in html_dyn
+
+

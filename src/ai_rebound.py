@@ -85,6 +85,23 @@ AI_PRIMARY_MAX_ATTEMPTS = _int_env("AI_PRIMARY_MAX_ATTEMPTS", 2)
 AI_RETRY_BASE_DELAY = _float_env("AI_RETRY_BASE_DELAY", 0.5)
 AI_RETRY_MAX_DELAY = _float_env("AI_RETRY_MAX_DELAY", 2.0)
 AI_REQUEST_TIMEOUT = _float_env("AI_REQUEST_TIMEOUT", 120.0)
+# 一次日报里 AI 研判允许占用的**墙钟总预算** (含重试与备用模型), 秒。
+#
+# 为什么必须存在: AI 只是报告的增强项, 却同步挂在报告主链路上, 而"单次请求超时"
+# 管不住**总时长** —— 重试次数和备用模型会把单次超时成倍放大。
+# 2026-09-12 复盘实测本机 .env: AI_PRIMARY_MAX_ATTEMPTS=3 + AI_REQUEST_TIMEOUT=240,
+# 再加备用模型 1 次 = 最坏 3×240 + 1×240 = 960s (16 分钟) 全部堵在日报里;
+# 而 2026-08-27 那次成功调用**静默**占了 73 秒 (成功路径不打印任何日志,
+# 日志里只剩一团没有输出的空白)。
+# 180s 的取值依据: 必须远小于价格抓取的 GLOBAL_TIMEOUT(300s), 保证 AI 挤不掉行情。
+AI_TOTAL_BUDGET = _float_env("AI_TOTAL_BUDGET", 180.0)
+
+
+def _clock() -> float:
+    """单调墙钟包装。单独包一层是为了让测试能替换时间源。"""
+    return time.monotonic()
+
+
 # 中转地址 (留空 = 官方)。裸域名会自动补 /v1/messages。
 ANTHROPIC_BASE_URL = os.environ.get("ANTHROPIC_BASE_URL", "").strip()
 # 部分中转强制要求显式启用 1M 上下文 beta (如 anyrouter: 不带此头直接 400
@@ -286,8 +303,27 @@ def _sanitize_output_against_facts(output: dict, facts: dict) -> int:
 
 
 def run_guarded_ai(facts: dict, policy, *, caller=None, timeout: float | None = None) -> dict:
-    """按发布策略控制 AI 调用、输出范围、缓存和审计指纹。"""
+    """按发布策略控制 AI 调用、输出范围、缓存和审计指纹。
+
+    阶段可观测性: 无论 skipped / ok / sanitized / fallback / failed, 都会打印**一行**
+    含耗时的状态, 并把 elapsed_seconds 记进 lineage。2026-08-27 那次跑批里有 73 秒
+    完全没有输出 —— 复盘确认就是本阶段一次成功的 AI 调用, 而成功路径原先不打印任何
+    日志。静默的阶段等于日志黑洞: 既看不出它跑了多久, 也区分不出"没跑"和"跑了没输出"。
+    """
     from report_logic import ReportPolicy, scan_forbidden_semantics
+
+    stage_started = _clock()
+
+    def _stage(result: dict) -> dict:
+        elapsed = _clock() - stage_started
+        lineage = result.get("lineage")
+        if isinstance(lineage, dict):
+            lineage["elapsed_seconds"] = round(elapsed, 3)
+        status = result.get("status")
+        detail = str(result.get("reason") or "")
+        print(f"  [AI 研判] 状态 {status} · 耗时 {elapsed:.1f}s"
+              + (f" · {detail[:120]}" if detail else ""))
+        return result
 
     active = policy if isinstance(policy, ReportPolicy) else ReportPolicy.from_mode(policy)
     payload = {"schema_version": "report-facts/v1", "publication_mode": active.mode, "facts": dict(facts or {})}
@@ -315,7 +351,7 @@ def run_guarded_ai(facts: dict, policy, *, caller=None, timeout: float | None = 
         model=ANTHROPIC_MODEL,
     )
     if not active.allow_ai:
-        return {"status": "skipped", "reason": "发布策略禁止 AI", "output": None, "lineage": lineage}
+        return _stage({"status": "skipped", "reason": "发布策略禁止 AI", "output": None, "lineage": lineage})
 
     diagnostics = {}
     try:
@@ -329,11 +365,11 @@ def run_guarded_ai(facts: dict, policy, *, caller=None, timeout: float | None = 
         reason = str(exc)
         cached = _cached_ai_result(identity, lineage, reason)
         if cached is not None:
-            return cached
-        return {"status": "failed", "reason": reason, "output": None, "lineage": lineage}
+            return _stage(cached)
+        return _stage({"status": "failed", "reason": reason, "output": None, "lineage": lineage})
 
     if diagnostics:
-        for key in ("attempt_count", "http_status"):
+        for key in ("attempt_count", "http_status", "elapsed_seconds", "budget_exhausted"):
             value = diagnostics.get(key)
             if value is not None:
                 lineage[key] = value
@@ -342,13 +378,13 @@ def run_guarded_ai(facts: dict, policy, *, caller=None, timeout: float | None = 
         reason = diagnostics.get("reason") or "AI 无结构化输出"
         cached = _cached_ai_result(identity, lineage, reason)
         if cached is not None:
-            return cached
-        return {
+            return _stage(cached)
+        return _stage({
             "status": "fallback",
             "reason": reason,
             "output": None,
             "lineage": lineage,
-        }
+        })
     lineage["normalized_from"] = normalized_from
     output["schema_version"] = "ai-output/v1"
     status = "ok"
@@ -371,7 +407,7 @@ def run_guarded_ai(facts: dict, policy, *, caller=None, timeout: float | None = 
         _write_ai_cache(identity, status=status, output=output, lineage=lineage)
     except OSError as exc:
         lineage["cache_write_error"] = f"{type(exc).__name__}: {exc}"
-    return {"status": status, "reason": "", "output": output, "lineage": lineage}
+    return _stage({"status": status, "reason": "", "output": output, "lineage": lineage})
 
 
 def _prompt_height(row: dict, *keys: str) -> int:
@@ -490,11 +526,21 @@ def _build_prompt(facts: dict) -> str:
 def generate_ai_rebound(
     facts: dict, timeout: float | None = None, *, return_diagnostics: bool = False,
 ) -> dict | None | tuple[dict | None, dict]:
-    """调用 Claude API；主模型有限重试，失败后可切备用模型，且不阻断日报。"""
+    """调用 Claude API；主模型有限重试，失败后可切备用模型，且不阻断日报。
+
+    总时长由 AI_TOTAL_BUDGET 约束: 预算用尽即停止重试 (诊断里 budget_exhausted=True),
+    且每次请求的 timeout 被**剩余预算**夹住 —— 否则一次卡死的连接就能吃掉整个预算。
+    """
+    started = _clock()
+
     def finish(result, *, reason="", attempt_count=0, http_status=None, extra=None):
         if not return_diagnostics:
             return result
-        diagnostics = {"reason": reason, "attempt_count": attempt_count}
+        diagnostics = {
+            "reason": reason,
+            "attempt_count": attempt_count,
+            "elapsed_seconds": round(_clock() - started, 3),
+        }
         if http_status is not None:
             diagnostics["http_status"] = http_status
         if extra:
@@ -505,6 +551,12 @@ def generate_ai_rebound(
         return finish(None, reason="AI 未启用或缺少 API Key")
 
     request_timeout = AI_REQUEST_TIMEOUT if timeout is None else timeout
+    budget = AI_TOTAL_BUDGET
+    budget_exhausted = False
+
+    def remaining() -> float:
+        return budget - (_clock() - started)
+
     prompt_facts = _compact_facts_for_prompt(facts)
     prompt = _build_prompt(prompt_facts)
 
@@ -525,18 +577,26 @@ def generate_ai_rebound(
     successful_response = None
 
     def call_model(model, attempts, allow_retry):
-        nonlocal last_response, last_error
+        nonlocal last_response, last_error, budget_exhausted
         payload = {
             "model": model,
             "max_tokens": 1500,
             "messages": [{"role": "user", "content": prompt}],
         }
         for attempt in range(attempts):
+            left = remaining()
+            if left <= 0:
+                # 预算用尽: 不再发请求 (entry 也不追加, 否则 attempt_count 会把
+                # "想发但没发"的次数算进去, 日志里看起来像真的打了这么多枪)。
+                budget_exhausted = True
+                last_error = f"AI 总预算 {budget:g}s 用尽, 停止重试"
+                break
             entry = {"model": model, "attempt": attempt + 1}
             model_attempts.append(entry)
             try:
                 response = requests.post(
-                    _resolve_api_url(), headers=headers, json=payload, timeout=request_timeout,
+                    _resolve_api_url(), headers=headers, json=payload,
+                    timeout=min(request_timeout, left),
                 )
                 last_response = response
                 status = getattr(response, "status_code", None)
@@ -570,6 +630,15 @@ def generate_ai_rebound(
                 delay = min(AI_RETRY_BASE_DELAY * (2 ** attempt), AI_RETRY_MAX_DELAY)
                 time.sleep(max(0.0, delay))
         return None
+
+    def attempt_extra() -> dict:
+        """每次收尾都要带的审计尾巴 (含预算是否被用尽)。"""
+        return {
+            "fallback_model": ANTHROPIC_FALLBACK_MODEL,
+            "fallback_attempt_count": fallback_attempt_count,
+            "model_attempts": model_attempts,
+            "budget_exhausted": budget_exhausted,
+        }
 
     try:
         successful_response = call_model(ANTHROPIC_MODEL, AI_PRIMARY_MAX_ATTEMPTS, True)
@@ -605,22 +674,14 @@ def generate_ai_rebound(
                 reason=reason,
                 attempt_count=primary_attempt_count,
                 http_status=status,
-                extra={
-                    "fallback_model": ANTHROPIC_FALLBACK_MODEL,
-                    "fallback_attempt_count": fallback_attempt_count,
-                    "model_attempts": model_attempts,
-                },
+                extra=attempt_extra(),
             )
 
         data = successful_response.json()
         blocks = data.get("content", [])
         text = "".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
         status = getattr(successful_response, "status_code", None)
-        extra = {
-            "fallback_model": ANTHROPIC_FALLBACK_MODEL,
-            "fallback_attempt_count": fallback_attempt_count,
-            "model_attempts": model_attempts,
-        }
+        extra = attempt_extra()
         if not text:
             return finish(None, reason="AI 返回空内容", attempt_count=primary_attempt_count,
                           http_status=status, extra=extra)
@@ -633,15 +694,11 @@ def generate_ai_rebound(
         # 非 post 位置（例如自定义 requests 适配器）也不让 AI 异常冒泡到日报。
         print(f"  [警告] AI 研判调用失败, 回退规则模板: {exc}")
         return finish(None, reason=f"AI 请求失败：{exc}", attempt_count=primary_attempt_count,
-                      extra={"fallback_model": ANTHROPIC_FALLBACK_MODEL,
-                             "fallback_attempt_count": fallback_attempt_count,
-                             "model_attempts": model_attempts})
+                      extra=attempt_extra())
     except Exception as exc:
         print(f"  [警告] AI 研判调用失败, 回退规则模板: {exc}")
         return finish(None, reason=f"AI 调用失败：{exc}", attempt_count=primary_attempt_count,
-                      extra={"fallback_model": ANTHROPIC_FALLBACK_MODEL,
-                             "fallback_attempt_count": fallback_attempt_count,
-                             "model_attempts": model_attempts})
+                      extra=attempt_extra())
 
 def _parse_json(text: str) -> dict | None:
     """从模型输出里稳健地抽出 JSON (容忍 ```json 代码块包裹)。"""

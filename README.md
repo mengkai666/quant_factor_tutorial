@@ -2,6 +2,8 @@
 
 A 股短线主线追踪终端。每日自动更新涨停池、概念板块分类、价格缓存和市场情绪数据，并生成 `主线强度追踪.html` 交互式报告。
 
+> **多板块观察子页。** 原主报告和原看板保持原布局；从主页面的“多板块观察”入口进入每板块3只重点股与近期多板表，子页可返回主报告。详见 [运行说明](docs/howto/multi-sector-brief.md)。
+
 ## ✨ 功能概览
 
 - 📊 **涨停梯队属性梳理表** — 连板高度→主属性/次属性/核心成分股
@@ -146,3 +148,4 @@ quant_factor_tutorial/
 - [文档索引](docs/index.md)
 
 - [逐策略资格、独立验证与条件预案](docs/howto/strategy-qualification.md)
+- [事件数据接通、离线验收与真实盘中采集](docs/howto/decision-data-connection.md)

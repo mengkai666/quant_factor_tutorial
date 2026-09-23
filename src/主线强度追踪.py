@@ -28,6 +28,7 @@ from report_logic import (
     reconcile_limit_pool,
     build_market_state,
     build_data_credibility_summary,
+    build_freshness_note,
     build_lianban_review,
     build_mainline_review,
     compute_ladder_metrics,
@@ -42,6 +43,7 @@ from data_sources.universe_provider import UniverseProvider
 from data_sources.calendar_provider import CalendarProvider
 from report_closure import build_decision_replay_context, persist_decision_review, merge_limit_event_observations
 from limit_events import build_limit_event_snapshot, archive_limit_event_snapshot, load_limit_event_snapshot
+from event_inputs import select_event_observations, prepare_limit_event_facts
 from data_sources.quality_gate import (
     aggregate_report_quality,
     build_module_quality,
@@ -87,6 +89,9 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
 from datetime import datetime, timedelta, timezone
+from web_assets import echarts_head_html
+from wordcloud_style import style_kwargs as wordcloud_style_kwargs
+from wordcloud_svg import render_svg as wordcloud_render_svg
 from fupan_report import FuPanZhangTingYuanYin
 from time_utils import filter_completed_rows, get_latest_date, get_report_cutoff
 
@@ -108,7 +113,7 @@ from paths import (
     ZT_CACHE_FILE, PRICE_CACHE, INDUSTRY_CACHE,
     SENTIMENT_CACHE, CLS_PLATE_CACHE, OUTPUT_HTML,
     SITE_DIR, SITE_URL, SECURITY_MASTER_CACHE, UNIVERSE_CACHE,
-    PREDICTION_HISTORY, DAILY_SNAPSHOT_DIR, PHASE_SNAPSHOT_HISTORY, AUDIT_DIR, CALENDAR_CACHE, LIMIT_EVENT_SNAPSHOT_DIR, STRATEGY_VALIDATION_FILE,
+    PREDICTION_HISTORY, DAILY_SNAPSHOT_DIR, PHASE_SNAPSHOT_HISTORY, AUDIT_DIR, CALENDAR_CACHE, LIMIT_EVENT_SNAPSHOT_DIR, STRATEGY_VALIDATION_FILE, RAW_BAR_CACHE_DIR, PRICE_SLICE_DIR,
 )
 CACHE_DIR = DATA_DIR  # 向后兼容: 旧代码引用 CACHE_DIR 的地方仍指向数据目录
 
@@ -599,13 +604,21 @@ def generate_wordclouds(plate_stock_data, output_dir):
             if not FONT_PATH:
                 raise FileNotFoundError("未找到CJK字体, 请安装 fonts-noto-cjk 或 fonts-wqy-zenhei")
 
-        res = {'hot_stock_b64': '', 'plate_b64': ''}
+        res = {'hot_stock_b64': '', 'plate_b64': '', 'hot_stock_svg': '', 'plate_svg': ''}
 
         def _to_base64(wc):
             img = wc.to_image()
             buf = BytesIO()
-            img.save(buf, format="PNG")
+            # optimize=True: 同样的画面体积更小, 而报告是邮件附件, 体积直接等于收件人的等待
+            img.save(buf, format="PNG", optimize=True)
             return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode('utf-8')
+
+        def _to_svg(wc, label):
+            """优先出矢量(约 2 KB vs 位图 84~117 KB); 拿不到排版数据就返回空串由调用方回退。"""
+            try:
+                return wordcloud_render_svg(wc.layout_, wc.width, wc.height, label=label)
+            except Exception:
+                return ''
 
         print("    [1/2] 抓取全网热门股...")
         # 三个热门榜互不依赖, 串行是三次 TLS 握手排队 (实测 cls 0.19s + em 1.13s
@@ -627,8 +640,10 @@ def generate_wordclouds(plate_stock_data, output_dir):
         all_stocks = weighted_list(cls) + weighted_list(em) + weighted_list(ths)
         if all_stocks:
             counter = Counter(all_stocks)
-            wc_stocks = WordCloud(width=800, height=400, background_color="#161b22", colormap="tab10", font_path=FONT_PATH).generate_from_frequencies(counter)
-            res['hot_stock_b64'] = _to_base64(wc_stocks)
+            wc_stocks = WordCloud(width=800, height=400, font_path=FONT_PATH, **wordcloud_style_kwargs()).generate_from_frequencies(counter)
+            res['hot_stock_svg'] = _to_svg(wc_stocks, '热门股票词云')
+            if not res['hot_stock_svg']:
+                res['hot_stock_b64'] = _to_base64(wc_stocks)
             res['top_stocks'] = {'cls': cls, 'em': em, 'ths': ths}  # type: ignore
 
         print("    [2/2] 生成当日涨停属性词云 & 提取Top强势板块...")
@@ -645,8 +660,10 @@ def generate_wordclouds(plate_stock_data, output_dir):
 
         if all_concepts:
             counter_concepts = Counter(all_concepts)
-            wc_concepts = WordCloud(width=800, height=400, background_color="#161b22", font_path=FONT_PATH).generate_from_frequencies(counter_concepts)
-            res['plate_b64'] = _to_base64(wc_concepts)
+            wc_concepts = WordCloud(width=800, height=400, font_path=FONT_PATH, **wordcloud_style_kwargs()).generate_from_frequencies(counter_concepts)
+            res['plate_svg'] = _to_svg(wc_concepts, '当日涨停属性词云')
+            if not res['plate_svg']:
+                res['plate_b64'] = _to_base64(wc_concepts)
             res['top_plates'] = counter_concepts.most_common(20)  # type: ignore
 
         return res
@@ -2780,6 +2797,60 @@ def _record_price_gap_outcome(frame, requested, target_dates):
         pass
 
 
+def _record_price_gap_fetch_status(meta, target_dates, started_at):
+    """把这次价格补缺的结果写进抓取状态契约 (data/fetch_status.csv)。
+
+    为什么必须有这道记录:
+        价格补缺是全流程里**唯一**一条每天真跑、却完全不进状态契约的抓取路径 ——
+        原来它的成功/部分/失败、请求数与覆盖数只落在本地 meta 字典里。于是质量闸门、
+        审计和报告里"价格可用"这句话没有任何抓取证据可核; 价格是核心数据集, 缺一天
+        会同时打坏 A/D、连板与收益(2026-09-12 复盘)。
+
+    口径: status 量的是"**缺口补上了吗**", 不是"我发出去的请求成功了吗"。
+        一只都没抓到却写 success 是 2026-08-31 已经踩过的坑, 所以
+        failed 直接落 failed, 有缺口但一只没抓 (deferred) 同样落 failed。
+
+    只在确实有活要干 (有请求或有延后) 时写行, 免得每天堆一条无信息的 success。
+    """
+    try:
+        from data_sources.fetch_status import FetchStatusStore
+        from data_sources.models import FetchResult, FetchStatus
+        from paths import FETCH_STATUS_CACHE
+    except Exception as exc:
+        print(f'  ⚠️ 价格抓取状态未记录 ({type(exc).__name__}: {exc})')
+        return
+
+    requested = int(meta.get('fallback_requested') or 0)
+    covered = int(meta.get('fallback_covered') or 0)
+    deferred = int(meta.get('fallback_deferred') or 0)
+    if not requested and not deferred:
+        return
+    date = str(target_dates[-1]) if target_dates else ''
+    if not date:
+        return
+
+    status_text = str(meta.get('fallback_status') or '')
+    if status_text == 'failed' or requested == 0:
+        status = FetchStatus.FAILED
+    elif covered >= requested:
+        status = FetchStatus.SUCCESS
+    else:
+        status = FetchStatus.PARTIAL
+    message = '; '.join(str(item) for item in (
+        meta.get('fallback_message'), meta.get('fallback_escalate_note'),
+    ) if item)
+
+    try:
+        FetchStatusStore(FETCH_STATUS_CACHE).record(FetchResult(
+            dataset='prices', date=date, source='price_provider', status=status,
+            expected_count=requested, actual_count=covered, scope='SH,SZ,BJ',
+            message=message, started_at=started_at,
+            finished_at=datetime.now(timezone.utc),
+        ))
+    except Exception as exc:
+        print(f'  ⚠️ 价格抓取状态写入失败 ({type(exc).__name__}: {exc})')
+
+
 def _fill_price_gaps_with_provider(
     frame,
     universe_codes,
@@ -2790,6 +2861,7 @@ def _fill_price_gaps_with_provider(
     max_non_bj_gaps=1000,
 ):
     """用统一 PriceProvider 补齐 A/D 双日价格缺口，北交所始终优先。"""
+    _gap_started = datetime.now(timezone.utc)
     all_codes = list(dict.fromkeys(
         code for code in (normalize_stock_code(value) for value in universe_codes or []) if code
     ))
@@ -2900,6 +2972,7 @@ def _fill_price_gaps_with_provider(
         'missing_after': len(missing_before),
     }
     if not requested:
+        _record_price_gap_fetch_status(meta, target_dates, _gap_started)
         return working, meta
 
     provider = provider or PriceProvider(
@@ -2918,6 +2991,7 @@ def _fill_price_gaps_with_provider(
     except Exception as exc:
         meta['fallback_status'] = 'failed'
         meta['fallback_message'] = str(exc)
+        _record_price_gap_fetch_status(meta, target_dates, _gap_started)
         return working, meta
 
     statuses = []
@@ -2965,6 +3039,7 @@ def _fill_price_gaps_with_provider(
     if meta['fallback_status'] != 'failed':
         # 整轮 failed 更像接口/代理故障, 不当作"这些票没有价"记账。
         _record_price_gap_outcome(working, requested, target_dates)
+    _record_price_gap_fetch_status(meta, target_dates, _gap_started)
     return working, meta
 
 
@@ -3820,10 +3895,13 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
                 hot_stock_html += f'<tr><td>{i+1}</td><td>{v1}</td><td>{v2}</td><td>{v3}</td></tr>'
             hot_stock_html += '</table></div></div>'
 
-        if wc_data.get('hot_stock_b64'):
+        _wc_stock_visual = wc_data.get('hot_stock_svg') or (
+            f'<img src="{wc_data["hot_stock_b64"]}" style="max-width:100%;object-fit:contain;border-radius:4px;">'
+            if wc_data.get('hot_stock_b64') else '')
+        if _wc_stock_visual:
             hot_stock_html += '<div style="flex:1 1 380px;min-width:0;background:#161b22;padding:15px;border-radius:8px;border:1px solid #21262d;display:flex;flex-direction:column;align-items:center;">'
             hot_stock_html += '<h3 style="color:#e0e0e0;margin-bottom:10px;">🔥 热门股票词云</h3>'
-            hot_stock_html += f'<img src="{wc_data["hot_stock_b64"]}" style="max-width:100%;object-fit:contain;border-radius:4px;"></div>'
+            hot_stock_html += f'{_wc_stock_visual}</div>'
 
         tp = wc_data.get('top_plates', [])
         tp_html = ''
@@ -3835,10 +3913,13 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
                 tp_html += f'<span style="background:#0d1117;border:1px solid {color};color:{color};padding:3px 8px;border-radius:4px;font-size:12px;">{pname} <b style="color:#fff">{pcount}只</b></span>'
             tp_html += '</div></div>'
 
-        if wc_data.get('plate_b64'):
+        _wc_plate_visual = wc_data.get('plate_svg') or (
+            f'<img src="{wc_data["plate_b64"]}" style="max-width:100%;object-fit:contain;border-radius:4px;">'
+            if wc_data.get('plate_b64') else '')
+        if _wc_plate_visual:
             hot_stock_html += '<div style="flex:1 1 380px;min-width:0;background:#161b22;padding:15px;border-radius:8px;border:1px solid #21262d;display:flex;flex-direction:column;align-items:center;">'
             hot_stock_html += '<h3 style="color:#e0e0e0;margin-bottom:10px;">📋 当日涨停属性词云</h3>'
-            hot_stock_html += f'<img src="{wc_data["plate_b64"]}" style="max-width:100%;object-fit:contain;border-radius:4px;">'
+            hot_stock_html += f'{_wc_plate_visual}'
             hot_stock_html += tp_html
             hot_stock_html += '</div>'
 
@@ -3848,7 +3929,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     if echelon:
         echelon_html = '<h2 class="section-title">🏆 涨停梯队属性梳理</h2>'
         echelon_html += '<div class="echelon-desc">该表按当日连板高度分组（首板→最高板），梳理每档的涨停属性与核心成分股。主属性为占比最高的板块，次属性为占比次高的板块。</div>'
-        echelon_html += '<table class="echelon-table"><tr><th>连板高度</th><th>数量</th><th>主属性</th><th>次属性</th><th>核心成分股</th></tr>'
+        echelon_html += '<table class="echelon-table"><tr><th>连板高度</th><th>数量</th><th>主属性</th><th>次属性</th><th>核心成分股</th><th>游资战法研判与操作指引</th></tr>'
         import re
         # 显示顺序: 从低到高 (首板 -> 最高连板)。仅本地排序, 不改 echelon 原始顺序。
         def _ech_key(e):
@@ -3856,6 +3937,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
             if '首板' in hh: return 0
             m = re.search(r'(\d+)', hh)
             return int(m.group(1)) if m else 0
+        max_h_int = max((_ech_key(x) for x in echelon), default=1)
         for e in sorted(echelon, key=_ech_key):
             h = e['height']
             c = e['count']
@@ -3877,7 +3959,22 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
             details = e.get('stock_details', [])
             names = ' '.join([d['name'] for d in details])
 
-            echelon_html += f'<tr><td class="height-cell">{h}</td><td class="count-cell">{c}</td><td>{p_html}</td><td>{s_fmt}</td><td>{names}</td></tr>'
+            h_int = _ech_key(e)
+            if h_int == max_h_int and h_int >= 3:
+                if h_int >= 7:
+                    tactic_tip = '<span style="font-size:11px;color:#f85149;"><b>【战法A高位警报/战法E防守】</b>触及P95天花板，警惕诱多出逃；断板高度暴跌3档</span>'
+                else:
+                    tactic_tip = f'<span style="font-size:11px;color:#22c55e;"><b>【战法A突破/铁律2空间锚】</b>突破事前P5，锚定全市场做多天花板，后排断层防守</span>'
+            elif c >= 2 and h_int >= 3:
+                tactic_tip = f'<span style="font-size:11px;color:#bc8cff;"><b>【铁律3 双子星生死律】</b>{c}只同身位竞价PK去弱留强，只上竞价胜出的第一名</span>'
+            elif h_int == 2:
+                tactic_tip = '<span style="font-size:11px;color:#06b6d4;"><b>【战法C模仿补涨/铁律2接力】</b>低位换手活口，重点看首板与2进3弱转强卡位</span>'
+            elif h_int == 1:
+                tactic_tip = '<span style="font-size:11px;color:#58a6ff;"><b>【战法F真龙基因/铁律2试错】</b>首发板块集群共振，分歧换手回封方为真龙胚子</span>'
+            else:
+                tactic_tip = '<span style="font-size:11px;color:#8b949e;">【铁律2 梯队接力】中位分流严重，去弱留强</span>'
+
+            echelon_html += f'<tr><td class="height-cell">{h}</td><td class="count-cell">{c}</td><td>{p_html}</td><td>{s_fmt}</td><td>{names}</td><td>{tactic_tip}</td></tr>'
         echelon_html += '</table>'
 
         # ===== 追加矩阵表格 =====
@@ -4016,7 +4113,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
 
     mainline_table_html = ''
     if sub_ratings:
-        mainline_table_html = '<h2 class="section-title">📊 主线数据</h2><div class="ml-table-wrap"><table class="ml-data-table"><tr><th>方向</th>'
+        mainline_table_html = '<h2 class="section-title">📊 主线方向状态 (评级 × 趋势 × 分支)</h2><div class="ml-table-wrap"><table class="ml-data-table"><tr><th>方向</th>'
         for ml in MAINLINE_NAMES:
             subs = [s for s, (_, m) in sub_ratings.items() if m == ml]
             colspan = max(len(subs), 1)
@@ -4114,7 +4211,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
           // 2. 主图 Top6 曲线联动重画 (图榜同源)
           var chart=window.SUB_CHARTS[cid], wd=window.SUB_CHART_DATA[cid];
           if(chart&&wd&&wd[w]){
-            chart.setOption({legend:{data:wd[w].legend},series:wd[w].series},
+            chart.setOption({legend:{data:wd[w].legend},series:wd[w].series.concat(window.SUB_CHART_THRESH||[])},
                             {replaceMerge:['series']});
           }
         }
@@ -4136,13 +4233,19 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     if isinstance(sub_ma, dict):
         all_sectors_with_data.update(sub_ma.keys())
 
-    # 阈值线 (窗口无关, 每个窗口的 series 都追加): 10日=100%, 30日=200%
+    # 阈值线 (窗口无关): 10日=100%, 30日=200%
+    #
+    # ⚠️ 只存**一份**, 放在全局 window.SUB_CHART_THRESH, 由两处 setOption 各自 concat。
+    #    原先它是"每个窗口的 series 都追加", 于是 5 窗口 × 10 图 = 50 份常量数组
+    #    (实测 53.8 KB, 每份都是上百个相同数字)。它是水平参考线, 换窗口不会变。
     thresh_series = []
     for tn, td in sub_thresh.items():
         clr = '#ffaa44' if '10' in tn else '#4466aa'
         thresh_series.append({'name': tn, 'type': 'line', 'smooth': False, 'data': td,
             'lineStyle': {'width': 1.5, 'type': 'dashed', 'color': clr},
             'itemStyle': {'color': clr}, 'symbol': 'none'})
+    sub_charts_html += ('<script>window.SUB_CHART_THRESH='
+                        + json.dumps(thresh_series, ensure_ascii=False) + ';</script>')
 
     def _tracks_to_series(tks):
         """把某窗口的 Top6 轨迹转成 (series, legend)。共振高亮, 领先加⚡, 关联加·关联。"""
@@ -4215,7 +4318,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
             win_opt = {}
             for w in avail:
                 series, legend = _tracks_to_series(win_tracks[w])
-                win_opt[w] = {'series': series + thresh_series, 'legend': legend}
+                win_opt[w] = {'series': series, 'legend': legend}
 
             # 榜单标签 + 各窗口榜单行
             tabs = ''
@@ -4238,7 +4341,6 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
                        f'核心=证监会行业也归此板块, 关联=仅概念沾边(如并购重组)。">?</span></div>'
                        f'{wins}')
 
-            init = win_opt[default_w]
             sub_charts_html += f'''
         {lb_html}
         <div class="chart-container" id="{chart_id}" style="height:500px;"></div>
@@ -4248,14 +4350,15 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
             window.SUB_CHART_DATA['{chart_id}']={json.dumps(win_opt, ensure_ascii=False)};
             var c=echarts.init(document.getElementById('{chart_id}'),'dark');
             window.SUB_CHARTS['{chart_id}']=c;
+            var _init=window.SUB_CHART_DATA['{chart_id}']['{default_w}'];
             c.setOption({{title:{{text:'{sector} 强势个股轨迹 ({sr_title})',left:'center',textStyle:{{color:'#e0e0e0',fontSize:16}}}},
                 tooltip:{{trigger:'axis',order:'valueDesc',valueFormatter:function(v){{return v==null?'-':v+'%';}}}},
-                legend:{{data:{json.dumps(init['legend'], ensure_ascii=False)},top:30,textStyle:{{fontSize:11}},type:'scroll'}},
+                legend:{{data:_init.legend,top:30,textStyle:{{fontSize:11}},type:'scroll'}},
                 grid:{{left:60,right:90,top:80,bottom:50}},
                 xAxis:{{type:'category',data:{json.dumps(dates_fmt)},axisLabel:{{rotate:45,fontSize:10}}}},
                 yAxis:{{type:'value',name:'涨幅(%)',axisLabel:{{formatter:'{{value}}%'}}}},
                 dataZoom:[{{type:'inside'}},{{type:'slider',bottom:5,height:20}}],
-                series:{json.dumps(init['series'], ensure_ascii=False)}}});
+                series:_init.series.concat(window.SUB_CHART_THRESH||[])}});
             window.addEventListener('resize',function(){{c.resize();}});
         }})();</script>'''
         else:
@@ -4269,7 +4372,6 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
                     s_series.append({'name': nm, 'type': 'line', 'smooth': True,
                         'data': data, 'lineStyle': {'width': 2, 'color': ma_colors[mk]},
                         'itemStyle': {'color': ma_colors[mk]}, 'symbol': 'circle', 'symbolSize': 5})
-            s_series += thresh_series
             sub_charts_html += f'''
         <div class="chart-container" id="{chart_id}" style="height:500px;"></div>
         <script>(function(){{
@@ -4280,7 +4382,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
                 xAxis:{{type:'category',data:{json.dumps(dates_fmt)},axisLabel:{{rotate:45,fontSize:10}}}},
                 yAxis:{{type:'value',name:'涨幅(%)',axisLabel:{{formatter:'{{value}}%'}}}},
                 dataZoom:[{{type:'inside'}},{{type:'slider',bottom:5,height:20}}],
-                series:{json.dumps(s_series,ensure_ascii=False)}}});
+                series:{json.dumps(s_series,ensure_ascii=False)}.concat(window.SUB_CHART_THRESH||[])}});
             window.addEventListener('resize',function(){{c.resize();}});
         }})();</script>'''
 
@@ -4618,236 +4720,11 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
         '''
 
     # --- 连板高度分析 (上半部) ---
-    lianban_height_html = ''
-    if sentiment_df is not None and not sentiment_df.empty and '连板高度' in sentiment_df.columns:
-        # 同步日期范围到 dates
-        if dates:
-            date_set = set(str(d) for d in dates)
-            sentiment_df = sentiment_df[sentiment_df['日期'].astype(str).isin(date_set)].copy()
-
-        sentiment_df = sentiment_df.reset_index(drop=True)
-        lb_dates = sentiment_df['日期'].astype(str).tolist()
-        lb_dates_parsed = pd.to_datetime(lb_dates, format='%Y%m%d', errors='coerce')
-        weekdays = ["一", "二", "三", "四", "五", "六", "日"]
-        lb_dates_fmt = [d.strftime('%m/%d') + '/' + weekdays[d.weekday()] if pd.notnull(d) else str(orig) for d, orig in zip(lb_dates_parsed, lb_dates)]  # type: ignore
-
-        lb_data = sentiment_df['连板高度'].fillna(0).tolist()
-        db_data = sentiment_df['断板高度'].fillna(0).tolist()
-        db_data = [d if d > 0 else None for d in db_data]
-
-        # 1. 核心修改：完全按照图一逻辑重构“压力高度”
-        # 逻辑：维持前高，遇断板确认新高，遇突破更新新高
-        pr_data = []
-        curr_pr = lb_data[0] if len(lb_data) > 0 else 0
-        for i in range(len(lb_data)):
-            if i == 0:
-                pr_data.append(curr_pr)
-                continue
-            if lb_data[i] < lb_data[i-1]:
-                curr_pr = lb_data[i-1]
-            elif lb_data[i] > curr_pr:
-                curr_pr = lb_data[i]
-            pr_data.append(curr_pr)
-
-        lb_labels = []
-        for _, row in sentiment_df.iterrows():
-            name = str(row.get('连板股', '')).split(',')[0].strip()
-            val_raw = row.get('连板高度', 0)
-            lb_val = int(val_raw) if pd.notnull(val_raw) else 0
-            if lb_val < 0: lb_val = 0
-            lb_labels.append(f"{name} {lb_val}" if name and name != 'nan' else str(lb_val))
-
-        db_labels = []
-        for _, row in sentiment_df.iterrows():
-            val_raw = row.get('断板高度', 0)
-            db_val = int(val_raw) if pd.notnull(val_raw) else 0
-            if db_val > 0:
-                name = '断:' + str(row.get('断板股', '')).split(',')[0].strip()
-                db_labels.append(f"{name} {db_val}" if name and name != '断:nan' and name[-1] != ':' else str(db_val))
-            else:
-                db_labels.append('')
-
-        td_details = []
-        for _, row in sentiment_df.iterrows():
-            lb_raw, db_raw = row.get('连板高度', 0), row.get('断板高度', 0)
-            td_details.append({
-                'date': str(row.get('日期', '')),
-                'lb': int(lb_raw) if pd.notnull(lb_raw) else 0,
-                'lb_name': str(row.get('连板股', '')),
-                'db': int(db_raw) if pd.notnull(db_raw) else 0,
-                'db_name': str(row.get('断板股', '')),
-                'mood': str(row.get('情绪', '')).replace('nan', ''),
-                'mood_clr': str(row.get('情绪颜色', '')).replace('nan', ''),
-            })
-
-        # 2. 核心修改：图一逻辑的龙头识别与连线计算
-        # 逻辑：一段时间内的最高连板（局部峰值）。直接用数学方法找峰值，并用 高度反推首板日。
-        lt_marks = []
-        n_lb = len(lb_data)
-        for i in range(n_lb):
-            h = lb_data[i]
-            if h >= 3:  # 设定最小连板数为3板才算作具备连线价值的龙头
-                is_peak = False
-                if i == n_lb - 1:
-                    is_peak = True
-                elif lb_data[i] > lb_data[i+1]:
-                    is_peak = True
-
-                if is_peak:
-                    # 核心突破：直接通过索引减去(高度-1)精准反推首板日，免去模糊查询
-                    start_idx = max(0, i - (int(h) - 1))
-                    name = str(sentiment_df.iloc[i].get('连板股', '')).split(',')[0].strip()
-                    if not name or name == 'nan':
-                        name = f"{int(h)}连板"
-                    lt_marks.append({
-                        'name': name,
-                        'sb_idx': start_idx,
-                        'peak_idx': i,
-                        'peak_h': int(h),
-                        'sb_date': str(lb_dates[start_idx]) if start_idx < len(lb_dates) else '',
-                        'peak_date': str(lb_dates[i]) if i < len(lb_dates) else ''
-                    })
-
-        lianban_height_html = f'''
-        <h2 class="section-title">🚀 连板高度分析 (市场高度) <span class="help-icon" data-tip="连板数为连续涨停的天数。该图表展示了市场投机高度的溢出与回撤，是情绪周期的核心指标。">?</span></h2>
-        <div class="chart-container" id="lianbanChart" style="height:450px;"></div>
-        <script>
-        var lb_dates_raw = {json.dumps(lb_dates)};
-        var LBL_lb = {json.dumps(lb_labels, ensure_ascii=False)};
-        var DBL_lb = {json.dumps(db_labels, ensure_ascii=False)};
-        var TD_lb = {json.dumps(td_details, ensure_ascii=False)};
-        var LTM_lb = {json.dumps(lt_marks, ensure_ascii=False)};
-
-        (function(){{
-            var c=echarts.init(document.getElementById('lianbanChart'),'dark');
-            var opt = {{
-                backgroundColor: '#161b22',
-                grid: {{ left: 50, right: 20, top: 40, bottom: 40 }},
-                tooltip: {{
-                    trigger: 'axis',
-                    backgroundColor: 'rgba(22, 27, 34, 0.95)',
-                    borderColor: '#30363d',
-                    borderWidth: 1,
-                    textStyle: {{ color: '#e6edf3', fontSize: 13 }},
-                    formatter: function(p) {{
-                        var i = p[0].dataIndex, d = TD_lb[i];
-                        if(!d) return '';
-                        var h = '<b style="color:#58a6ff">' + d.date + '</b>  <span style="color:' + (d.mood_clr||'#fff') + '">' + (d.mood||'') + '</span><br>';
-                        h += '<span style="color:#58a6ff">● 连板高度 ' + d.lb + '板  ' + (d.lb_name && d.lb_name !== 'nan'?d.lb_name:'') + '</span><br>';
-                        if (d.db > 0) h += '<span style="color:#ff7b72">● 断板高度 ' + d.db + '板  ' + (d.db_name && d.db_name !== 'nan'?d.db_name:'') + '</span><br>';
-
-                        var day_lts = LTM_lb.filter(m => String(m.peak_date || m.date) === String(d.date));
-                        if (day_lts.length > 0) {{
-                            day_lts.forEach(function(m){{
-                                h += '<span style="color:#ff8800">▲ 龙头首板: ' + m.name + ' @ ' + m.sb_date + '</span><br>';
-                            }});
-                        }}
-                        return h;
-                    }}
-                }},
-                legend: {{ show: true, data: ['连板高度', '压力高度', '断板高度'], top: 10, right: 30, textStyle: {{ fontSize: 12, color: '#8b949e' }} }},
-                xAxis: {{
-                    type: 'category', data: {json.dumps(lb_dates_fmt, ensure_ascii=False)},
-                    axisLine: {{ lineStyle: {{ color: '#333' }} }},
-                    axisLabel: {{ color: '#666', fontSize: 10, interval: 'auto' }},
-                    axisTick: {{ show: true, lineStyle: {{ color: '#222' }} }},
-                }},
-                yAxis: {{
-                    type: 'value', min: 0, minInterval: 1,
-                    axisLine: {{ show: false }},
-                    axisLabel: {{ color: '#555', fontSize: 11 }},
-                    splitLine: {{ show: true, lineStyle: {{ color: '#161616' }} }}
-                }},
-                dataZoom: [
-                    {{ type: 'inside', xAxisIndex: 0, start: 0, end: 100 }},
-                    {{ type: 'slider', xAxisIndex: 0, start: 0, end: 100, height: 16, bottom: 4,
-                       backgroundColor: '#0d1117', borderColor: '#30363d', fillerColor: 'rgba(88, 166, 255, 0.15)' }}
-                ],
-                series: [
-                    {{
-                        name: '连板高度', type: 'line', data: {json.dumps(lb_data)}, z: 10,
-                        symbol: 'circle', symbolSize: 8,
-                        lineStyle: {{ color: '#58a6ff', width: 3 }},
-                        itemStyle: {{ color: '#58a6ff', borderColor: '#e6edf3', borderWidth: 1 }},
-                        label: {{
-                            show: true, position: 'top', color: '#58a6ff', fontSize: 11, fontWeight: 'bold',
-                            backgroundColor: 'rgba(13, 17, 23, 0.7)', padding: [2, 4], borderRadius: 4,
-                            formatter: function(p) {{ return LBL_lb[p.dataIndex]; }}
-                        }}
-                    }},
-                    {{
-                        // 新增：图一逻辑的压力高度 (青色实线)
-                        name: '压力高度', type: 'line', data: {json.dumps(pr_data)}, z: 8,
-                        symbol: 'circle', symbolSize: 4,
-                        lineStyle: {{ color: '#00e5ff', width: 2 }},
-                        itemStyle: {{ color: '#00e5ff' }}
-                    }},
-                    {{
-                        name: '断板高度', type: 'line', data: {json.dumps(db_data)}, z: 9,
-                        symbol: 'rect', symbolSize: 6, connectNulls: false,
-                        lineStyle: {{ color: '#ff7b72', width: 2, type: 'dotted' }},
-                        itemStyle: {{ color: '#ff7b72' }},
-                        label: {{
-                            show: true, position: 'bottom', color: '#ff7b72', fontSize: 10,
-                            backgroundColor: 'rgba(13, 17, 23, 0.7)', padding: [2, 4], borderRadius: 4,
-                            formatter: function(p) {{ return DBL_lb[p.dataIndex]; }}
-                        }}
-                    }}
-                ]
-            }};
-
-            // 新增：图一逻辑的纯正首板起涨连线 (粗红实线)
-            if (LTM_lb && LTM_lb.length > 0) {{
-                var sbScatterData = [];
-                var markLineData = [];
-                for (var k = 0; k < LTM_lb.length; k++) {{
-                    var m = LTM_lb[k];
-                    // 直接使用 Python 端计算好的精准索引
-                    var s_idx = m.sb_idx;
-                    var p_idx = m.peak_idx;
-
-                    sbScatterData.push({{
-                        value: [s_idx, 0], // 首板起点从底部开始画
-                        name: m.name,
-                        peak_h: m.peak_h,
-                        sb_date: m.sb_date
-                    }});
-                    markLineData.push([
-                        {{ coord: [s_idx, 0] }},
-                        {{ coord: [p_idx, m.peak_h] }}
-                    ]);
-                }}
-                opt.series.push({{
-                    name: '龙头主升连线',
-                    type: 'scatter',
-                    xAxisIndex: 0,
-                    yAxisIndex: 0,
-                    data: sbScatterData,
-                    symbol: 'circle',
-                    symbolSize: 6,
-                    z: 15,
-                    itemStyle: {{ color: '#ff3333' }},
-                    label: {{
-                        show: true, position: 'bottom', color: '#ff3333', fontSize: 10,
-                        backgroundColor: 'rgba(22, 27, 34, 0.8)', padding: [1, 2], borderRadius: 2,
-                        formatter: function(p) {{ return p.data.name; }}
-                    }},
-                    markLine: {{
-                        silent: true,
-                        symbol: ['none', 'none'],
-                        // 使用实线，模拟图一从首板直插云霄的效果
-                        lineStyle: {{ color: '#ff3333', width: 2, type: 'solid' }},
-                        label: {{ show: false }},
-                        data: markLineData
-                    }}
-                }});
-            }}
-
-            c.setOption(opt);
-            window.addEventListener('resize',function(){{c.resize();}});
-        }})();
-        </script>
-        '''
+    # 独立一年窗口；不再随板块图的65日窗口裁剪，不修改共享sentiment_df。
+    from annual_height_view import render_annual_height_section
+    lianban_height_html = render_annual_height_section(
+        sentiment_df, as_of=(dates[-1] if dates else None)
+    )
 
     fupan_html = ""
 
@@ -4993,6 +4870,26 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     except Exception as e:
         print(f"  [警告] 内嵌决策看板 section 生成失败 (不影响主流程): {e}")
 
+    # 游资实战作战室模块: 深度融合游资战法体系、今日复盘与明日预案
+    tactics_panel_html = ''
+    try:
+        from recap_panels import render_tactics_review_panel
+        _report_date_str = str(dates[-1]) if dates else ''
+        _tactics_input = (
+            unified_context.get('tactics_data')
+            or (market_state or {}).get('tactics_data')
+            or None
+        )
+        tactics_panel_html = render_tactics_review_panel(
+            _tactics_input,
+            report_date=_report_date_str,
+            context=unified_context,
+            echelon=echelon,
+            advance_decline=advance_decline,
+        )
+    except Exception as e:
+        print(f"  [警告] 战法复盘作战室面板生成失败 (不影响主流程): {e}")
+
     # 内嵌看板已包含择时状态、情绪温度和质量门禁；成功生成后隐藏旧版雷达，
     # 避免首屏连续出现两套“发布状态”表达。看板失败时仍保留旧版雷达兜底。
     if dashboard_section_html:
@@ -5019,6 +4916,33 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     )
     _security_effective_date = _report_quality_view.get('security_effective_date') or _report_trade_date
     _report_generated_at = datetime.now().astimezone().isoformat(timespec='seconds')
+
+    # 时效提示: 报告会被归档进 site/reports/ 并被邮件转发, 读者需要知道"这份离最近
+    # 交易日差几天"。报告仍是最新一份时为空串, 所以日常跑批不会多出一行噪声。
+    # 日历一律走 cache-only 查询: 渲染不该为算个天数去联网, 也不该因网络失败而丢掉提示。
+    _freshness_note = ''
+    try:
+        from data_sources.calendar_provider import CalendarProvider as _CalendarProvider
+        _today_iso = datetime.now().strftime('%Y-%m-%d')
+        _report_iso = (
+            f'{report_date_digits[:4]}-{report_date_digits[4:6]}-{report_date_digits[6:]}'
+            if report_date_digits else ''
+        )
+        _trading_days = (
+            _CalendarProvider(cache_path=CALENDAR_CACHE).cached_trading_days(_report_iso, _today_iso)
+            if _report_iso else []
+        )
+        _freshness_note = build_freshness_note(
+            report_date_digits, today=_today_iso, trading_days=_trading_days,
+        )
+    except Exception as _freshness_exc:
+        print(f"  [警告] 报告时效提示生成失败 (不影响主流程): {_freshness_exc}")
+        _freshness_note = ''
+    _freshness_html = (
+        f'<div class="subtitle" style="margin-top: 6px; color: var(--accent-yellow); '
+        f'font-weight: bold;">⏳ {html_lib.escape(_freshness_note)}</div>'
+        if _freshness_note else ''
+    )
     _daily_delta_view = unified_context.get('daily_delta') if isinstance(unified_context.get('daily_delta'), dict) else {}
     if _daily_delta_view.get('available'):
         _delta_items = []
@@ -5074,7 +4998,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
 {integrity_metadata}
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>主线强度追踪系统 V3 - 量化投研决策终端</title>
-<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+{echarts_head_html()}
 <style>
     :root {{
         --bg-color: #0d1117;
@@ -5268,6 +5192,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
         <div class="subtitle">量化维度: 财联社CLS全域概念 / 涨停能量矩阵 / 多周期强度映射</div>
         <div class="subtitle" style="margin-top: 15px;">报告交易日: <span style="color: var(--accent-yellow); font-weight: bold;">{_report_trade_date}</span>  |  市场数据截止: <span style="color: var(--accent-blue); font-weight: bold;">{html_lib.escape(str(_market_cutoff))}</span></div>
         <div class="subtitle" style="margin-top: 6px;">证券状态生效日: <span style="color: var(--accent-yellow); font-weight: bold;">{_security_effective_date}</span>  |  报告生成时间: <span style="color: var(--text-secondary); font-weight: bold;">{_report_generated_at}</span></div>
+        {_freshness_html}
     </div>
 
     {timing_html}
@@ -5275,6 +5200,8 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     {_daily_delta_html}
 
     {dashboard_section_html}
+
+    {tactics_panel_html}
 
     {legacy_decision_block_html}
 
@@ -5385,6 +5312,26 @@ window.addEventListener('resize',function(){{c.resize();}});}})();
         html = html.replace(trend_sanitize_marker, trusted_trend_html)
     if trusted_dragon_html:
         html = html.replace(dragon_sanitize_marker, trusted_dragon_html)
+    research_link = unified_context.get('research_subpage')
+    if isinstance(research_link, dict) and research_link.get('href'):
+        from research_subpages import add_research_entry
+        html = add_research_entry(html, research_link['href'], report_date=research_link.get('report_date'))
+
+    # 页内目录: 报告有 13 个章节 / 1MB, 没有锚点就只能一路滚。
+    #
+    # ⚠️ 必须放在**最后**, 在 trusted-* 模块替换与策略中和器之后:
+    #   上面那几个 `html.replace(marker, trusted_*_html)` 会把整段标记区域换成模块自带的
+    #    渲染结果, 而那份渲染结果是**没有我加的 id 的**。目录若先挂锚点, 落在这些区域里的
+    #    章节就会丢锚点 —— 实测 2026-09-15 的正式报告里 `#sec-5`(连板高度分析) 指向了
+    #    一个不存在的锚点, 点击没反应。
+    #   放在最后还有一个附带好处: 目录里的标题是从**已中和**的正文里抄的, 不可能夹带
+    #   没走过门禁的新文本(它只是原文的子集), 所以既安全又不会再被擦掉。
+    try:
+        from research_subpages import add_section_toc
+        html = add_section_toc(html)
+    except Exception as _toc_exc:
+        print(f"  [警告] 页内目录生成失败 (不影响主流程): {_toc_exc}")
+
     with open(OUTPUT_HTML, 'w', encoding='utf-8') as f:
         f.write(html)
 
@@ -6107,14 +6054,21 @@ def _main_impl():
     except (OSError, ValueError) as exc:
         _limit_event_snapshot = None
         print(f"  [事件观测] 历史归档不可用: {exc}")
-    if _limit_event_snapshot is None:
-        _limit_event_snapshot = build_limit_event_snapshot(
-            _authoritative_limit_rows, trade_date=_report_date, source=_fact_pool_source,
-        )
-        archive_limit_event_snapshot(_limit_event_snapshot, LIMIT_EVENT_SNAPSHOT_DIR)
-    _authoritative_limit_rows = merge_limit_event_observations(
-        _authoritative_limit_rows, _limit_event_snapshot, report_date=_report_date,
+    _fresh_limit_events = build_limit_event_snapshot(
+        [{'pool_type': 'ZT', **row} for row in _authoritative_limit_rows],
+        trade_date=_report_date, source=_fact_pool_source,
     )
+    _raw_limit_event_snapshot = select_event_observations(_limit_event_snapshot, _fresh_limit_events)
+    archive_limit_event_snapshot(_raw_limit_event_snapshot, LIMIT_EVENT_SNAPSHOT_DIR)
+    # Immutable daily facts retain original observations, never projected flags.
+    _authoritative_limit_rows = merge_limit_event_observations(
+        _authoritative_limit_rows, _raw_limit_event_snapshot, report_date=_report_date,
+    )
+    _event_inputs = prepare_limit_event_facts(
+        _raw_limit_event_snapshot, cache_dir=RAW_BAR_CACHE_DIR, fetch_missing=True,
+        reference_prices=price_df,
+    )
+    _limit_event_snapshot = _event_inputs['snapshot']
     _report_timing = generate_timing_signal(sentiment_df, advance_decline, echelon)
     _security_master = market_meta.get('security_master', {})
     _current_echelon_rows = _flatten_echelon_rows(echelon)
@@ -6783,6 +6737,35 @@ def _main_impl():
         scenario_calibration=_scenario_calibration,
         target_trade_date=_target_trade_date,
     ).to_dict()
+    # Research is an optional child page, never a replacement for the main report.
+    from research_brief_io import prepare_research_brief, write_research_subpage
+    from research_subpages import relative_report_link
+    from report_integrity import ReportIntegrityError
+    _research_files = None
+    _research_html = None
+    try:
+        _report_context['research_brief'] = prepare_research_brief(
+            _report_context, price_rows=price_df, snapshot_dir=DAILY_SNAPSHOT_DIR,
+            price_slices_dir=PRICE_SLICE_DIR, calendar_cache=CALENDAR_CACHE,
+            raw_bar_cache_dir=RAW_BAR_CACHE_DIR, fetch_missing=True,
+        )
+        _research_files = write_research_subpage(
+            _report_context['research_brief'], os.path.join(os.path.dirname(OUTPUT_HTML), 'research_briefs'),
+            parent_report=OUTPUT_HTML,
+            source_paths=[os.path.join(AUDIT_DIR, f'{_report_date}.json')], quality=_report_quality,
+        )
+        with open(_research_files['html'], encoding='utf-8') as _child_file:
+            _research_html = _child_file.read()
+        _report_context['research_subpage'] = {
+            'href': relative_report_link(_research_files['html'], os.path.dirname(OUTPUT_HTML)),
+            'report_date': _report_date,
+        }
+        print(f"  [多板块子页] {_research_files['html']}")
+    except (OSError, ValueError, ReportIntegrityError) as exc:
+        _report_context.pop('research_brief', None)
+        _report_context.pop('research_subpage', None)
+        _research_files = _research_html = None
+        print(f"  [多板块子页] 未生成，继续原主报告: {exc}")
     # One computed decision feeds journal, CSV and audit; even empty/facts-only
     # days are recorded. A failed journal/export must not silently publish stale plans.
     from decision_dashboard import build_dashboard_ctx, build_today_decision, write_today_focus_pool
@@ -6900,6 +6883,7 @@ def _main_impl():
             summary=_summary,
             dashboard_html=_dashboard_html,
             dragon_html=_dragon_html,
+            research_html=_research_html,
         )
         publish_succeeded = publish_result is not None
     except Exception as e:

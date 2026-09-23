@@ -60,3 +60,64 @@ def test_execution_contract_preserves_explicit_holdings_status():
     got = build_execution_contract(_plan(), holdings={"sh600001": {"quantity": 100}})
     assert got["holding_status"] == "provided"
     assert got["details"]["sh600001"]["holding_status"] == "provided"
+
+
+def test_execution_contract_accepts_dataframe_and_chinese_columns():
+    """价格表既可能来自 DataFrame 也可能是 dict 列表, 列名中英混用, 三种都要成立。"""
+    import pandas as pd
+    from execution_contract import build_execution_contract
+
+    frame = pd.DataFrame({
+        "代码": ["600001", "000002"],
+        "日期": ["2026-09-03", "2026-09-03"],
+        "close_raw": [10.0, 20.0],
+    })
+    got = build_execution_contract(
+        {"groups": [{"rows": [{"code": "sh600001"}, {"code": "sz000002"}]}]},
+        price_df=frame, report_date="2026-09-03",
+    )
+
+    assert got["details"]["sh600001"]["reference_close"] == 10.0
+    assert got["details"]["sz000002"]["reference_close"] == 20.0
+
+
+def test_exact_raw_closes_filters_before_materializing_the_whole_price_frame():
+    """1M 行价格表只为取当天十几只股票的收盘价, 绝不能先整表 to_dict。
+
+    2026-09-12 cProfile 实测: 渲染层每张卡片各自重建一次决策, 本函数随
+    build_today_decision 被调用 5 次, 每次都把整份价格表 to_dict("records"),
+    5 次合计 83.5s —— 其中 pandas 的 to_dict 就占 29.8s。按日向量化切片之后,
+    转成 dict 的行数应当只剩目标日那几行。
+    """
+    import pandas as pd
+    from execution_contract import build_execution_contract
+
+    materialized: list[int] = []
+
+    class CountingFrame(pd.DataFrame):
+        @property
+        def _constructor(self):
+            return CountingFrame
+
+        def to_dict(self, *args, **kwargs):
+            materialized.append(len(self))
+            return super().to_dict(*args, **kwargs)
+
+    frame = CountingFrame({
+        "code": ["sh600001", "sh600001", "sz000002"],
+        "date": ["2026-09-02", "2026-09-03", "2026-09-03"],
+        "close_raw": [9.0, 10.0, 20.0],
+    })
+
+    got = build_execution_contract(
+        {"groups": [{"rows": [{"code": "sh600001"}, {"code": "sz000002"}]}]},
+        price_df=frame, report_date="2026-09-03",
+    )
+
+    assert got["details"]["sh600001"]["reference_close"] == 10.0
+    assert got["details"]["sz000002"]["reference_close"] == 20.0
+    assert materialized, "没有走 to_dict 路径, 这个断言失去意义"
+    assert max(materialized) < len(frame), (
+        f"整表被 materialize ({materialized} 行), 应先按报告日切片"
+    )
+

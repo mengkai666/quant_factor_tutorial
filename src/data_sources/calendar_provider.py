@@ -48,6 +48,21 @@ class CalendarProvider:
             return None
         return next((day for day in dates if day > report_date), None)
 
+    def cached_trading_days(self, start: str, end: str) -> list[str]:
+        """Read only: 区间内的交易日, 与 cached_next_trading_day 同一份缓存。
+
+        为什么不复用 `trading_days()`: 那个走 `_dates()`, 缓存过期时会**发网络请求**。
+        报告渲染只是想算"这份报告离最近交易日差几天", 不该为此付一次联网代价, 更不该
+        因为网络失败而让时效提示消失。缓存缺失/坏掉一律返回空列表, 由调用方换口径。
+        """
+        try:
+            start = datetime.strptime(str(start), "%Y-%m-%d").date().isoformat()
+            end = datetime.strptime(str(end), "%Y-%m-%d").date().isoformat()
+            dates = self._read_cache()
+        except (ValueError, OSError, KeyError):
+            return []
+        return [day for day in dates if start <= day <= end]
+
     def _write_cache(self, dates: list[str]) -> None:
         if self.cache_path is None or not dates:
             return

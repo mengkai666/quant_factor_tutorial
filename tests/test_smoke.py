@@ -259,6 +259,11 @@ def test_main_uses_safe_report_cutoff_instead_of_stale_cache(monkeypatch):
         raise RuntimeError('date selection reached')
 
     monkeypatch.setattr(module, '_load_market_universe', stop_after_date_selection)
+    # `_main_impl()` 的 **[0/7] 步会 trim 四个生产缓存**(涨停历史/价格/板块/情绪),
+    # 而这一步跑在 `_load_market_universe` **之前** —— 也就是说这个用例虽然在第 5399 行
+    # 就抛错退出, 却已经顺手改写了生产数据。它要验的是"日期选择用了安全的截止日",
+    # 跟缓存裁剪无关, 所以这里把裁剪整个停掉。
+    monkeypatch.setattr(module, 'trim_cache_file', lambda *args, **kwargs: None)
 
     with pytest.raises(RuntimeError, match='date selection reached'):
         module._main_impl()
@@ -469,11 +474,22 @@ def test_market_sentiment_missing_snapshot_keeps_counts_unknown(monkeypatch):
     assert result['status'] == 'missing'
 
 
-def test_large_qfq_only_gap_is_repaired_without_deferring_sh_sz_codes():
+def test_large_qfq_only_gap_is_repaired_without_deferring_sh_sz_codes(tmp_path, monkeypatch):
     from types import SimpleNamespace
 
     import pandas as pd
+    import paths
     import 主线强度追踪 as report
+
+    # `_fill_price_gaps_with_provider` 会在收尾时把结果写进抓取状态契约, 而那个契约的
+    # 路径是 `from paths import FETCH_STATUS_CACHE` **在函数里**取的 —— 不重定向就会往
+    # 生产 data/fetch_status.csv 里写一条假 success (实测: 一次全量回归留下
+    # `2026-08-10,prices,...,3,3`)。与 test_price_gap_fetch_status.py 同一处理。
+    monkeypatch.setattr(paths, "FETCH_STATUS_CACHE", str(tmp_path / "fetch_status.csv"))
+    # 同一函数还会把缺口结果写进价格缺口负缓存, 而 price_gap_memo 是**模块级**
+    # `from paths import PRICE_GAP_MEMO` —— 必须打在 price_gap_memo 上, 打在 paths 上没用。
+    import price_gap_memo
+    monkeypatch.setattr(price_gap_memo, "PRICE_GAP_MEMO", str(tmp_path / "gap.csv"))
 
     dates = ["2026-08-07", "2026-08-10"]
     codes = ["sh600000", "sz000001", "sh600001"]
@@ -551,6 +567,10 @@ def test_chronic_gap_codes_are_skipped_on_a_brand_new_date(tmp_path, monkeypatch
 
     monkeypatch.setattr(price_gap_memo, 'PRICE_GAP_MEMO', str(tmp_path / 'gap.csv'))
     monkeypatch.delenv('PRICE_GAP_RETRY_ALL', raising=False)
+    # 同上: 价格补缺收尾会写抓取状态契约, 必须指到临时文件, 否则会往生产
+    # data/fetch_status.csv 里写一条 63 只的假 success。
+    import paths
+    monkeypatch.setattr(paths, 'FETCH_STATUS_CACHE', str(tmp_path / 'fetch_status.csv'))
     # 让 sh600001 在 3 个历史日都判定抓不到 → 达到 chronic 凭据
     for date in ('2026-08-10', '2026-08-11', '2026-08-12'):
         price_gap_memo.record_outcome([('sh600001', date)])

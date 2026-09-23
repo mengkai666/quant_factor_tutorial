@@ -1722,3 +1722,81 @@ def test_dashboard_keeps_trade_plan_review_separate_from_market_scenario_review(
     assert "交易计划复盘" in html
     assert "非市场场景命中率" in html
     assert "暂无明确成交收益结果" in html
+
+
+def test_rendered_report_pins_echarts_and_warns_when_the_library_is_missing(monkeypatch, tmp_path):
+    """真实渲染一次完整主报告, 从**产物**上检查前端依赖 (2026-09-12)。
+
+    原先三个渲染器各写一份 ECharts 地址, 主报告与旧入口用浮动标签 `echarts@5`
+    (39 期归档全指向它 —— 上游发一个 5.x 补丁就改变了已归档报告的渲染), 看板用锁定的
+    5.5.1。统一到 src/web_assets.py 之后, 这里确认三件事: 版本已锁定、CDN 不可达时的
+    兜底提示在、以及占位符没有被原样打进页面。
+    """
+    import pandas as pd
+
+    import 主线强度追踪 as report
+    from web_assets import ECHARTS_CDN
+
+    output = tmp_path / "report.html"
+    monkeypatch.setattr(report, "OUTPUT_HTML", str(output))
+    empty = pd.DataFrame()
+
+    report.generate_html(
+        ml_strength=empty, sub_strength=empty, ml_ma={}, sub_ma={},
+        ml_thresh={}, sub_thresh={}, leaders={}, dates=["20260910"],
+        ratings={}, sub_ratings={}, echelon=[], top30_data={},
+        advance_decline={"up": 1576, "down": 1446, "zt": 83, "dt": 4},
+        sentiment_df=empty, classified_df=empty, price_df=empty,
+        market_state={
+            "publication_mode": "facts_only",
+            "title": "数据待核验",
+            "allow_strong_conclusion": False,
+        },
+        report_context={
+            "publication_mode": "facts_only",
+            "quality": {"status": "insufficient", "publication_mode": "facts_only"},
+        },
+    )
+
+    html = output.read_text(encoding="utf-8")
+    assert f'src="{ECHARTS_CDN}"' in html
+    assert "cdn.jsdelivr.net/npm/echarts@5/" not in html, "产物里出现了浮动版本引用"
+    assert "图表库未加载" in html, "缺少 CDN 不可达时的兜底提示"
+    assert "echarts_head_html" not in html, "占位符被原样打进了页面"
+
+
+def test_full_report_includes_tactics_war_room_panel(tmp_path, monkeypatch):
+    import pandas as pd
+    import 主线强度追踪 as report
+
+    monkeypatch.setenv("AI_ENABLE", "0")
+    output = tmp_path / "report_tactics.html"
+    monkeypatch.setattr(report, "OUTPUT_HTML", str(output))
+    empty = pd.DataFrame()
+
+    report.generate_html(
+        ml_strength=empty, sub_strength=empty, ml_ma={}, sub_ma={},
+        ml_thresh={}, sub_thresh={}, leaders={}, dates=["20260922"],
+        ratings={}, sub_ratings={}, echelon=[], top30_data={},
+        advance_decline={"up": 1800, "down": 3200, "zt": 62, "dt": 8},
+        sentiment_df=empty, classified_df=empty, price_df=empty,
+        market_state={
+            "publication_mode": "decision",
+            "title": "分歧淘汰",
+            "allow_strong_conclusion": True,
+        },
+        report_context={
+            "publication_mode": "decision",
+            "quality": {"status": "ok", "publication_mode": "decision"},
+        },
+        phase_resonance_result={"summary": {}, "html": ""},
+    )
+
+    html = output.read_text(encoding="utf-8")
+    assert 'id="sec-tactics"' in html
+    assert 'href="#sec-tactics"' in html
+    assert "游资四大核心战法精要" in html
+    assert "情绪周期极值律" in html
+    assert "今日盘面实战对账深度复盘" in html
+    assert "明日操盘实战作战预案" in html
+

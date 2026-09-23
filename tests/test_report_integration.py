@@ -398,23 +398,31 @@ def test_scenario_calibration_hides_probability_for_small_sample():
     assert enough["brier_score"] is not None
 
 
-def test_ai_gate_skips_facts_only_and_sanitizes_observation():
+def test_ai_gate_skips_facts_only_and_sanitizes_observation(tmp_path, monkeypatch):
+    import ai_rebound
     from report_logic import ReportPolicy
-    from ai_rebound import run_guarded_ai
+
+    # 这里走的是**成功**路径, run_guarded_ai 会把结果写进 AI_OUTPUT_CACHE_DIR。
+    # 不重定向就会写进生产目录 data/ai_output_cache/ —— 测试套件不该动生产缓存
+    # (2026-09-12 实测: 一次全量回归就在那里留下了一条 sanitized 记录)。
+    monkeypatch.setattr(ai_rebound, "AI_OUTPUT_CACHE_DIR", tmp_path / "ai-output-cache")
 
     calls = []
     def caller(payload):
         calls.append(payload)
         return {"facts": ["上涨家数 3000"], "observations": ["强度改善"], "conditions": ["覆盖完整"], "risks": [], "decision": "建议7成仓位加仓"}
 
-    facts = run_guarded_ai({"breadth": 0.6}, ReportPolicy.from_mode("facts_only"), caller=caller)
+    facts = ai_rebound.run_guarded_ai({"breadth": 0.6}, ReportPolicy.from_mode("facts_only"), caller=caller)
     assert facts["status"] == "skipped"
     assert calls == []
 
-    observation = run_guarded_ai({"breadth": 0.6}, ReportPolicy.from_mode("observation"), caller=caller)
+    observation = ai_rebound.run_guarded_ai({"breadth": 0.6}, ReportPolicy.from_mode("observation"), caller=caller)
     assert observation["status"] == "sanitized"
     assert observation["output"]["decision"] == ""
     assert calls[0]["schema_version"] == "report-facts/v1"
+    # 成功路径必须真的写进了**被重定向**的缓存目录, 而不是生产目录。
+    assert list((tmp_path / "ai-output-cache").glob("*.json")), \
+        "缓存目录没有被测试接住 —— 它会写进生产 data/ai_output_cache/"
 
 
 def test_ai_gate_drops_unsupported_promotion_metrics_without_previous_snapshot(tmp_path, monkeypatch):
@@ -1116,9 +1124,13 @@ def test_ai_primary_attempt_count_is_configurable(monkeypatch):
     assert diagnostics['http_status'] == 200
 
 
-def test_guarded_ai_uses_configurable_default_request_timeout(monkeypatch):
+def test_guarded_ai_uses_configurable_default_request_timeout(tmp_path, monkeypatch):
     import ai_rebound
     from report_logic import ReportPolicy
+
+    # 这条走的是成功路径, 会把结果写进 AI_OUTPUT_CACHE_DIR —— 必须重定向,
+    # 否则测试套件直接往生产 data/ai_output_cache/ 里塞记录。
+    monkeypatch.setattr(ai_rebound, 'AI_OUTPUT_CACHE_DIR', tmp_path / 'ai-output-cache')
 
     observed = {}
 

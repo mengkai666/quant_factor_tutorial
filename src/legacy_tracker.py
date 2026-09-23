@@ -26,6 +26,9 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
 from datetime import datetime, timedelta
+from web_assets import echarts_head_html
+from wordcloud_style import style_kwargs as wordcloud_style_kwargs
+from wordcloud_svg import render_svg as wordcloud_render_svg
 from fupan_report import FuPanZhangTingYuanYin
 from time_utils import get_latest_date
 
@@ -522,13 +525,21 @@ def generate_wordclouds(plate_stock_data, output_dir):
             if not FONT_PATH:
                 raise FileNotFoundError("未找到CJK字体, 请安装 fonts-noto-cjk 或 fonts-wqy-zenhei")
             
-        res = {'hot_stock_b64': '', 'plate_b64': ''}
+        res = {'hot_stock_b64': '', 'plate_b64': '', 'hot_stock_svg': '', 'plate_svg': ''}
             
         def _to_base64(wc):
             img = wc.to_image()
             buf = BytesIO()
-            img.save(buf, format="PNG")
+            # optimize=True: 同样的画面体积更小, 而报告是邮件附件, 体积直接等于收件人的等待
+            img.save(buf, format="PNG", optimize=True)
             return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode('utf-8')
+
+        def _to_svg(wc, label):
+            """优先出矢量(约 2 KB vs 位图 84~117 KB); 拿不到排版数据就返回空串由调用方回退。"""
+            try:
+                return wordcloud_render_svg(wc.layout_, wc.width, wc.height, label=label)
+            except Exception:
+                return ''
             
         print("    [1/2] 抓取全网热门股...")
         cls = fetch_cls_top20()
@@ -545,8 +556,10 @@ def generate_wordclouds(plate_stock_data, output_dir):
         all_stocks = weighted_list(cls) + weighted_list(em) + weighted_list(ths)
         if all_stocks:
             counter = Counter(all_stocks)
-            wc_stocks = WordCloud(width=800, height=400, background_color="#161b22", colormap="tab10", font_path=FONT_PATH).generate_from_frequencies(counter)
-            res['hot_stock_b64'] = _to_base64(wc_stocks)
+            wc_stocks = WordCloud(width=800, height=400, font_path=FONT_PATH, **wordcloud_style_kwargs()).generate_from_frequencies(counter)
+            res['hot_stock_svg'] = _to_svg(wc_stocks, '热门股票词云')
+            if not res['hot_stock_svg']:
+                res['hot_stock_b64'] = _to_base64(wc_stocks)
             res['top_stocks'] = {'cls': cls, 'em': em, 'ths': ths}  # type: ignore
         
         print("    [2/2] 生成当日涨停属性词云 & 提取Top强势板块...")
@@ -563,8 +576,10 @@ def generate_wordclouds(plate_stock_data, output_dir):
                     
         if all_concepts:
             counter_concepts = Counter(all_concepts)
-            wc_concepts = WordCloud(width=800, height=400, background_color="#161b22", font_path=FONT_PATH).generate_from_frequencies(counter_concepts)
-            res['plate_b64'] = _to_base64(wc_concepts)
+            wc_concepts = WordCloud(width=800, height=400, font_path=FONT_PATH, **wordcloud_style_kwargs()).generate_from_frequencies(counter_concepts)
+            res['plate_svg'] = _to_svg(wc_concepts, '当日涨停属性词云')
+            if not res['plate_svg']:
+                res['plate_b64'] = _to_base64(wc_concepts)
             res['top_plates'] = counter_concepts.most_common(20)  # type: ignore
             
         return res
@@ -2415,10 +2430,13 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
                 hot_stock_html += f'<tr><td>{i+1}</td><td>{v1}</td><td>{v2}</td><td>{v3}</td></tr>'
             hot_stock_html += '</table></div></div>'
             
-        if wc_data.get('hot_stock_b64'):
+        _wc_stock_visual = wc_data.get('hot_stock_svg') or (
+            f'<img src="{wc_data["hot_stock_b64"]}" style="max-width:100%;object-fit:contain;border-radius:4px;">'
+            if wc_data.get('hot_stock_b64') else '')
+        if _wc_stock_visual:
             hot_stock_html += '<div style="flex:1;min-width:380px;background:#161b22;padding:15px;border-radius:8px;border:1px solid #21262d;display:flex;flex-direction:column;align-items:center;">'
             hot_stock_html += '<h3 style="color:#e0e0e0;margin-bottom:10px;">🔥 热门股票词云</h3>'
-            hot_stock_html += f'<img src="{wc_data["hot_stock_b64"]}" style="max-width:100%;object-fit:contain;border-radius:4px;"></div>'
+            hot_stock_html += f'{_wc_stock_visual}</div>'
 
         tp = wc_data.get('top_plates', [])
         tp_html = ''
@@ -2430,10 +2448,13 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
                 tp_html += f'<span style="background:#0d1117;border:1px solid {color};color:{color};padding:3px 8px;border-radius:4px;font-size:12px;">{pname} <b style="color:#fff">{pcount}只</b></span>'
             tp_html += '</div></div>'
 
-        if wc_data.get('plate_b64'):
+        _wc_plate_visual = wc_data.get('plate_svg') or (
+            f'<img src="{wc_data["plate_b64"]}" style="max-width:100%;object-fit:contain;border-radius:4px;">'
+            if wc_data.get('plate_b64') else '')
+        if _wc_plate_visual:
             hot_stock_html += '<div style="flex:1;min-width:380px;background:#161b22;padding:15px;border-radius:8px;border:1px solid #21262d;display:flex;flex-direction:column;align-items:center;">'
             hot_stock_html += '<h3 style="color:#e0e0e0;margin-bottom:10px;">📋 当日涨停属性词云</h3>'
-            hot_stock_html += f'<img src="{wc_data["plate_b64"]}" style="max-width:100%;object-fit:contain;border-radius:4px;">'
+            hot_stock_html += f'{_wc_plate_visual}'
             hot_stock_html += tp_html
             hot_stock_html += '</div>'
             
@@ -2611,7 +2632,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
 
     mainline_table_html = ''
     if sub_ratings:
-        mainline_table_html = '<h2 class="section-title">📊 主线数据</h2><div class="ml-table-wrap"><table class="ml-data-table"><tr><th>方向</th>'
+        mainline_table_html = '<h2 class="section-title">📊 主线方向状态 (评级 × 趋势 × 分支)</h2><div class="ml-table-wrap"><table class="ml-data-table"><tr><th>方向</th>'
         for ml in MAINLINE_NAMES:
             subs = [s for s, (_, m) in sub_ratings.items() if m == ml]
             colspan = max(len(subs), 1)
@@ -2835,7 +2856,6 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
                        f'核心=证监会行业也归此板块, 关联=仅概念沾边(如并购重组)。">?</span></div>'
                        f'{wins}')
 
-            init = win_opt[default_w]
             sub_charts_html += f'''
         {lb_html}
         <div class="chart-container" id="{chart_id}" style="height:500px;"></div>
@@ -2845,14 +2865,15 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
             window.SUB_CHART_DATA['{chart_id}']={json.dumps(win_opt, ensure_ascii=False)};
             var c=echarts.init(document.getElementById('{chart_id}'),'dark');
             window.SUB_CHARTS['{chart_id}']=c;
+            var _init=window.SUB_CHART_DATA['{chart_id}']['{default_w}'];
             c.setOption({{title:{{text:'{sector} 强势个股轨迹 ({sr_title})',left:'center',textStyle:{{color:'#e0e0e0',fontSize:16}}}},
                 tooltip:{{trigger:'axis',order:'valueDesc',valueFormatter:function(v){{return v==null?'-':v+'%';}}}},
-                legend:{{data:{json.dumps(init['legend'], ensure_ascii=False)},top:30,textStyle:{{fontSize:11}},type:'scroll'}},
+                legend:{{data:_init.legend,top:30,textStyle:{{fontSize:11}},type:'scroll'}},
                 grid:{{left:60,right:90,top:80,bottom:50}},
                 xAxis:{{type:'category',data:{json.dumps(dates_fmt)},axisLabel:{{rotate:45,fontSize:10}}}},
                 yAxis:{{type:'value',name:'涨幅(%)',axisLabel:{{formatter:'{{value}}%'}}}},
                 dataZoom:[{{type:'inside'}},{{type:'slider',bottom:5,height:20}}],
-                series:{json.dumps(init['series'], ensure_ascii=False)}}});
+                series:_init.series}});
             window.addEventListener('resize',function(){{c.resize();}});
         }})();</script>'''
         else:
@@ -3184,236 +3205,11 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
         '''
 
     # --- 连板高度分析 (上半部) ---
-    lianban_height_html = ''
-    if sentiment_df is not None and not sentiment_df.empty and '连板高度' in sentiment_df.columns:
-        # 同步日期范围到 dates
-        if dates:
-            date_set = set(str(d) for d in dates)
-            sentiment_df = sentiment_df[sentiment_df['日期'].astype(str).isin(date_set)].copy()
-        
-        sentiment_df = sentiment_df.reset_index(drop=True)
-        lb_dates = sentiment_df['日期'].astype(str).tolist()
-        lb_dates_parsed = pd.to_datetime(lb_dates, format='%Y%m%d', errors='coerce')
-        weekdays = ["一", "二", "三", "四", "五", "六", "日"]
-        lb_dates_fmt = [d.strftime('%m/%d') + '/' + weekdays[d.weekday()] if pd.notnull(d) else str(orig) for d, orig in zip(lb_dates_parsed, lb_dates)]  # type: ignore
-        
-        lb_data = sentiment_df['连板高度'].fillna(0).tolist()
-        db_data = sentiment_df['断板高度'].fillna(0).tolist()
-        db_data = [d if d > 0 else None for d in db_data]
-        
-        # 1. 核心修改：完全按照图一逻辑重构“压力高度”
-        # 逻辑：维持前高，遇断板确认新高，遇突破更新新高
-        pr_data = []
-        curr_pr = lb_data[0] if len(lb_data) > 0 else 0
-        for i in range(len(lb_data)):
-            if i == 0:
-                pr_data.append(curr_pr)
-                continue
-            if lb_data[i] < lb_data[i-1]:
-                curr_pr = lb_data[i-1]
-            elif lb_data[i] > curr_pr:
-                curr_pr = lb_data[i]
-            pr_data.append(curr_pr)
-        
-        lb_labels = []
-        for _, row in sentiment_df.iterrows():
-            name = str(row.get('连板股', '')).split(',')[0].strip()
-            val_raw = row.get('连板高度', 0)
-            lb_val = int(val_raw) if pd.notnull(val_raw) else 0
-            if lb_val < 0: lb_val = 0
-            lb_labels.append(f"{name} {lb_val}" if name and name != 'nan' else str(lb_val))
-            
-        db_labels = []
-        for _, row in sentiment_df.iterrows():
-            val_raw = row.get('断板高度', 0)
-            db_val = int(val_raw) if pd.notnull(val_raw) else 0
-            if db_val > 0:
-                name = '断:' + str(row.get('断板股', '')).split(',')[0].strip()
-                db_labels.append(f"{name} {db_val}" if name and name != '断:nan' and name[-1] != ':' else str(db_val))
-            else:
-                db_labels.append('')
-                
-        td_details = []
-        for _, row in sentiment_df.iterrows():
-            lb_raw, db_raw = row.get('连板高度', 0), row.get('断板高度', 0)
-            td_details.append({
-                'date': str(row.get('日期', '')),
-                'lb': int(lb_raw) if pd.notnull(lb_raw) else 0,
-                'lb_name': str(row.get('连板股', '')),
-                'db': int(db_raw) if pd.notnull(db_raw) else 0,
-                'db_name': str(row.get('断板股', '')),
-                'mood': str(row.get('情绪', '')).replace('nan', ''),
-                'mood_clr': str(row.get('情绪颜色', '')).replace('nan', ''),
-            })
-            
-        # 2. 核心修改：图一逻辑的龙头识别与连线计算
-        # 逻辑：一段时间内的最高连板（局部峰值）。直接用数学方法找峰值，并用 高度反推首板日。
-        lt_marks = []
-        n_lb = len(lb_data)
-        for i in range(n_lb):
-            h = lb_data[i]
-            if h >= 3:  # 设定最小连板数为3板才算作具备连线价值的龙头
-                is_peak = False
-                if i == n_lb - 1:
-                    is_peak = True
-                elif lb_data[i] > lb_data[i+1]:
-                    is_peak = True
-                    
-                if is_peak:
-                    # 核心突破：直接通过索引减去(高度-1)精准反推首板日，免去模糊查询
-                    start_idx = max(0, i - (int(h) - 1))
-                    name = str(sentiment_df.iloc[i].get('连板股', '')).split(',')[0].strip()
-                    if not name or name == 'nan':
-                        name = f"{int(h)}连板"
-                    lt_marks.append({
-                        'name': name,
-                        'sb_idx': start_idx,
-                        'peak_idx': i,
-                        'peak_h': int(h),
-                        'sb_date': str(lb_dates[start_idx]) if start_idx < len(lb_dates) else '',
-                        'peak_date': str(lb_dates[i]) if i < len(lb_dates) else ''
-                    })
-        
-        lianban_height_html = f'''
-        <h2 class="section-title">🚀 连板高度分析 (市场高度) <span class="help-icon" data-tip="连板数为连续涨停的天数。该图表展示了市场投机高度的溢出与回撤，是情绪周期的核心指标。">?</span></h2>
-        <div class="chart-container" id="lianbanChart" style="height:450px;"></div>
-        <script>
-        var lb_dates_raw = {json.dumps(lb_dates)}; 
-        var LBL_lb = {json.dumps(lb_labels, ensure_ascii=False)};
-        var DBL_lb = {json.dumps(db_labels, ensure_ascii=False)};
-        var TD_lb = {json.dumps(td_details, ensure_ascii=False)};
-        var LTM_lb = {json.dumps(lt_marks, ensure_ascii=False)};
-        
-        (function(){{
-            var c=echarts.init(document.getElementById('lianbanChart'),'dark');
-            var opt = {{
-                backgroundColor: '#161b22',
-                grid: {{ left: 50, right: 20, top: 40, bottom: 40 }},
-                tooltip: {{
-                    trigger: 'axis',
-                    backgroundColor: 'rgba(22, 27, 34, 0.95)',
-                    borderColor: '#30363d',
-                    borderWidth: 1,
-                    textStyle: {{ color: '#e6edf3', fontSize: 13 }},
-                    formatter: function(p) {{
-                        var i = p[0].dataIndex, d = TD_lb[i];
-                        if(!d) return '';
-                        var h = '<b style="color:#58a6ff">' + d.date + '</b>  <span style="color:' + (d.mood_clr||'#fff') + '">' + (d.mood||'') + '</span><br>';
-                        h += '<span style="color:#58a6ff">● 连板高度 ' + d.lb + '板  ' + (d.lb_name && d.lb_name !== 'nan'?d.lb_name:'') + '</span><br>';
-                        if (d.db > 0) h += '<span style="color:#ff7b72">● 断板高度 ' + d.db + '板  ' + (d.db_name && d.db_name !== 'nan'?d.db_name:'') + '</span><br>';
-
-                        var day_lts = LTM_lb.filter(m => String(m.peak_date || m.date) === String(d.date));
-                        if (day_lts.length > 0) {{
-                            day_lts.forEach(function(m){{
-                                h += '<span style="color:#ff8800">▲ 龙头首板: ' + m.name + ' @ ' + m.sb_date + '</span><br>';
-                            }});
-                        }}
-                        return h;
-                    }}
-                }},
-                legend: {{ show: true, data: ['连板高度', '压力高度', '断板高度'], top: 10, right: 30, textStyle: {{ fontSize: 12, color: '#8b949e' }} }},
-                xAxis: {{
-                    type: 'category', data: {json.dumps(lb_dates_fmt, ensure_ascii=False)},
-                    axisLine: {{ lineStyle: {{ color: '#333' }} }},
-                    axisLabel: {{ color: '#666', fontSize: 10, interval: 'auto' }},
-                    axisTick: {{ show: true, lineStyle: {{ color: '#222' }} }},
-                }},
-                yAxis: {{
-                    type: 'value', min: 0, minInterval: 1,
-                    axisLine: {{ show: false }},
-                    axisLabel: {{ color: '#555', fontSize: 11 }},
-                    splitLine: {{ show: true, lineStyle: {{ color: '#161616' }} }}
-                }},
-                dataZoom: [
-                    {{ type: 'inside', xAxisIndex: 0, start: 0, end: 100 }},
-                    {{ type: 'slider', xAxisIndex: 0, start: 0, end: 100, height: 16, bottom: 4,
-                       backgroundColor: '#0d1117', borderColor: '#30363d', fillerColor: 'rgba(88, 166, 255, 0.15)' }}
-                ],
-                series: [
-                    {{
-                        name: '连板高度', type: 'line', data: {json.dumps(lb_data)}, z: 10,
-                        symbol: 'circle', symbolSize: 8,
-                        lineStyle: {{ color: '#58a6ff', width: 3 }},
-                        itemStyle: {{ color: '#58a6ff', borderColor: '#e6edf3', borderWidth: 1 }},
-                        label: {{
-                            show: true, position: 'top', color: '#58a6ff', fontSize: 11, fontWeight: 'bold',
-                            backgroundColor: 'rgba(13, 17, 23, 0.7)', padding: [2, 4], borderRadius: 4,
-                            formatter: function(p) {{ return LBL_lb[p.dataIndex]; }}
-                        }}
-                    }},
-                    {{
-                        // 新增：图一逻辑的压力高度 (青色实线)
-                        name: '压力高度', type: 'line', data: {json.dumps(pr_data)}, z: 8,
-                        symbol: 'circle', symbolSize: 4,
-                        lineStyle: {{ color: '#00e5ff', width: 2 }},
-                        itemStyle: {{ color: '#00e5ff' }}
-                    }},
-                    {{
-                        name: '断板高度', type: 'line', data: {json.dumps(db_data)}, z: 9,
-                        symbol: 'rect', symbolSize: 6, connectNulls: false,
-                        lineStyle: {{ color: '#ff7b72', width: 2, type: 'dotted' }},
-                        itemStyle: {{ color: '#ff7b72' }},
-                        label: {{
-                            show: true, position: 'bottom', color: '#ff7b72', fontSize: 10,
-                            backgroundColor: 'rgba(13, 17, 23, 0.7)', padding: [2, 4], borderRadius: 4,
-                            formatter: function(p) {{ return DBL_lb[p.dataIndex]; }}
-                        }}
-                    }}
-                ]
-            }};
-            
-            // 新增：图一逻辑的纯正首板起涨连线 (粗红实线)
-            if (LTM_lb && LTM_lb.length > 0) {{
-                var sbScatterData = [];
-                var markLineData = [];
-                for (var k = 0; k < LTM_lb.length; k++) {{
-                    var m = LTM_lb[k];
-                    // 直接使用 Python 端计算好的精准索引
-                    var s_idx = m.sb_idx;
-                    var p_idx = m.peak_idx;
-                    
-                    sbScatterData.push({{
-                        value: [s_idx, 0], // 首板起点从底部开始画
-                        name: m.name,
-                        peak_h: m.peak_h,
-                        sb_date: m.sb_date
-                    }});
-                    markLineData.push([
-                        {{ coord: [s_idx, 0] }},
-                        {{ coord: [p_idx, m.peak_h] }}
-                    ]);
-                }}
-                opt.series.push({{
-                    name: '龙头主升连线',
-                    type: 'scatter',
-                    xAxisIndex: 0,
-                    yAxisIndex: 0,
-                    data: sbScatterData,
-                    symbol: 'circle',
-                    symbolSize: 6,
-                    z: 15,
-                    itemStyle: {{ color: '#ff3333' }},
-                    label: {{
-                        show: true, position: 'bottom', color: '#ff3333', fontSize: 10, 
-                        backgroundColor: 'rgba(22, 27, 34, 0.8)', padding: [1, 2], borderRadius: 2,
-                        formatter: function(p) {{ return p.data.name; }}
-                    }},
-                    markLine: {{
-                        silent: true,
-                        symbol: ['none', 'none'],
-                        // 使用实线，模拟图一从首板直插云霄的效果
-                        lineStyle: {{ color: '#ff3333', width: 2, type: 'solid' }},
-                        label: {{ show: false }},
-                        data: markLineData
-                    }}
-                }});
-            }}
-            
-            c.setOption(opt);
-            window.addEventListener('resize',function(){{c.resize();}});
-        }})();
-        </script>
-        '''
+    # 独立一年窗口；不再随板块图的65日窗口裁剪，不修改共享sentiment_df。
+    from annual_height_view import render_annual_height_section
+    lianban_height_html = render_annual_height_section(
+        sentiment_df, as_of=(dates[-1] if dates else None)
+    )
 
     fupan_html = ""
 
@@ -3493,7 +3289,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
 <html lang="zh-CN"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>主线强度追踪系统 V3 - 量化投研决策终端</title>
-<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+{echarts_head_html()}
 <style>
     :root {{
         --bg-color: #0d1117;
