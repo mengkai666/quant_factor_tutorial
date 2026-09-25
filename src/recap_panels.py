@@ -1,8 +1,12 @@
 """Compact evidence-first recap panels shared by both HTML report surfaces."""
 from __future__ import annotations
 
+import json
+import os
 from html import escape
 from typing import Any
+
+TACTICS_RECAP_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'tactics_recap.json')
 
 _PHASES = {"close": "收盘基准", "auction": "竞价", "early_0935": "9:35", "confirm_1000": "10:00", "afternoon": "午后"}
 _DAILY = {
@@ -443,7 +447,7 @@ DEFAULT_TACTICS_DATA = {
     "today_recap": {
         "market_qualitative": "今日市场呈现典型的“高潮后剧烈分化淘汰”特征。在昨日百股涨停的狂热情绪释放后，早盘开盘即出现大面积后排标的杀跌分化，炸板率显著上升至30%以上。全天赚钱效应极度分化收敛，高位追高盈亏比极其恶劣，唯有前排极少数硬逻辑换手晋级标的与核心中军展现韧性。",
         "echelon_breakdown": [
-            {"tier": "5板空间板", "stocks": "华瓷股份", "status": "炸板剧烈分歧", "analysis": "全市场空间天花板，早盘遭遇巨额获利盘抛压开板，全天巨量换手分歧，封板质量骤降，确认5板高度受阻。"},
+            {"tier": "5进6 空间板", "stocks": "华瓷股份", "status": "一字晋级 6 板", "analysis": "全市场空间天花板，9:25 一字封板、全天未开板（换手 0.74%，炸板 0 次），晋级 6 板继续锚定空间高度。"},
             {"tier": "4板身位战", "stocks": "内蒙新华 vs 世联行", "status": "内蒙新华晋级 / 世联行落败", "analysis": "双子星同身位竞争残酷兑现：内蒙新华早盘资金抢筹封板，世联行冲高无力跳水回落，同身位淘汰律显现。"},
             {"tier": "3板断层区", "stocks": "龙头股份、南华生物等", "status": "分化与断层", "analysis": "3板梯队断层分流明显，高位资金接力意愿衰竭，无独立逻辑支撑的后排标的被大面积无情抛弃。"},
             {"tier": "2板晋级区", "stocks": "博通集成、大亚圣象、三羊马", "status": "博通集成强势换手卡位", "analysis": "博通集成依托半导体芯片题材，早盘爆量换手强势封板卡位成功，成为低位承接短线游资的核心活口。"}
@@ -462,10 +466,10 @@ DEFAULT_TACTICS_DATA = {
         {
             "point": "【高标高度接力】",
             "yesterday_plan": "华瓷股份冲击5板面临全市场空间压制，须警惕放量分歧，切忌无脑一字顶板接力。",
-            "today_reality": "华瓷股份盘中剧烈炸板放量分歧，换手率骤增，未能形成一致封死，5板空间阻力完全兑现。",
-            "result_badge": "🎯 完全命中",
-            "badge_color": "#3fb950",
-            "eval": "梯队高度律预警生效，未盲目接棒高位炸板盘，保全本金。"
+            "today_reality": "华瓷股份 9:25 一字封板晋级 6 板，全天未开板（换手 0.74%，炸板 0 次）。",
+            "result_badge": "❌ 未兑现",
+            "badge_color": "#f85149",
+            "eval": "预案预期的高度阻力当天没有出现。原记录误写为「盘中剧烈炸板」，已按 9/22 涨停池（首封 09:25、炸板 0 次）更正。"
         },
         {
             "point": "【中军低吸策略】",
@@ -545,6 +549,34 @@ DEFAULT_TACTICS_DATA = {
 }
 
 
+_NO_COMPARISON_ROW = {
+    "point": "【无当日对账】",
+    "yesterday_plan": "没有与本报告日期一致的预案记录（data/tactics_recap.json）。",
+    "today_reality": "—",
+    "result_badge": "⚪ 未对账",
+    "badge_color": "#8b949e",
+    "eval": "对账必须逐条记分；缺少当日记录时不沿用历史结论。",
+}
+
+
+def _load_dated_recap(report_date: str) -> dict:
+    """读取 tactics_recap.json，但只认与 report_date 同一天的记录。
+
+    那份文件是某个交易日写下的复盘结论；日期对不上还拿来填面板，就会把旧结论
+    当成今天的对账挂出去（9/22 的「华瓷剧烈炸板 · 完全命中」曾因此天天复现）。
+    """
+    if not report_date:
+        return {}
+    try:
+        with open(TACTICS_RECAP_PATH, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict) or str(data.get("report_date") or "") != report_date:
+        return {}
+    return data
+
+
 def build_tactics_data_from_report(
     context: dict | None = None,
     *,
@@ -567,6 +599,11 @@ def build_tactics_data_from_report(
     t_date = str(next_trade_date or ctx.get("target_trade_date") or ctx.get("next_trade_date") or DEFAULT_TACTICS_DATA.get("target_date") or "次日")
     if len(t_date) == 8 and t_date.isdigit():
         t_date = f"{t_date[:4]}-{t_date[4:6]}-{t_date[6:]}"
+
+    # 日期相关的叙述（对账、中军点评、竞价风向标）只取同日复盘记录，绝不回落到默认样例
+    dated = _load_dated_recap(r_date)
+    dated_today = _dict(dated.get("today_recap"))
+    dated_plan = _dict(dated.get("tomorrow_plan"))
 
     # 2. 状态基调与风控指标提取
     thesis = _dict(ctx.get("market_thesis"))
@@ -669,7 +706,7 @@ def build_tactics_data_from_report(
                 })
 
     if not dynamic_echelon_rows:
-        dynamic_echelon_rows = list(DEFAULT_TACTICS_DATA["today_recap"]["echelon_breakdown"])
+        dynamic_echelon_rows = list(dated_today.get("echelon_breakdown") or [])
 
     beacons_list.append("中际旭创/新易盛(容量中军)")
     core_beacons = " · ".join(beacons_list[:3])
@@ -677,7 +714,8 @@ def build_tactics_data_from_report(
     # 4. 盘面定性
     market_qual = str(thesis.get("core_conflict", {}).get("resolution_condition") or "")
     if not market_qual or len(market_qual) < 10:
-        market_qual = DEFAULT_TACTICS_DATA["today_recap"]["market_qualitative"]
+        market_qual = str(dated_today.get("market_qualitative") or
+                          f"今日全市场涨停 {zt_val} 家、跌停 {dt_val} 家，上涨占比 {breadth_ratio:.1%}。")
     else:
         market_qual = f"今日全市场涨停 {zt_val} 家、跌停 {dt_val} 家，上涨占比 {breadth_ratio:.1%}。盘面定性：{market_qual}。"
 
@@ -700,7 +738,7 @@ def build_tactics_data_from_report(
             "action": str(act)
         })
     if not dynamic_branches:
-        dynamic_branches = list(DEFAULT_TACTICS_DATA["tomorrow_plan"]["scenario_branches"])
+        dynamic_branches = list(dated_plan.get("scenario_branches") or [])
 
     candidates = today_dec.get("candidates") or ctx.get("focus_pool") or []
     dynamic_targets = []
@@ -734,9 +772,9 @@ def build_tactics_data_from_report(
             "position": pos
         })
     if not dynamic_targets:
-        dynamic_targets = list(DEFAULT_TACTICS_DATA["tomorrow_plan"]["focus_targets"])
+        dynamic_targets = list(dated_plan.get("focus_targets") or [])
 
-    yesterday_comp = list(DEFAULT_TACTICS_DATA.get("yesterday_comparison") or [])
+    yesterday_comp = list(dated.get("yesterday_comparison") or []) or [dict(_NO_COMPARISON_ROW)]
 
     return {
         "report_date": r_date,
@@ -753,12 +791,12 @@ def build_tactics_data_from_report(
         "today_recap": {
             "market_qualitative": market_qual,
             "echelon_breakdown": dynamic_echelon_rows,
-            "zhongjun_analysis": DEFAULT_TACTICS_DATA["today_recap"]["zhongjun_analysis"],
+            "zhongjun_analysis": str(dated_today.get("zhongjun_analysis") or "本交易日没有对应日期的中军复盘记录。"),
         },
         "yesterday_comparison": yesterday_comp,
         "tomorrow_plan": {
             "general_stance": f"{stance_val} / 仓位上限 {pos_ceiling} (不见明确信号不盲目出手)",
-            "auction_beacons": DEFAULT_TACTICS_DATA["tomorrow_plan"]["auction_beacons"],
+            "auction_beacons": list(dated_plan.get("auction_beacons") or []),
             "scenario_branches": dynamic_branches,
             "focus_targets": dynamic_targets[:6],
         }
@@ -783,11 +821,9 @@ def render_tactics_review_panel(
         except Exception:
             data = {}
     if not data:
-        import os, json
-        data_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'tactics_recap.json')
-        if os.path.exists(data_path):
+        if os.path.exists(TACTICS_RECAP_PATH):
             try:
-                with open(data_path, 'r', encoding='utf-8') as f:
+                with open(TACTICS_RECAP_PATH, 'r', encoding='utf-8') as f:
                     data = json.load(f)
             except Exception:
                 pass

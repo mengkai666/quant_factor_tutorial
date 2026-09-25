@@ -214,3 +214,31 @@ def test_build_tactics_data_from_report_dynamic():
     assert "博通集成" in html_dyn
 
 
+def test_dated_recap_only_used_on_its_own_report_date(tmp_path, monkeypatch):
+    import json
+    import recap_panels
+    recap = {
+        "report_date": "2026-09-23",
+        "today_recap": {"zhongjun_analysis": "9/23 中军点评"},
+        "yesterday_comparison": [{"point": "【9/23 对账】", "yesterday_plan": "p", "today_reality": "r",
+                                  "result_badge": "✅ 条件成立", "eval": "e"}],
+        "tomorrow_plan": {"auction_beacons": [{"beacon": "9/23 风向标", "focus": "f"}]},
+    }
+    path = tmp_path / "tactics_recap.json"
+    path.write_text(json.dumps(recap, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(recap_panels, "TACTICS_RECAP_PATH", str(path))
+
+    same_day = recap_panels.build_tactics_data_from_report({}, echelon=[], report_date="2026-09-23")
+    assert same_day["yesterday_comparison"][0]["point"] == "【9/23 对账】"
+    assert same_day["today_recap"]["zhongjun_analysis"] == "9/23 中军点评"
+    assert same_day["tomorrow_plan"]["auction_beacons"][0]["beacon"] == "9/23 风向标"
+
+    later = recap_panels.build_tactics_data_from_report({}, echelon=[], report_date="2026-09-25")
+    assert [c["point"] for c in later["yesterday_comparison"]] == ["【无当日对账】"]
+    assert later["tomorrow_plan"]["auction_beacons"] == []
+    dumped = json.dumps(later, ensure_ascii=False)
+    # 默认样例里的 9/22 结论不许借日期空档混进别的交易日
+    for stale in ("9/23 中军点评", "华瓷股份盘中剧烈炸板", "高标华瓷股份竞价", "完全命中"):
+        assert stale not in dumped
+
+
