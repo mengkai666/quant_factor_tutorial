@@ -4878,7 +4878,13 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
         try:
             from ai_tactics_recap import is_gemini_available, update_tactics_recap_file
             if is_gemini_available() and _report_date_str:
-                update_tactics_recap_file(report_date=_report_date_str)
+                # AI 只拿当日上下文现算的事实；缺失时 update_tactics_recap_file 自己跳过，不再回落到写死的旧盘面
+                from next_day_plan import collect_market_facts
+                update_tactics_recap_file(
+                    report_date=_report_date_str,
+                    target_date=str(unified_context.get('target_trade_date') or ''),
+                    market_facts=collect_market_facts(unified_context, echelon, price_df),
+                )
         except Exception as _gemini_err:
             print(f"  [AI对账] 自动更新跳过: {_gemini_err}")
 
@@ -4894,6 +4900,11 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
             echelon=echelon,
             advance_decline=advance_decline,
         )
+        try:
+            from next_day_plan import render_plan_teaser_html
+            tactics_panel_html = render_plan_teaser_html(_report_date_str) + tactics_panel_html
+        except Exception as _plan_err:
+            print(f"  [警告] 明日预案入口卡生成失败: {_plan_err}")
     except Exception as e:
         print(f"  [警告] 战法复盘作战室面板生成失败 (不影响主流程): {e}")
 
@@ -6883,6 +6894,14 @@ def _main_impl():
         except Exception as e:
             print(f"  [警告] 龙头接替谱系子页生成失败 (不影响主流程): {e}")
 
+        # === 明日预案: 独立子页归档到 site/plan/ (与主报告同一份 report_context, 另对上一交易日预案逐只记分) ===
+        _plan_html = None
+        try:
+            from next_day_plan import build_next_day_plan, generate_plan_html
+            _plan_html = generate_plan_html(build_next_day_plan(_report_context, echelon, price_df))
+        except Exception as e:
+            print(f"  [警告] 明日预案子页生成失败 (不影响主流程): {e}")
+
         publish_result = publish(
             OUTPUT_HTML,
             SITE_DIR,
@@ -6891,6 +6910,7 @@ def _main_impl():
             dashboard_html=_dashboard_html,
             dragon_html=_dragon_html,
             research_html=_research_html,
+            plan_html=_plan_html,
         )
         publish_succeeded = publish_result is not None
     except Exception as e:

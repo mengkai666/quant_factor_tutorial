@@ -244,20 +244,36 @@ def generate_recap_analysis(
     return call_gemini_json(prompt, system_instruction=system_instruction)
 
 
+def _iso_date(value: Any) -> str:
+    text = str(value or "").strip()
+    if len(text) == 8 and text.isdigit():
+        return f"{text[:4]}-{text[4:6]}-{text[6:]}"
+    return text[:10]
+
+
 def update_tactics_recap_file(
-    report_date: str = "2026-09-24",
-    target_date: str = "2026-09-25",
+    report_date: str,
+    target_date: str = "",
     market_facts: Dict[str, Any] | None = None,
     dry_run: bool = False,
 ) -> Dict[str, Any]:
-    """主执行函数：读取旧配置 -> 调 Gemini 生成新对账 -> 原子写回 tactics_recap.json."""
+    """主执行函数：读取旧配置 -> 调 Gemini 生成新对账 -> 原子写回 tactics_recap.json.
+
+    market_facts 必须是 report_date 当天的真实行情（next_day_plan.collect_market_facts）。
+    曾经在缺省时回落到写死的 9/24 盘面，于是每天都拿 9/24 的数据冒充当天生成对账；
+    现在缺失或日期对不上就原样返回、不调 AI。
+    """
     if not TACTICS_RECAP_PATH.exists():
         raise FileNotFoundError(f"未找到 tactics_recap.json: {TACTICS_RECAP_PATH}")
 
     with open(TACTICS_RECAP_PATH, "r", encoding="utf-8") as f:
         existing_data = json.load(f)
 
-    facts = market_facts or get_default_market_facts_0924()
+    report_date, target_date = _iso_date(report_date), _iso_date(target_date)
+    facts = market_facts or {}
+    if _iso_date(facts.get("trade_date")) != report_date:
+        print(f"  [Gemini] 缺少 {report_date} 当日行情事实（收到 {facts.get('trade_date') or '无'}），跳过 AI 对账。")
+        return existing_data
     
     print(f"🤖 [Gemini] 正在调用 {GEMINI_MODEL} 分析 {report_date} 盘面对账与 {target_date} 竞价风向标...")
     ai_result = generate_recap_analysis(report_date, target_date, existing_data, facts)
@@ -271,19 +287,23 @@ def update_tactics_recap_file(
     updated_data["report_date"] = report_date
     updated_data["target_date"] = target_date
 
-    # 更新 status_summary
-    dt_count = facts.get("breadth", {}).get("dt_count", 0)
-    breadth_up = facts.get("breadth", {}).get("up_count", 0)
-    stance = "极端冰点防守 / 严控开仓" if dt_count >= 10 or breadth_up < 1200 else "分化防守反击"
-    stance_clr = "#f85149" if "极端" in stance else "#d29922"
-
+    # 更新 status_summary：只用当日事实，不写死任何个股
+    breadth = facts.get("breadth") or {}
+    dt_count = breadth.get("dt_count") or 0
+    ratio = breadth.get("breadth_ratio")
+    cold = dt_count >= 10 or (isinstance(ratio, (int, float)) and ratio < 0.3)
+    stance = "极端冰点防守 / 严控开仓" if cold else "分化防守反击"
+    top = breadth.get("zt_highest") or {}
+    ratio_text = f"上涨占比 {ratio:.0%} · " if isinstance(ratio, (int, float)) else ""
     updated_data["status_summary"] = {
         "tactical_stance": stance,
-        "stance_color": stance_clr,
-        "cycle_stage": f"高位退潮强分化期 (4000+个股普跌 · 跌停{dt_count}家)",
-        "position_ceiling": "0-2成 (防守观望，保全本金第一)",
-        "core_beacons": "新华文轩(5板总高标) · 澳弘电子(硬件抗跌核心) · 平潭发展(福建首板潮) · 中际旭创(大市值中军)"
+        "stance_color": "#f85149" if cold else "#d29922",
+        "cycle_stage": f"{ratio_text}涨停 {breadth.get('zt_count', '—')} 家 · 跌停 {dt_count} 家",
+        "position_ceiling": "0-2成 (防守观望，保全本金第一)" if cold else "2-3成",
+        "core_beacons": (f"{'、'.join(top.get('names') or [top.get('name') or ''])}({top.get('height')}板最高标)"
+                         if top else "无 2 板以上高标"),
     }
+    updated_data["facts_source"] = "report_context"
 
     # 更新 today_recap
     updated_today = dict(updated_data.get("today_recap", {}))
@@ -322,6 +342,7 @@ def update_tactics_recap_file(
             "target_date": target_date,
             "generated_at": datetime.now().isoformat(),
             "model": GEMINI_MODEL,
+            "facts_source": "report_context",
             "yesterday_comparison": updated_data["yesterday_comparison"],
             "zhongjun_analysis": updated_today.get("zhongjun_analysis"),
             "auction_beacons": updated_plan.get("auction_beacons"),
@@ -342,4 +363,5 @@ if __name__ == "__main__":
     parser.add_argument("--dry-run", action="store_true", help="演练模式，不写回文件")
     args = parser.parse_args()
 
-    update_tactics_recap_file(args.date, args.target, dry_run=args.dry_run)
+    # 手工重跑只有 9/24 这一份核对过的离线事实；其他日期请走主报告流程（当日上下文现算）
+    update_tactics_recap_file(args.date, args.target, market_facts=get_default_market_facts_0924(), dry_run=args.dry_run)

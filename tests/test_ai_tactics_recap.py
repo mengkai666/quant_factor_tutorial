@@ -75,9 +75,12 @@ def test_update_tactics_recap_mocked_gemini(tmp_path, monkeypatch):
     monkeypatch.setattr(ai_tactics_recap, "call_gemini_json", lambda *a, **kw: mock_ai_output)
 
     # 3. Execute
-    res = update_tactics_recap_file(report_date="2026-09-24", target_date="2026-09-25")
+    res = update_tactics_recap_file(report_date="2026-09-24", target_date="2026-09-25",
+                                    market_facts=get_default_market_facts_0924())
 
     # 4. Verify in-memory result
+    assert res["facts_source"] == "report_context"
+    assert res["status_summary"]["core_beacons"].startswith("新华文轩(5板")
     assert res["report_date"] == "2026-09-24"
     assert res["target_date"] == "2026-09-25"
     assert res["today_recap"]["market_qualitative"] == "今日市场普跌，资金防御。"
@@ -109,7 +112,24 @@ def test_update_tactics_recap_fallback_when_gemini_unavailable(tmp_path, monkeyp
     monkeypatch.setattr(ai_tactics_recap, "TACTICS_RECAP_PATH", recap_file)
     monkeypatch.setattr(ai_tactics_recap, "call_gemini_json", lambda *a, **kw: None)
 
-    res = update_tactics_recap_file(report_date="2026-09-24", target_date="2026-09-25")
+    res = update_tactics_recap_file(report_date="2026-09-24", target_date="2026-09-25",
+                                    market_facts=get_default_market_facts_0924())
     # Graceful fallback: file is untouched
     assert res["report_date"] == "2026-09-23"
     assert res["today_recap"]["zhongjun_analysis"] == "保持不变"
+
+
+def test_update_tactics_recap_skips_without_same_day_facts(tmp_path, monkeypatch):
+    """缺行情或日期对不上时不许调 AI —— 曾经默认回落到写死的 9/24 盘面, 每天冒充当天生成对账。"""
+    import ai_tactics_recap
+
+    recap_file = tmp_path / "tactics_recap.json"
+    recap_file.write_text(json.dumps({"report_date": "2026-09-24"}), encoding="utf-8")
+    monkeypatch.setattr(ai_tactics_recap, "TACTICS_RECAP_PATH", recap_file)
+    calls = []
+    monkeypatch.setattr(ai_tactics_recap, "call_gemini_json", lambda *a, **kw: calls.append(1) or {})
+
+    for facts in (None, get_default_market_facts_0924()):
+        res = update_tactics_recap_file(report_date="20260925", target_date="2026-09-28", market_facts=facts)
+        assert res["report_date"] == "2026-09-24"
+    assert calls == []

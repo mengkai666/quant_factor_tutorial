@@ -231,6 +231,18 @@ def _render_dragon_entry(dragon_date):
   </a>'''
 
 
+def _render_plan_entry(plan_date):
+    """明日预案子页入口卡 (site/plan/latest.html)。plan_date 为空则不挂, 避免死链。"""
+    if not plan_date:
+        return ''
+    day = _esc(plan_date)
+    return (f'<a class="dragon-entry" href="plan/latest.html" style="border-left-color:#58a6ff">'
+            f'<div class="de-left"><div class="de-label" style="color:#58a6ff">明日预案</div>'
+            f'<div class="de-title">三道开关 · 情景推演 · 不追名单 · 昨日对账</div>'
+            f'<div class="de-sub">基于 {day} 收盘数据 · 每个交易日自动更新</div></div>'
+            f'<div class="de-right" style="color:#58a6ff">查看预案 →</div></a>')
+
+
 def _render_research_entry(research_date):
     if not research_date:
         return ''
@@ -241,7 +253,8 @@ def _render_research_entry(research_date):
             f'每板块3只重点股 · 近期多板轨迹 · {day}</div></a></div>')
 
 
-def _render_index(reports, updated_at, summary=None, dashboard_date=None, dragon_date=None, research_date=None):
+def _render_index(reports, updated_at, summary=None, dashboard_date=None, dragon_date=None, research_date=None,
+                  plan_date=None):
     """生成首页 HTML。reports: [(date_str, filename)] 已按日期倒序。
 
     dashboard_date: 提供后在首页顶部插入"当日决策看板"卡片入口。
@@ -384,6 +397,7 @@ def _render_index(reports, updated_at, summary=None, dashboard_date=None, dragon
   {_render_research_entry(research_date)}
   {_render_dashboard_entry(dashboard_date)}
 
+  {_render_plan_entry(plan_date)}
   {_render_dragon_entry(dragon_date)}
 
   <div class="hero">
@@ -405,7 +419,7 @@ def _render_index(reports, updated_at, summary=None, dashboard_date=None, dragon
 
 
 def publish(output_html, site_dir, report_date=None, summary=None, dashboard_html=None,
-            dragon_html=None, research_html=None):
+            dragon_html=None, research_html=None, plan_html=None):
     """把 output_html 归档进 site_dir 并重建首页。
 
     Args:
@@ -417,6 +431,7 @@ def publish(output_html, site_dir, report_date=None, summary=None, dashboard_htm
                         并生成 dashboards/latest.html, 首页顶部加入口。
         dragon_html:    可选龙头接替·监管周期子页 HTML 字符串; 提供后归档到 dragon/YYYY-MM-DD.html
                         并生成 dragon/latest.html, 首页看板卡下加入口。为空 (无周期) 则不归档、不挂入口。
+        plan_html:      可选明日预案子页 HTML; 提供后归档到 plan/YYYY-MM-DD.html 并生成 plan/latest.html, 首页挂入口。
 
     Returns:
         (archived_path, index_path) 或 None (源文件不存在时)。
@@ -450,6 +465,7 @@ def publish(output_html, site_dir, report_date=None, summary=None, dashboard_htm
     for enabled, directory, filename in (
             (dashboard_html, 'dashboards', f'{date_str}.html'),
             (dragon_html, 'dragon', f'{date_str}.html'),
+            (plan_html, 'plan', f'{date_str}.html'),
             (research_html is not None, 'research_briefs', f'research_brief_{date_str}.html')):
         if enabled:
             destinations.extend((Path(site_dir) / directory / filename, Path(site_dir) / directory / 'latest.html'))
@@ -527,6 +543,17 @@ def publish(output_html, site_dir, report_date=None, summary=None, dashboard_htm
         dragon_date = date_str
         print(f"  [publish] 已归档龙头接替谱系 {date_str} → {dragon_archived}")
 
+    # === 明日预案子页归档 (镜像龙头接替子页) ===
+    plan_date = None
+    if plan_html:
+        plan_dir = os.path.join(site_dir, 'plan')
+        os.makedirs(plan_dir, exist_ok=True)
+        for name in (f'{date_str}.html', 'latest.html'):
+            with open(os.path.join(plan_dir, name), 'w', encoding='utf-8') as f:
+                f.write(plan_html)
+        plan_date = date_str
+        print(f"  [publish] 已归档明日预案 {date_str} → {os.path.join(plan_dir, f'{date_str}.html')}")
+
     reports = _scan_reports(reports_dir, max_date=date_str)
     generated_now = datetime.now()
     updated_at = (generated_now.strftime('%Y-%m-%d %H:%M') if _fmt_date(generated_now) <= date_str
@@ -534,7 +561,7 @@ def publish(output_html, site_dir, report_date=None, summary=None, dashboard_htm
     index_path = os.path.join(site_dir, 'index.html')
     with open(index_path, 'w', encoding='utf-8') as f:
         f.write(_render_index(reports, updated_at, summary, dashboard_date=dashboard_date,
-                              dragon_date=dragon_date, research_date=research_date))
+                              dragon_date=dragon_date, research_date=research_date, plan_date=plan_date))
 
     print(f"  [publish] 已归档 {date_str} → {archived}")
     print(f"  [publish] 首页已重建 ({len(reports)} 期) → {index_path}")
