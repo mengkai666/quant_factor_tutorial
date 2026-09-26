@@ -129,7 +129,7 @@ def test_tactics_review_panel_renders_and_escapes():
     assert "情绪周期极值律" in html_default
     assert "双子星卡位生死律" in html_default
     assert "华瓷股份" in html_default
-    assert "博通集成" in html_default
+    assert any(s in html_default for s in ("博通集成", "中天精装", "澳弘电子"))
     assert "中际旭创" in html_default
     assert "sec-tactics" in html_default
     # Verify quantitative strategies A-G

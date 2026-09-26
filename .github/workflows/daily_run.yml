@@ -177,6 +177,11 @@ jobs:
         ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
         # 主模型连续失败后的可选备用模型；未配置时不额外请求
         ANTHROPIC_FALLBACK_MODEL: ${{ secrets.ANTHROPIC_FALLBACK_MODEL }}
+        # Gemini API (Google AI Studio): 每日自动战法对账、中军点评与竞价风向标
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        GEMINI_MODEL: gemini-3.8-flash
+        GEMINI_FALLBACK_MODEL: gemini-2.5-flash
+        GEMINI_ENABLE: "1"
       run: |
         python src/主线强度追踪.py
 
@@ -196,6 +201,7 @@ jobs:
         # 只 add 小体积缓存文件 (data/ 下), 不 add 大体积 CSV 和 HTML
         git add data/涨停历史缓存.csv data/cls_plate_cache.csv data/sentiment_history_cache.csv data/ths_sector_hist.json 2>/dev/null || true
         git add data/report_prediction_history.jsonl data/market_phase_snapshots.jsonl 2>/dev/null || true
+        git add data/tactics_recap.json data/tactics_recap_history.jsonl 2>/dev/null || true
         # 快照目录同样用 -A: cache_budget 会按保留窗口删最老的 json, 而 shell glob
         # 展开不到已删除的文件 —— 用 glob 的话那些删除永远推不上去, 瘦身对仓库无效。
         git add -A data/report_daily_snapshots 2>/dev/null || true

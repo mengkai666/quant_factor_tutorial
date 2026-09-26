@@ -4875,6 +4875,13 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     try:
         from recap_panels import render_tactics_review_panel
         _report_date_str = str(dates[-1]) if dates else ''
+        try:
+            from ai_tactics_recap import is_gemini_available, update_tactics_recap_file
+            if is_gemini_available() and _report_date_str:
+                update_tactics_recap_file(report_date=_report_date_str)
+        except Exception as _gemini_err:
+            print(f"  [AI对账] 自动更新跳过: {_gemini_err}")
+
         _tactics_input = (
             unified_context.get('tactics_data')
             or (market_state or {}).get('tactics_data')
