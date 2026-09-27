@@ -216,7 +216,14 @@ jobs:
           echo "缓存无变化，跳过提交"
         else
           git commit -m "Auto-update market data caches [skip ci]"
-          git push
+          # GitHub 偶发 500（2026-09-23 两次 remote rejected: Internal Server Error）或本地同时推送
+          # 导致 non-fast-forward：重试 3 次，每次先 rebase 到远端最新；rebase 冲突仍按原样失败。
+          for attempt in 1 2 3; do
+            if git push; then break; fi
+            if [ "$attempt" = 3 ]; then exit 1; fi
+            sleep $((attempt * 15))
+            git pull --rebase --no-edit
+          done
         fi
 
     - name: 校验实际报告站点产物
@@ -281,9 +288,9 @@ jobs:
           echo "归档文件名日期 $REPORT_DATE 与正文日期 $ARCHIVE_DATE 不一致" >&2
           exit 1
         fi
-        cmp --silent "$OUTPUT_HTML" "$REPORT_DIR/$REPORT_DATE.html"
-        cmp --silent "$OUTPUT_HTML" output/site/latest.html
-        grep -q "reports/$REPORT_DATE.html" output/site/index.html
+        # publish() 会改写副本里的研究入口和年度研究链接，副本与原报告逐字节不同；
+        # 原来的 cmp --silent 因此自 2026-09-23 起每次都失败。改为比对元数据与页面文字。
+        python tools/verify_published_report.py "$OUTPUT_HTML" output/site "$REPORT_DATE"
 
     - name: 部署报告站点到 GitHub Pages
       if: steps.idempotency.outputs.skip != 'true'
