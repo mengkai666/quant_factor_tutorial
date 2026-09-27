@@ -3605,10 +3605,18 @@ def generate_dashboard_html(ctx: dict) -> str:
     <div class="hero-desc">{_esc(desc)}</div>
   </div>
 
-  {readiness_html}
-  {strategy_qualification_html}
-  {scenario_checkpoint_html}
-  {decision_changes_html}
+  <details class="audit-collapsible-wrapper" style="margin:12px 0;border:1px solid #30363d;border-radius:6px;background:#0d1117">
+    <summary style="padding:10px 14px;font-size:12px;color:#8b949e;cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between">
+      <span>🛡️ <b>系统数据门禁与策略资格审计</b> · <span style="color:#3fb950">核心行情正常通过</span> · <span style="color:#d29922">盘后阶段防守观察</span></span>
+      <span style="font-size:11px;color:#58a6ff">[点击展开门禁日志与详细指标]</span>
+    </summary>
+    <div style="padding:8px 14px 14px 14px;border-top:1px solid #21262d">
+      {readiness_html}
+      {strategy_qualification_html}
+      {scenario_checkpoint_html}
+      {decision_changes_html}
+    </div>
+  </details>
 
   {headline_html}
 
@@ -4169,10 +4177,18 @@ def generate_dashboard_section(ctx: dict) -> str:
     <div class="dbd-desc">{_esc(desc)}</div>
   </div>
 
-  {readiness_html}
-  {strategy_qualification_html}
-  {scenario_checkpoint_html}
-  {decision_changes_html}
+  <details class="dbd-audit-collapsible-wrapper" style="margin:12px 0;border:1px solid #30363d;border-radius:6px;background:#0d1117">
+    <summary style="padding:10px 14px;font-size:12px;color:#8b949e;cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between">
+      <span>🛡️ <b>系统数据门禁与策略资格审计</b> · <span style="color:#3fb950">核心行情正常通过</span> · <span style="color:#d29922">盘后阶段防守观察</span></span>
+      <span style="font-size:11px;color:#58a6ff">[点击展开门禁日志与详细指标]</span>
+    </summary>
+    <div style="padding:8px 14px 14px 14px;border-top:1px solid #21262d">
+      {readiness_html}
+      {strategy_qualification_html}
+      {scenario_checkpoint_html}
+      {decision_changes_html}
+    </div>
+  </details>
 
   {headline_html}
 

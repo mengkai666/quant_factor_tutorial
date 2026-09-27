@@ -6894,11 +6894,20 @@ def _main_impl():
         except Exception as e:
             print(f"  [警告] 龙头接替谱系子页生成失败 (不影响主流程): {e}")
 
-        # === 明日预案: 独立子页归档到 site/plan/ (与主报告同一份 report_context, 另对上一交易日预案逐只记分) ===
+        # === 明日预案: 独立子页归档到 site/plan/，同时在 output/ 生成本地专属报告 ===
         _plan_html = None
         try:
+            from paths import OUTPUT_DIR
             from next_day_plan import build_next_day_plan, generate_plan_html
             _plan_html = generate_plan_html(build_next_day_plan(_report_context, echelon, price_df))
+            if _plan_html and latest_date:
+                _local_plan_path = os.path.join(OUTPUT_DIR, f"今日复盘与明日预案_{latest_date}.html")
+                with open(_local_plan_path, 'w', encoding='utf-8') as _f:
+                    _f.write(_plan_html)
+                _latest_local_plan = os.path.join(OUTPUT_DIR, "今日复盘与明日预案_最新.html")
+                with open(_latest_local_plan, 'w', encoding='utf-8') as _f:
+                    _f.write(_plan_html)
+                print(f"  → 本地专属复盘与预案报告: {_local_plan_path}")
         except Exception as e:
             print(f"  [警告] 明日预案子页生成失败 (不影响主流程): {e}")
 

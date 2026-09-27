@@ -77,10 +77,12 @@ CACHE_BUDGET = [
     # 只是给它一个天花板。
     ('em_stock_plate_cache.csv', 'date', 60, 4),          # 85KB/天, 自滚 10 天
     ('cninfo_announcement_cache.csv', 'query_date', 15, 2),  # 126KB/天 (~1000 行)
+    # ⑤ AI 战法对账留痕 —— 每天追加一行，保留 250 天
+    ('tactics_recap_history.jsonl', 'report_date', 250, 4),
 ]
 
-# 明确豁免: 与日期无关, 也不随天数增长 (证券主表一行一只股票)。
-EXEMPT = {'security_master.csv'}
+# 明确豁免: 与日期无关, 也不随天数增长 (证券主表一行一只股票; tactics_recap.json 只存单日快照)。
+EXEMPT = {'security_master.csv', 'tactics_recap.json'}
 
 # 上限在别处、但同样有人管的: CI 也会提交它们, 结构测试靠这张表确认"有人管"。
 EXTERNAL_BUDGET = {

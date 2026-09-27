@@ -237,9 +237,9 @@ def _render_plan_entry(plan_date):
         return ''
     day = _esc(plan_date)
     return (f'<a class="dragon-entry" href="plan/latest.html" style="border-left-color:#58a6ff">'
-            f'<div class="de-left"><div class="de-label" style="color:#58a6ff">明日预案</div>'
-            f'<div class="de-title">三道开关 · 情景推演 · 不追名单 · 昨日对账</div>'
-            f'<div class="de-sub">基于 {day} 收盘数据 · 每个交易日自动更新</div></div>'
+            f'<div class="de-left"><div class="de-label" style="color:#58a6ff">今日复盘 · 明日实战预案</div>'
+            f'<div class="de-title">优先级作战手册 (P0~P3 &amp; 黑名单) · 三大情景推演 · 昨日对账</div>'
+            f'<div class="de-sub">基于 {day} 真实盘面数据 · 结合微观博弈与游资战法 · 每日自动更新</div></div>'
             f'<div class="de-right" style="color:#58a6ff">查看预案 →</div></a>')
 
 
