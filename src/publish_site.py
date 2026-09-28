@@ -563,6 +563,27 @@ def publish(output_html, site_dir, report_date=None, summary=None, dashboard_htm
         f.write(_render_index(reports, updated_at, summary, dashboard_date=dashboard_date,
                               dragon_date=dragon_date, research_date=research_date, plan_date=plan_date))
 
+    # 本地专属: 同时在 output/ 根目录下维护一份本地导航入口，方便本地直接双击打开
+    try:
+        from paths import OUTPUT_DIR
+        local_nav_path = os.path.join(OUTPUT_DIR, '本地导航入口.html')
+        local_nav_alias = os.path.join(OUTPUT_DIR, 'index.html')
+        _local_index_html = _render_index(
+            reports, updated_at, summary, dashboard_date=dashboard_date,
+            dragon_date=dragon_date, research_date=research_date, plan_date=plan_date
+        )
+        _local_index_html = _local_index_html.replace('href="dashboards/', 'href="site/dashboards/')
+        _local_index_html = _local_index_html.replace('href="dragon/', 'href="site/dragon/')
+        _local_index_html = _local_index_html.replace('href="plan/', 'href="今日复盘与明日预案_最新.html" data-orig="plan/')
+        _local_index_html = _local_index_html.replace('href="reports/', 'href="site/reports/')
+        _local_index_html = _local_index_html.replace('href="research_briefs/', 'href="site/research_briefs/')
+        with open(local_nav_path, 'w', encoding='utf-8') as f:
+            f.write(_local_index_html)
+        with open(local_nav_alias, 'w', encoding='utf-8') as f:
+            f.write(_local_index_html)
+    except Exception as _e:
+        pass
+
     print(f"  [publish] 已归档 {date_str} → {archived}")
     print(f"  [publish] 首页已重建 ({len(reports)} 期) → {index_path}")
     return archived, index_path
