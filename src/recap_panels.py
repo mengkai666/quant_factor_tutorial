@@ -1046,7 +1046,7 @@ def render_tactics_review_panel(
                 <span>🏛️ 宏观量化战略库 · 连板高度年度深研七大核心战法 (战法 A ~ G)</span>
                 <span style="font-size:11px;color:#8b949e;font-weight:normal;">(长周期样本实证规律)</span>
             </div>
-            <a href="annual_height_research.html" target="_blank" style="font-size:11.5px;color:#58a6ff;text-decoration:none;border:1px solid rgba(88,166,255,0.3);padding:2px 8px;border-radius:10px;background:rgba(88,166,255,0.08);">
+            <a data-annual-height-study href="annual_height_research.html" target="_blank" style="font-size:11.5px;color:#58a6ff;text-decoration:none;border:1px solid rgba(88,166,255,0.3);padding:2px 8px;border-radius:10px;background:rgba(88,166,255,0.08);">
                 📊 查看年度深研与六大战法可视化总看板 ↗
             </a>
         </div>

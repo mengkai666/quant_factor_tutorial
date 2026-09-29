@@ -3595,7 +3595,23 @@ def generate_dashboard_html(ctx: dict) -> str:
 </head>
 <body>
 <div class="wrap" style="--sc:{_esc(color)};">
-  <a class="back" href="../index.html">← 返回首页</a>
+  <!-- 统一全功能快捷导航条 -->
+  <div class="top-nav" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:20px;padding:10px 16px;background:rgba(22,27,34,0.85);border:1px solid #30363d;border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,0.25)">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <a href="../index.html" style="color:#58a6ff;text-decoration:none;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:4px">🏠 导航门户</a>
+      <span style="color:#30363d">|</span>
+      <a href="../reports/{_esc(date_str)}.html" style="color:#58a6ff;text-decoration:none;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:4px">📊 主线追踪大报告</a>
+      <span style="color:#30363d">|</span>
+      <span style="color:#58a6ff;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:4px;background:rgba(88,166,255,0.18);padding:3px 10px;border-radius:12px;border:1px solid rgba(88,166,255,0.35)">📈 决策看板 (当前)</span>
+      <span style="color:#30363d">|</span>
+      <a href="../plan/latest.html" style="color:#58a6ff;text-decoration:none;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:4px">⚔️ 今日复盘与明日预案</a>
+      <span style="color:#30363d">|</span>
+      <a href="../pullback/latest.html" style="color:#58a6ff;text-decoration:none;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:4px">🌊 强势板块回调跟踪</a>
+      <span style="color:#30363d">|</span>
+      <a href="../dragon/latest.html" style="color:#58a6ff;text-decoration:none;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:4px">🐉 龙头接替谱系</a>
+    </div>
+    <div style="font-size:12px;color:#8b949e">数据基准日：{_esc(date_str)}</div>
+  </div>
   <div class="hero">
     <div class="left">
       <h1>{_esc(scene)}</h1>

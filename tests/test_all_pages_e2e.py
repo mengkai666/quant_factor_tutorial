@@ -37,16 +37,23 @@ def test_standalone_files_exist():
 
 
 def test_no_dead_relative_links_in_pages():
-    """验证主要页面内的所有相对 href 链接均可解析为存在的本地物理文件 (杜绝 404 死链)."""
+    """验证全量 11 个主要及归档页面内的所有相对 href 链接均可解析为存在的本地物理文件 (杜绝 404 死链)."""
     check_pages = [
         OUTPUT_DIR / "本地导航入口.html",
+        OUTPUT_DIR / "主线强度追踪.html",
         OUTPUT_DIR / "今日复盘与明日预案_最新.html",
         OUTPUT_DIR / "强势板块回调跟踪_最新.html",
         SITE_DIR / "index.html",
+        SITE_DIR / "latest.html",
+        SITE_DIR / "reports" / "2026-09-28.html",
         SITE_DIR / "plan" / "latest.html",
+        SITE_DIR / "plan" / "2026-09-28.html",
         SITE_DIR / "pullback" / "latest.html",
+        SITE_DIR / "pullback" / "2026-09-28.html",
         SITE_DIR / "dashboards" / "latest.html",
+        SITE_DIR / "dashboards" / "2026-09-28.html",
         SITE_DIR / "dragon" / "latest.html",
+        SITE_DIR / "dragon" / "2026-09-28.html",
     ]
 
     for page in check_pages:
@@ -64,7 +71,24 @@ def test_no_dead_relative_links_in_pages():
                 continue
             # 解析相对路径
             target_path = (page.parent / clean_link).resolve()
-            assert target_path.exists(), f"页面 {page.name} 存在死链: href='{link}' -> 目标文件不存在: {target_path}"
+            assert target_path.exists(), f"页面 {page} 存在死链: href='{link}' -> 目标文件不存在: {target_path}"
+
+
+def test_unified_top_nav_bar_symmetry():
+    """验证所有 5 大子页面均具备统一的 .top-nav 顶部全功能导航栏与高亮状态."""
+    nav_pages = [
+        (SITE_DIR / "reports" / "2026-09-28.html", "主线追踪大报告"),
+        (SITE_DIR / "dashboards" / "latest.html", "决策看板"),
+        (SITE_DIR / "plan" / "latest.html", "今日复盘与明日预案"),
+        (SITE_DIR / "pullback" / "latest.html", "强势板块回调跟踪"),
+        (SITE_DIR / "dragon" / "latest.html", "龙头接替谱系"),
+    ]
+    for page, title_keyword in nav_pages:
+        assert page.exists(), f"页面不存在: {page}"
+        content = page.read_text(encoding="utf-8")
+        assert 'class="top-nav"' in content or "class='top-nav'" in content, f"{page.name} 缺少 unified .top-nav 导航栏"
+        assert "导航门户" in content, f"{page.name} 导航栏缺少返回导航门户链接"
+        assert title_keyword in content, f"{page.name} 缺少当前页面标识: {title_keyword}"
 
 
 def test_plan_page_interactive_and_mobile_ux():

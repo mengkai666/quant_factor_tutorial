@@ -5206,13 +5206,14 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
 <body>
 <div class="wrapper">
     <!-- 本地核心子页快捷导航条 -->
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;background:linear-gradient(135deg,#161f30 0%,#161b22 100%);border:1px solid #388bfd;border-radius:10px;padding:12px 18px;margin-bottom:24px;box-shadow:0 4px 16px rgba(0,0,0,0.3)">
+    <div class="top-nav" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;background:linear-gradient(135deg,#161f30 0%,#161b22 100%);border:1px solid #388bfd;border-radius:10px;padding:12px 18px;margin-bottom:24px;box-shadow:0 4px 16px rgba(0,0,0,0.3)">
         <div style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:#58a6ff">
             <span>🧭 核心子页快捷直达：</span>
         </div>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
             <a href="本地导航入口.html" style="background:#21262d;color:#c9d1d9;border:1px solid #30363d;padding:6px 12px;border-radius:6px;text-decoration:none;font-size:12.5px;font-weight:600;display:inline-flex;align-items:center;gap:5px">🏠 导航门户首页</a>
-            <a href="site/dashboards/latest.html" style="background:#1f6feb;color:#fff;padding:6px 12px;border-radius:6px;text-decoration:none;font-size:12.5px;font-weight:600;display:inline-flex;align-items:center;gap:5px">📊 决策看板</a>
+            <a href="#" style="background:#238636;color:#fff;border:1px solid #2ea043;padding:6px 12px;border-radius:6px;text-decoration:none;font-size:12.5px;font-weight:700;display:inline-flex;align-items:center;gap:5px">📊 主线追踪大报告 (当前)</a>
+            <a href="site/dashboards/latest.html" style="background:#1f6feb;color:#fff;padding:6px 12px;border-radius:6px;text-decoration:none;font-size:12.5px;font-weight:600;display:inline-flex;align-items:center;gap:5px">📈 决策看板</a>
             <a href="今日复盘与明日预案_最新.html" style="background:#9e6a03;color:#fff;padding:6px 12px;border-radius:6px;text-decoration:none;font-size:12.5px;font-weight:600;display:inline-flex;align-items:center;gap:5px">⚔️ 今日复盘与明日预案</a>
             <a href="强势板块回调跟踪_最新.html" style="background:#0969da;color:#fff;padding:6px 12px;border-radius:6px;text-decoration:none;font-size:12.5px;font-weight:600;display:inline-flex;align-items:center;gap:5px">🌊 强势板块回调跟踪</a>
             <a href="site/dragon/latest.html" style="background:#da3633;color:#fff;padding:6px 12px;border-radius:6px;text-decoration:none;font-size:12.5px;font-weight:600;display:inline-flex;align-items:center;gap:5px">🐉 龙头接替谱系</a>

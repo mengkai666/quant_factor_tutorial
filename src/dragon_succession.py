@@ -1136,8 +1136,26 @@ def generate_dragon_html(result) -> str:
         degrade = result.get('degrade_reason') if result.get('degraded') else None
         degrade_html = (f"<p class='dp-note'>⚠️ {_e(degrade)}</p>" if degrade else '')
 
+        nav_html = (
+            f"<div class='top-nav' style='display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:20px;padding:10px 16px;background:rgba(22,27,34,0.85);border:1px solid #30363d;border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,0.25)'>"
+            f"<div style='display:flex;align-items:center;gap:12px;flex-wrap:wrap'>"
+            f"<a href='../index.html' style='color:#58a6ff;text-decoration:none;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:4px'>🏠 导航门户</a>"
+            f"<span style='color:#30363d'>|</span>"
+            f"<a href='../reports/{as_of}.html' style='color:#58a6ff;text-decoration:none;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:4px'>📊 主线追踪大报告</a>"
+            f"<span style='color:#30363d'>|</span>"
+            f"<a href='../dashboards/latest.html' style='color:#58a6ff;text-decoration:none;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:4px'>📈 决策看板</a>"
+            f"<span style='color:#30363d'>|</span>"
+            f"<a href='../plan/latest.html' style='color:#58a6ff;text-decoration:none;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:4px'>⚔️ 今日复盘与明日预案</a>"
+            f"<span style='color:#30363d'>|</span>"
+            f"<a href='../pullback/latest.html' style='color:#58a6ff;text-decoration:none;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:4px'>🌊 强势板块回调跟踪</a>"
+            f"<span style='color:#30363d'>|</span>"
+            f"<span style='color:#58a6ff;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:4px;background:rgba(88,166,255,0.18);padding:3px 10px;border-radius:12px;border:1px solid rgba(88,166,255,0.35)'>🐉 龙头接替谱系 (当前)</span>"
+            f"</div>"
+            f"<div style='font-size:12px;color:#8b949e'>数据基准日：{as_of}</div></div>"
+        )
+
         body = (
-            f"<a class='back' href='../index.html'>← 返回首页</a>"
+            f"{nav_html}"
             f"<h1>🐉 龙头接替 · 监管周期复盘</h1>"
             f"<div class='dp-sub'>周期 {span} · 峰值 {_e(cycle.get('peak_height'))} 板 "
             f"· 状态 {_e(stage)} · 截至 {as_of}</div>"

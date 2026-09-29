@@ -236,7 +236,7 @@ def _render_plan_entry(plan_date):
     if not plan_date:
         return ''
     day = _esc(plan_date)
-    return (f'<a class="dragon-entry" href="plan/latest.html" style="border-left-color:#58a6ff">'
+    return (f'<a class="dragon-entry" href="plan/latest.html" style="background:linear-gradient(135deg,#121d2f,#16243b);border-left-color:#58a6ff">'
             f'<div class="de-left"><div class="de-label" style="color:#58a6ff">今日复盘 · 明日实战预案</div>'
             f'<div class="de-title">优先级作战手册 (P0~P3 &amp; 黑名单) · 三大情景推演 · 昨日对账</div>'
             f'<div class="de-sub">基于 {day} 真实盘面数据 · 结合微观博弈与游资战法 · 每日自动更新</div></div>'
@@ -248,11 +248,48 @@ def _render_pullback_entry(pullback_date):
     if not pullback_date:
         return ''
     day = _esc(pullback_date)
-    return (f'<a class="dragon-entry" href="pullback/latest.html" style="border-left-color:#388bfd">'
-            f'<div class="de-left"><div class="de-label" style="color:#58a6ff">强势板块回调跟踪 · 量化战法作战室</div>'
+    return (f'<a class="dragon-entry" href="pullback/latest.html" style="background:linear-gradient(135deg,#0e2428,#132f35);border-left-color:#39c5bb">'
+            f'<div class="de-left"><div class="de-label" style="color:#39c5bb">强势板块回调跟踪 · 量化战法作战室</div>'
             f'<div class="de-title">二波主升蓄势甄别 · 健康缩量回调一笔 · 三级健康度与战法匹配</div>'
             f'<div class="de-sub">基于 {day} 真实盘面数据 · 算力PCB/传媒AI/机器人汽配实战对账 · 固化四维量化红线</div></div>'
-            f'<div class="de-right" style="color:#58a6ff">查看作战室 →</div></a>')
+            f'<div class="de-right" style="color:#39c5bb">查看作战室 →</div></a>')
+
+
+def _rebase_main_nav_links(html: str, target_depth: str) -> str:
+    """将主报告中的子页快捷导航链接根据目标深度调整为正确的相对路径."""
+    if not html:
+        return html
+    if target_depth == 'reports':
+        replacements = [
+            ('href="本地导航入口.html"', 'href="../index.html"'),
+            ('href="site/dashboards/latest.html"', 'href="../dashboards/latest.html"'),
+            ('href="今日复盘与明日预案_最新.html"', 'href="../plan/latest.html"'),
+            ('href="强势板块回调跟踪_最新.html"', 'href="../pullback/latest.html"'),
+            ('href="site/dragon/latest.html"', 'href="../dragon/latest.html"'),
+            ("href='./今日复盘与明日预案_最新.html'", "href='../plan/latest.html'"),
+            ("href='./强势板块回调跟踪_最新.html'", "href='../pullback/latest.html'"),
+            ('href="annual_height_research.html"', 'href="../research/annual_height_research.html"'),
+            ("href='annual_height_research.html'", "href='../research/annual_height_research.html'"),
+        ]
+    elif target_depth == 'site':
+        replacements = [
+            ('href="本地导航入口.html"', 'href="index.html"'),
+            ('href="site/dashboards/latest.html"', 'href="dashboards/latest.html"'),
+            ('href="今日复盘与明日预案_最新.html"', 'href="plan/latest.html"'),
+            ('href="强势板块回调跟踪_最新.html"', 'href="pullback/latest.html"'),
+            ('href="site/dragon/latest.html"', 'href="dragon/latest.html"'),
+            ("href='./今日复盘与明日预案_最新.html'", "href='plan/latest.html'"),
+            ("href='./强势板块回调跟踪_最新.html'", "href='pullback/latest.html'"),
+            ('href="annual_height_research.html"', 'href="research/annual_height_research.html"'),
+            ("href='annual_height_research.html'", "href='research/annual_height_research.html'"),
+        ]
+    else:
+        return html
+
+    out = html
+    for src, dst in replacements:
+        out = out.replace(src, dst)
+    return out
 
 
 def _render_research_entry(research_date):
@@ -512,6 +549,9 @@ def publish(output_html, site_dir, report_date=None, summary=None, dashboard_htm
         child_name = f'research_brief_{date_str}.html'
         archived_document = add_research_entry(archived_document, f'../research_briefs/{child_name}', report_date=date_str)
         latest_document = add_research_entry(latest_document, f'research_briefs/{child_name}', report_date=date_str)
+
+    archived_document = _rebase_main_nav_links(archived_document, 'reports')
+    latest_document = _rebase_main_nav_links(latest_document, 'site')
 
     reports_dir = os.path.join(site_dir, 'reports')
     os.makedirs(reports_dir, exist_ok=True)
