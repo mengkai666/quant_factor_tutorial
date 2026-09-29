@@ -1001,6 +1001,12 @@ def render_tactics_review_panel(
         ''')
     targets_table_html = "".join(target_rows)
 
+    try:
+        from pullback_tracker import render_pullback_tracker_panel
+        pullback_html = render_pullback_tracker_panel(r_date)
+    except Exception:
+        pullback_html = ""
+
     panel_html = f'''
 <!-- tactics-review-panel:start -->
 <section class="tactics-war-room" id="sec-tactics-section" style="margin: 30px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
@@ -1088,6 +1094,9 @@ def render_tactics_review_panel(
             <b style="color:#58a6ff;">🛡️ 容量大中军与主力中枢动向：</b>{zj_ana}
         </div>
     </div>
+
+    <!-- 模块二(B): 强势板块放量主升回调一笔量化战法跟踪作战室 -->
+    {pullback_html}
 
     <!-- 模块三: 昨日预案实战检验与推演对比 -->
     <div style="background:#161b22;border:1px solid #30363d;border-radius:10px;padding:18px 20px;margin-bottom:20px;box-shadow:0 4px 12px rgba(0,0,0,0.25);">

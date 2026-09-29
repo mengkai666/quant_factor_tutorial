@@ -509,6 +509,12 @@ def generate_plan_html(plan: dict[str, Any]) -> str:
                + ''.join(f"<div class='card' style='margin-bottom:8px'><b>{_e(b.get('beacon'))}</b><div>{_e(b.get('focus'))}</div></div>" for b in ai)
                if ai else '')
 
+    try:
+        from pullback_tracker import render_pullback_tracker_panel
+        pullback_html = render_pullback_tracker_panel(report_date)
+    except Exception:
+        pullback_html = ''
+
     return f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="report-date" content="{report_date}">
 <title>今日深度复盘与明日实战预案 · {target_date}</title><style>{_CSS}</style></head><body><div class="wrap">
@@ -677,6 +683,8 @@ def generate_plan_html(plan: dict[str, Any]) -> str:
   </table>
 </div>
 
+{pullback_html}
+
 <h2>昨日预案对账</h2>
 {score_html}
 
@@ -706,6 +714,12 @@ def render_plan_teaser_html(report_date: Any) -> str:
         target_day = trade_dates[trade_dates.index(day) + 1] if day in trade_dates and trade_dates.index(day) + 1 < len(trade_dates) else '下一交易日'
     except Exception:
         target_day = '2026-09-29' if day == '2026-09-28' else '下一交易日'
+
+    try:
+        from pullback_tracker import render_pullback_tracker_panel
+        pullback_html = render_pullback_tracker_panel(day)
+    except Exception:
+        pullback_html = ''
 
     return f"""
     <div style='margin:20px 0;padding:18px 22px;background:linear-gradient(135deg,rgba(88,166,255,0.12) 0%,rgba(22,27,34,0.95) 100%);
@@ -971,6 +985,9 @@ def render_plan_teaser_html(report_date: Any) -> str:
           </table>
         </div>
       </div>
+
+      <!-- 强势板块放量主升回调一笔量化战法跟踪作战室 -->
+      {pullback_html}
 
       <!-- 五、操盘总结一句话 -->
       <div style="background:rgba(210,153,34,0.12);border:1px solid rgba(210,153,34,0.4);border-left:4px solid #d29922;border-radius:8px;padding:14px 18px">
