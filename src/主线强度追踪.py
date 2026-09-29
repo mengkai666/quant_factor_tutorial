@@ -6911,18 +6911,24 @@ def _main_impl():
         _plan_html = None
         try:
             from paths import OUTPUT_DIR
-            from next_day_plan import build_next_day_plan, generate_plan_html
-            _plan_html = generate_plan_html(build_next_day_plan(_report_context, echelon, price_df))
-            if _plan_html and latest_date:
-                _local_plan_path = os.path.join(OUTPUT_DIR, f"今日复盘与明日预案_{latest_date}.html")
-                with open(_local_plan_path, 'w', encoding='utf-8') as _f:
-                    _f.write(_plan_html)
-                _latest_local_plan = os.path.join(OUTPUT_DIR, "今日复盘与明日预案_最新.html")
-                with open(_latest_local_plan, 'w', encoding='utf-8') as _f:
-                    _f.write(_plan_html)
-                print(f"  → 本地专属复盘与预案报告: {_local_plan_path}")
+            from next_day_plan import build_next_day_plan, generate_plan_html, export_plan_standalone_reports
+            _plan_data = build_next_day_plan(_report_context, echelon, price_df)
+            _plan_res = export_plan_standalone_reports(latest_date, output_dir=OUTPUT_DIR, site_dir=SITE_DIR, plan_data=_plan_data)
+            _plan_html = generate_plan_html(_plan_data, is_site_mode=True)
+            print(f"  → 本地专属复盘与预案报告: {_plan_res.get('local_latest')}")
         except Exception as e:
             print(f"  [警告] 明日预案子页生成失败 (不影响主流程): {e}")
+
+        # === 强势板块回调跟踪: 独立子页归档到 site/pullback/，同时在 output/ 生成本地专属报告 ===
+        _pullback_html = None
+        try:
+            from paths import OUTPUT_DIR
+            from pullback_tracker import export_pullback_standalone_reports, generate_pullback_standalone_html
+            _pb_res = export_pullback_standalone_reports(latest_date, output_dir=OUTPUT_DIR, site_dir=SITE_DIR)
+            _pullback_html = generate_pullback_standalone_html(latest_date, is_site_mode=True)
+            print(f"  → 本地专属回调跟踪报告: {_pb_res.get('local_latest')}")
+        except Exception as e:
+            print(f"  [警告] 强势板块回调跟踪子页生成失败 (不影响主流程): {e}")
 
         publish_result = publish(
             OUTPUT_HTML,
@@ -6933,6 +6939,7 @@ def _main_impl():
             dragon_html=_dragon_html,
             research_html=_research_html,
             plan_html=_plan_html,
+            pullback_html=_pullback_html,
         )
         publish_succeeded = publish_result is not None
     except Exception as e:

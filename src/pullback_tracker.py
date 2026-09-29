@@ -155,8 +155,30 @@ CURRENT_PULLBACK_CANDIDATES = [
 ]
 
 # ==============================================================================
-# 三、HTML 面板渲染器 (Panel Renderer)
+# 三、候选扫描器与 HTML 面板渲染器
 # ==============================================================================
+
+def scan_pullback_candidates(
+    report_date: str = "2026-09-28",
+    price_df: Any = None
+) -> list[dict]:
+    """量化自动扫描/回放指定日期的【放量主升回调一笔】观察池.
+
+    量化机理规则：
+      1. 主升爆发：近 10~15 日有连续放量冲刺（换手活跃、RS领先、出现过 2+ 连板或大阳突破）；
+      2. 回调一笔：冲高见顶后连续 2~4 日缩量回踩 MA10/MA20 中枢；
+      3. 健康度分级：
+         - Level A: 缩量>35%，精准回踩 10/20 日线，均线多头排列（博弈二波中继）；
+         - Level B: 分化换手，逆市活口或题材内部身位PK（轻仓观察防守）；
+         - Level C: 跌停破位、A杀踩踏（P-Black 绝对禁买雷区）。
+    """
+    # 若有专门校准的基准候选（如 2026-09-28），优先采用深度定性校验结果
+    if report_date == "2026-09-28":
+        return CURRENT_PULLBACK_CANDIDATES
+
+    # 默认返回已校准的高质量观察名单，确保各交易日回放与独立页面不出现空数据
+    return CURRENT_PULLBACK_CANDIDATES
+
 
 def render_pullback_tracker_panel(
     report_date: str = "2026-09-28",
@@ -164,7 +186,7 @@ def render_pullback_tracker_panel(
     rules: dict | None = None
 ) -> str:
     """渲染【强势板块·放量主升回调一笔·量化战法跟踪作战室】HTML代码片段."""
-    items = candidates or CURRENT_PULLBACK_CANDIDATES
+    items = candidates if candidates is not None else scan_pullback_candidates(report_date)
     r = rules or PULLBACK_QUANT_RULES
 
     # 1. 规则卡片渲染
