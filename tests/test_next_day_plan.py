@@ -114,3 +114,20 @@ def test_site_index_links_plan_only_when_published():
     assert _render_plan_entry(None) == ""
     assert 'href="plan/latest.html"' in _render_plan_entry("2026-09-24")
     assert ndp.render_plan_teaser_html("20260924").count("/plan/latest.html") == 1
+
+
+def test_export_plan_standalone_reports(tmp_path):
+    out_dir = str(tmp_path / "output")
+    res = ndp.export_plan_standalone_reports("2026-09-28", output_dir=out_dir)
+    assert "local_latest" in res and "site_latest" in res
+    import os
+    assert os.path.exists(res["local_latest"])
+    assert os.path.exists(res["site_latest"])
+    with open(res["local_latest"], encoding="utf-8") as f:
+        local_content = f.read()
+    assert "今日深度复盘 · 明日实战预案" in local_content
+    assert "本地导航入口.html" in local_content
+    with open(res["site_latest"], encoding="utf-8") as f:
+        site_content = f.read()
+    assert "../index.html" in site_content
+
