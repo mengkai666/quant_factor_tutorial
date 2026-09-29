@@ -323,3 +323,301 @@ def render_pullback_tracker_panel(
 
     </section>
     """
+
+
+# ==============================================================================
+# 四、独立报告页面生成器 (Standalone Report Generator)
+# ==============================================================================
+
+_STANDALONE_CSS = """
+:root {
+  --bg-primary: #0d1117;
+  --bg-card: #161b22;
+  --bg-card-sub: #0f141c;
+  --border-color: #30363d;
+  --border-hover: #58a6ff;
+  --text-primary: #f0f6fc;
+  --text-secondary: #8b949e;
+  --accent-red: #f85149;
+  --accent-green: #3fb950;
+  --accent-blue: #58a6ff;
+  --accent-yellow: #d29922;
+  --accent-purple: #bc8cff;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg-primary);
+  color: #c9d1d9;
+  font: 14px/1.65 -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  min-height: 100vh;
+}
+.wrap {
+  max-width: 1140px;
+  margin: 0 auto;
+  padding: 24px 20px 60px;
+}
+a { color: var(--accent-blue); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.top-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding: 10px 16px;
+  background: rgba(22,27,34,0.85);
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+}
+.top-nav .nav-links {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.top-nav .nav-link {
+  color: #58a6ff;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.top-nav .sep { color: #30363d; }
+.hero {
+  background: linear-gradient(135deg, rgba(56,139,253,0.14) 0%, rgba(188,140,255,0.08) 50%, rgba(22,27,34,0.95) 100%);
+  border: 1px solid rgba(88,166,255,0.35);
+  border-left: 5px solid #58a6ff;
+  border-radius: 12px;
+  padding: 24px 28px;
+  margin-bottom: 24px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+}
+.hero-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+.hero-title { font-size: 24px; font-weight: 800; color: #f0f6fc; margin-bottom: 6px; }
+.hero-sub { color: var(--text-secondary); font-size: 13.5px; }
+.pulse-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12.5px;
+  font-weight: 700;
+  background: rgba(56,139,253,0.15);
+  color: #58a6ff;
+  border: 1px solid rgba(56,139,253,0.4);
+}
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+  box-shadow: 0 3px 12px rgba(0,0,0,0.2);
+}
+table.flow-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-top: 10px;
+}
+table.flow-table th, table.flow-table td {
+  border: 1px solid #21262d;
+  padding: 9px 12px;
+  text-align: left;
+}
+table.flow-table th {
+  background: #161b22;
+  color: #8b949e;
+  font-weight: 600;
+}
+table.flow-table tr:nth-child(even) { background: rgba(255,255,255,0.015); }
+footer {
+  margin-top: 40px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: center;
+}
+"""
+
+
+def generate_pullback_standalone_html(
+    report_date: str = "2026-09-28",
+    candidates: list[dict] | None = None,
+    rules: dict | None = None,
+    is_site_mode: bool = False
+) -> str:
+    """生成【强势板块放量主升回调一笔量化跟踪】专属独立报告完整 HTML 页面."""
+    items = candidates or CURRENT_PULLBACK_CANDIDATES
+    r = rules or PULLBACK_QUANT_RULES
+    body_panel_html = render_pullback_tracker_panel(report_date, items, r)
+
+    # 针对本地模式 (output/) 与 站点模式 (output/site/pullback/) 自适应相对路径
+    if is_site_mode:
+        nav_home = "../index.html"
+        nav_main = f"../reports/{report_date}.html"
+        nav_dash = "../dashboards/latest.html"
+        nav_plan = "../plan/latest.html"
+        nav_dragon = "../dragon/latest.html"
+        nav_pullback = "latest.html"
+    else:
+        nav_home = "本地导航入口.html"
+        nav_main = "主线强度追踪.html"
+        nav_dash = "site/dashboards/latest.html"
+        nav_plan = "今日复盘与明日预案_最新.html"
+        nav_dragon = "site/dragon/latest.html"
+        nav_pullback = "强势板块回调跟踪_最新.html"
+
+    return f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="report-date" content="{escape(report_date)}">
+<title>强势板块·放量主升回调一笔·量化跟踪与战法结合 · {escape(report_date)}</title>
+<style>{_STANDALONE_CSS}</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- 顶部全功能导航条 -->
+  <div class="top-nav">
+    <div class="nav-links">
+      <a href="{nav_home}" class="nav-link">🏠 导航门户</a>
+      <span class="sep">|</span>
+      <a href="{nav_main}" class="nav-link">📊 主线追踪大报告</a>
+      <span class="sep">|</span>
+      <a href="{nav_dash}" class="nav-link">📈 决策看板</a>
+      <span class="sep">|</span>
+      <a href="{nav_plan}" class="nav-link">⚔️ 今日复盘与明日预案</a>
+      <span class="sep">|</span>
+      <a href="{nav_dragon}" class="nav-link">🐉 龙头接替谱系</a>
+      <span class="sep">|</span>
+      <span style="color:#58a6ff;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:4px;background:rgba(56,139,253,0.18);padding:3px 10px;border-radius:12px;border:1px solid rgba(56,139,253,0.35);">
+        🌊 强势板块回调跟踪 (当前)
+      </span>
+    </div>
+    <div style="font-size:12px;color:#8b949e">数据基准日：{escape(report_date)}</div>
+  </div>
+
+  <!-- Hero Header -->
+  <div class="hero">
+    <div class="hero-top">
+      <div>
+        <div class="hero-title">🌊 强势板块·放量主升回调一笔·量化战法跟踪作战室</div>
+        <div class="hero-sub">
+          二波主升蓄势 × 极致缩量鉴别 × 三级健康度与游资战法结合 · 严格执行四维量化红线
+        </div>
+      </div>
+      <div class="pulse-badge">
+        <span>●</span> 定量标准固化 · 4 维红线风控
+      </div>
+    </div>
+  </div>
+
+  <!-- 核心量化作战室组件 -->
+  {body_panel_html}
+
+  <!-- 实战分时量化执行与检查表 -->
+  <div class="card" style="margin-top:20px;">
+    <div style="font-size:14.5px;font-weight:700;color:#f0f6fc;margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+      <span>⏱️ 强势板块回调一笔·临盘分时触发与熔断检查表 (Execution &amp; Invalidation)</span>
+    </div>
+    <table class="flow-table">
+      <thead>
+        <tr>
+          <th style="width:120px;">时间时段</th>
+          <th style="width:240px;">监控焦点与健康信号</th>
+          <th>量化通过门槛 (Go)</th>
+          <th>熔断失效动作 (No-Go / Stop)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><b style="color:#e3b341;">09:25 集合竞价</b></td>
+          <td>板块核心标的开盘溢价、竞价量比、同板块跌停数</td>
+          <td>核心标的量比 &gt; 1.3，平开或高开 +0.5%~+3.0%，且板块内无 -5% 以上抢跑跌停盘。</td>
+          <td>竞价出现大单核按钮，或板块内出现一字跌停：<b style="color:#f85149;">取消开仓计划，全天观望。</b></td>
+        </tr>
+        <tr>
+          <td><b style="color:#58a6ff;">09:35 开盘前10分</b></td>
+          <td>回踩分时均线获得支撑，核心中军出现主动推升大单</td>
+          <td>分时线始终依托分时均线不破，分时量价齐升，未跌破前日最低点。</td>
+          <td>开盘放量单边滑落至分时均线下方且反抽无力：<b style="color:#f85149;">判定承接失败，禁止左侧买入。</b></td>
+        </tr>
+        <tr>
+          <td><b style="color:#3fb950;">10:00 梯队确认</b></td>
+          <td>板块成交占比进前三，出现首板助攻小弟，梯队共振</td>
+          <td>板块内至少走出 1~2 只涨停助攻小弟，龙头封单持续增加，板块效应扩散。</td>
+          <td>龙头冲高回落炸板超过 3 分钟未封回：<b style="color:#f85149;">立即停止跟进，底仓逢高减半防守。</b></td>
+        </tr>
+        <tr>
+          <td><b style="color:#bc8cff;">14:00 午后防守</b></td>
+          <td>20日生命线得失与大盘流动性抽血情况</td>
+          <td>日 K 线收缩量阳线或下影十字星，站稳 20 日均线支撑带。</td>
+          <td>收盘跌破 20 日均线或个股跌超 -4.0%：<b style="color:#f85149;">执行机械止损，严禁补仓被动套牢。</b></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <footer>
+    主线强度追踪系统 · 强势板块回调一笔量化规则引擎 · 数据跑批生成 · 仅供研究参考, 不构成投资建议
+  </footer>
+</div>
+</body>
+</html>
+"""
+
+
+def export_pullback_standalone_reports(
+    report_date: str = "2026-09-28",
+    output_dir: str | None = None,
+    site_dir: str | None = None
+) -> dict[str, str]:
+    """导出独立报告文件至 output/ 根目录与 output/site/ 站点目录."""
+    base_output = output_dir or os.path.join(os.path.dirname(os.path.dirname(__file__)), "output")
+    base_site = site_dir or os.path.join(base_output, "site")
+
+    os.makedirs(base_output, exist_ok=True)
+    pullback_site_dir = os.path.join(base_site, "pullback")
+    os.makedirs(pullback_site_dir, exist_ok=True)
+
+    # 1. 本地根目录独立页面
+    local_latest = os.path.join(base_output, "强势板块回调跟踪_最新.html")
+    local_dated = os.path.join(base_output, f"强势板块回调跟踪_{report_date}.html")
+    local_html = generate_pullback_standalone_html(report_date, is_site_mode=False)
+
+    with open(local_latest, "w", encoding="utf-8") as f:
+        f.write(local_html)
+    with open(local_dated, "w", encoding="utf-8") as f:
+        f.write(local_html)
+
+    # 2. 站点目录独立页面
+    site_latest = os.path.join(pullback_site_dir, "latest.html")
+    site_dated = os.path.join(pullback_site_dir, f"{report_date}.html")
+    site_html = generate_pullback_standalone_html(report_date, is_site_mode=True)
+
+    with open(site_latest, "w", encoding="utf-8") as f:
+        f.write(site_html)
+    with open(site_dated, "w", encoding="utf-8") as f:
+        f.write(site_html)
+
+    return {
+        "local_latest": local_latest,
+        "local_dated": local_dated,
+        "site_latest": site_latest,
+        "site_dated": site_dated,
+    }
+

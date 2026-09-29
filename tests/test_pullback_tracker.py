@@ -56,3 +56,33 @@ def test_render_pullback_tracker_panel_returns_html_and_escapes():
     assert "Level C" in html
     assert "AI算力硬件" in html
     assert "雪龙集团" in html
+
+
+def test_generate_pullback_standalone_html():
+    """验证独立报告页面生成器渲染完整 HTML 文档与导航条."""
+    from pullback_tracker import generate_pullback_standalone_html
+
+    local_html = generate_pullback_standalone_html("2026-09-28", is_site_mode=False)
+    assert "<!doctype html>" in local_html
+    assert "强势板块·放量主升回调一笔·量化跟踪与战法结合" in local_html
+    assert "本地导航入口.html" in local_html
+    assert "今日复盘与明日预案_最新.html" in local_html
+    assert "临盘分时触发与熔断检查表" in local_html
+
+    site_html = generate_pullback_standalone_html("2026-09-28", is_site_mode=True)
+    assert "../index.html" in site_html
+    assert "../dashboards/latest.html" in site_html
+
+
+def test_export_pullback_standalone_reports(tmp_path):
+    """验证独立报告导出生成各目标文件."""
+    from pullback_tracker import export_pullback_standalone_reports
+
+    out_dir = str(tmp_path / "output")
+    res = export_pullback_standalone_reports("2026-09-28", output_dir=out_dir)
+    assert "local_latest" in res
+    assert "site_latest" in res
+    import os
+    assert os.path.exists(res["local_latest"])
+    assert os.path.exists(res["site_latest"])
+

@@ -5214,6 +5214,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
             <a href="本地导航入口.html" style="background:#21262d;color:#c9d1d9;border:1px solid #30363d;padding:6px 12px;border-radius:6px;text-decoration:none;font-size:12.5px;font-weight:600;display:inline-flex;align-items:center;gap:5px">🏠 导航门户首页</a>
             <a href="site/dashboards/latest.html" style="background:#1f6feb;color:#fff;padding:6px 12px;border-radius:6px;text-decoration:none;font-size:12.5px;font-weight:600;display:inline-flex;align-items:center;gap:5px">📊 决策看板</a>
             <a href="今日复盘与明日预案_最新.html" style="background:#9e6a03;color:#fff;padding:6px 12px;border-radius:6px;text-decoration:none;font-size:12.5px;font-weight:600;display:inline-flex;align-items:center;gap:5px">⚔️ 今日复盘与明日预案</a>
+            <a href="强势板块回调跟踪_最新.html" style="background:#0969da;color:#fff;padding:6px 12px;border-radius:6px;text-decoration:none;font-size:12.5px;font-weight:600;display:inline-flex;align-items:center;gap:5px">🌊 强势板块回调跟踪</a>
             <a href="site/dragon/latest.html" style="background:#da3633;color:#fff;padding:6px 12px;border-radius:6px;text-decoration:none;font-size:12.5px;font-weight:600;display:inline-flex;align-items:center;gap:5px">🐉 龙头接替谱系</a>
         </div>
     </div>

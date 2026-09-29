@@ -820,11 +820,13 @@ def render_tactics_review_panel(
             )
         except Exception:
             data = {}
-    if not data:
+    if not data and report_date:
         if os.path.exists(TACTICS_RECAP_PATH):
             try:
                 with open(TACTICS_RECAP_PATH, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
+                    cached = json.load(f)
+                    if cached.get("report_date") == report_date:
+                        data = cached
             except Exception:
                 pass
     if not data:
