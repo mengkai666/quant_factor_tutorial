@@ -149,3 +149,12 @@ quant_factor_tutorial/
 
 - [逐策略资格、独立验证与条件预案](docs/howto/strategy-qualification.md)
 - [事件数据接通、离线验收与真实盘中采集](docs/howto/decision-data-connection.md)
+
+---
+
+## 👨‍💻 作者与个人主页 (Author)
+
+- **作者**：**[孟锴 (Kai Meng)](https://mengkai666.github.io/)**
+- **个人官方主页**：[https://mengkai666.github.io/](https://mengkai666.github.io/)
+- **GitHub**：[@mengkai666](https://github.com/mengkai666)
+- **知乎专栏**：[孟锴的知乎主页](https://www.zhihu.com/people/yi-dui-ji-mu-zai-kuang-xiang)

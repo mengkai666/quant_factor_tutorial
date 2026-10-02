@@ -10,6 +10,8 @@ dist/
 build/
 *.spec
 *.exe
+mengkai666.github.io/
+mengkai666_profile/
 
 # === 运行时生成的缓存数据 (过大，不适合存仓库) ===
 # 这些文件在 GitHub Actions 中通过 actions/cache 管理
