@@ -255,6 +255,16 @@ def _render_pullback_entry(pullback_date):
             f'<div class="de-right" style="color:#39c5bb">查看作战室 →</div></a>')
 
 
+def _render_september_study_entry():
+    """9月底板块大洗牌与房地产主线深研专题入口卡."""
+    return ('<a class="dragon-entry" href="research/september_regime_and_real_estate_study.html" '
+            'style="background:linear-gradient(135deg,#1f1a2e,#271f3a);border-left-color:#bc8cff">'
+            '<div class="de-left"><div class="de-label" style="color:#bc8cff">深度专题研报 · 宏观战法与大洗牌实证</div>'
+            '<div class="de-title">9月底板块大洗牌与房地产主线深研 (数据可视化)</div>'
+            '<div class="de-sub">房地产5阶段启动复盘 · 56家跌停潮大出清 · 新华传媒空间独苗穿越 · 操盘三大规律</div></div>'
+            '<div class="de-right" style="color:#bc8cff">查看专题 →</div></a>')
+
+
 def _rebase_main_nav_links(html: str, target_depth: str) -> str:
     """将主报告中的子页快捷导航链接根据目标深度调整为正确的相对路径."""
     if not html:
@@ -270,6 +280,8 @@ def _rebase_main_nav_links(html: str, target_depth: str) -> str:
             ("href='./强势板块回调跟踪_最新.html'", "href='../pullback/latest.html'"),
             ('href="annual_height_research.html"', 'href="../research/annual_height_research.html"'),
             ("href='annual_height_research.html'", "href='../research/annual_height_research.html'"),
+            ('href="9月底板块大洗牌与房地产战法深研.html"', 'href="../research/september_regime_and_real_estate_study.html"'),
+            ("href='9月底板块大洗牌与房地产战法深研.html'", "href='../research/september_regime_and_real_estate_study.html'"),
         ]
     elif target_depth == 'site':
         replacements = [
@@ -282,6 +294,8 @@ def _rebase_main_nav_links(html: str, target_depth: str) -> str:
             ("href='./强势板块回调跟踪_最新.html'", "href='pullback/latest.html'"),
             ('href="annual_height_research.html"', 'href="research/annual_height_research.html"'),
             ("href='annual_height_research.html'", "href='research/annual_height_research.html'"),
+            ('href="9月底板块大洗牌与房地产战法深研.html"', 'href="research/september_regime_and_real_estate_study.html"'),
+            ("href='9月底板块大洗牌与房地产战法深研.html'", "href='research/september_regime_and_real_estate_study.html'"),
         ]
     else:
         return html
@@ -449,6 +463,7 @@ def _render_index(reports, updated_at, summary=None, dashboard_date=None, dragon
   {_render_plan_entry(plan_date)}
   {_render_pullback_entry(pullback_date)}
   {_render_dragon_entry(dragon_date)}
+  {_render_september_study_entry()}
 
   <div class="hero">
     <div class="hero-info">
@@ -629,11 +644,11 @@ def publish(output_html, site_dir, report_date=None, summary=None, dashboard_htm
                               dragon_date=dragon_date, research_date=research_date, plan_date=plan_date,
                               pullback_date=pullback_date))
 
-    # 本地专属: 同时在 output/ 根目录下维护一份本地导航入口，方便本地直接双击打开
+    # 本地专属: 同时在 site_dir 的父目录 (本地 output/ 根目录) 下维护一份本地导航入口，方便本地直接双击打开
     try:
-        from paths import OUTPUT_DIR
-        local_nav_path = os.path.join(OUTPUT_DIR, '本地导航入口.html')
-        local_nav_alias = os.path.join(OUTPUT_DIR, 'index.html')
+        local_nav_dir = os.path.dirname(os.path.abspath(site_dir))
+        local_nav_path = os.path.join(local_nav_dir, '本地导航入口.html')
+        local_nav_alias = os.path.join(local_nav_dir, 'index.html')
         _local_index_html = _render_index(
             reports, updated_at, summary, dashboard_date=dashboard_date,
             dragon_date=dragon_date, research_date=research_date, plan_date=plan_date,
@@ -643,6 +658,7 @@ def publish(output_html, site_dir, report_date=None, summary=None, dashboard_htm
         _local_index_html = _local_index_html.replace('href="dragon/', 'href="site/dragon/')
         _local_index_html = _local_index_html.replace('href="plan/', 'href="今日复盘与明日预案_最新.html" data-orig="plan/')
         _local_index_html = _local_index_html.replace('href="pullback/', 'href="强势板块回调跟踪_最新.html" data-orig="pullback/')
+        _local_index_html = _local_index_html.replace('href="research/september_regime_and_real_estate_study.html"', 'href="9月底板块大洗牌与房地产战法深研.html"')
         _local_index_html = _local_index_html.replace('href="reports/', 'href="site/reports/')
         _local_index_html = _local_index_html.replace('href="research_briefs/', 'href="site/research_briefs/')
         with open(local_nav_path, 'w', encoding='utf-8') as f:

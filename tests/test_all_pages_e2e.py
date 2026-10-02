@@ -54,6 +54,8 @@ def test_no_dead_relative_links_in_pages():
         SITE_DIR / "dashboards" / "2026-09-28.html",
         SITE_DIR / "dragon" / "latest.html",
         SITE_DIR / "dragon" / "2026-09-28.html",
+        OUTPUT_DIR / "9月底板块大洗牌与房地产战法深研.html",
+        SITE_DIR / "research" / "september_regime_and_real_estate_study.html",
     ]
 
     for page in check_pages:
@@ -75,13 +77,14 @@ def test_no_dead_relative_links_in_pages():
 
 
 def test_unified_top_nav_bar_symmetry():
-    """验证所有 5 大子页面均具备统一的 .top-nav 顶部全功能导航栏与高亮状态."""
+    """验证所有 6 大子页面均具备统一的 .top-nav 顶部全功能导航栏与高亮状态."""
     nav_pages = [
         (SITE_DIR / "reports" / "2026-09-28.html", "主线追踪大报告"),
         (SITE_DIR / "dashboards" / "latest.html", "决策看板"),
         (SITE_DIR / "plan" / "latest.html", "今日复盘与明日预案"),
         (SITE_DIR / "pullback" / "latest.html", "强势板块回调跟踪"),
         (SITE_DIR / "dragon" / "latest.html", "龙头接替谱系"),
+        (SITE_DIR / "research" / "september_regime_and_real_estate_study.html", "9月专题深研"),
     ]
     for page, title_keyword in nav_pages:
         assert page.exists(), f"页面不存在: {page}"
