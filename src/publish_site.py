@@ -357,6 +357,7 @@ def _render_index(reports, updated_at, summary=None, dashboard_date=None, dragon
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex, nofollow, noarchive">
 <title>主线强度追踪 · A股短线主线终端</title>
 <style>
   :root {{ color-scheme: dark; }}
@@ -643,6 +644,12 @@ def publish(output_html, site_dir, report_date=None, summary=None, dashboard_htm
         f.write(_render_index(reports, updated_at, summary, dashboard_date=dashboard_date,
                               dragon_date=dragon_date, research_date=research_date, plan_date=plan_date,
                               pullback_date=pullback_date))
+
+    # 部署安全防护: 默认写入 robots.txt 禁止任何搜索引擎爬虫收录本站
+    robots_path = os.path.join(site_dir, 'robots.txt')
+    if not os.path.exists(robots_path):
+        with open(robots_path, 'w', encoding='utf-8') as f:
+            f.write("User-agent: *\nDisallow: /\n")
 
     # 本地专属: 同时在 site_dir 的父目录 (本地 output/ 根目录) 下维护一份本地导航入口，方便本地直接双击打开
     try:
