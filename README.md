@@ -6,13 +6,14 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python-Version](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
+[![Author: 孟锴 (Kai Meng)](https://img.shields.io/badge/Author-孟锴%20(Kai%20Meng)-2563eb.svg)](https://mengkai666.github.io/)
 [![GitHub Actions](https://github.com/mengkai666/quant_factor_tutorial/actions/workflows/daily_run.yml/badge.svg)](https://github.com/mengkai666/quant_factor_tutorial/actions)
 [![Stars](https://img.shields.io/github/stars/mengkai666/quant_factor_tutorial?style=social)](https://github.com/mengkai666/quant_factor_tutorial)
 [![Forks](https://img.shields.io/github/forks/mengkai666/quant_factor_tutorial?style=social)](https://github.com/mengkai666/quant_factor_tutorial)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/mengkai666/quant_factor_tutorial/pulls)
 
 <p>
-  <sub>🚀 每日全自动盘后计算 · 统一沪深北全 A 股 Universe · 数据质量闸门机制 · 自动化邮件与站点发布</sub>
+  <sub>🚀 发起与维护：<a href="https://mengkai666.github.io/">孟锴 (Kai Meng)</a> · 每日全自动盘后计算 · 统一沪深北全 A 股 Universe · 数据质量闸门机制 · 自动化邮件与站点发布</sub>
 </p>
 
 </div>
