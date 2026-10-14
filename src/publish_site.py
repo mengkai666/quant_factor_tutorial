@@ -265,6 +265,53 @@ def _render_september_study_entry():
             '<div class="de-right" style="color:#bc8cff">查看专题 →</div></a>')
 
 
+def _render_zhao_entry(zhao_date):
+    """属于zhao的个股追踪专属作战室入口卡 (site/zhao/latest.html)。"""
+    if not zhao_date:
+        return ''
+    day = _esc(zhao_date)
+    return (f'<a class="dragon-entry" href="zhao/latest.html" style="background:linear-gradient(135deg,#1b1428,#251a38);border-left-color:#bc8cff">'
+            f'<div class="de-left"><div class="de-label" style="color:#bc8cff">核心持仓追踪 · 属于zhao的专属作战室</div>'
+            f'<div class="de-title">🎯 属于zhao的个股追踪 · 每日复盘 · 明日推演 · 操作预案</div>'
+            f'<div class="de-sub">吉华集团 / 华映科技 / 焦作万方 / 深圳燃气 / 易明医药 / 锦鸡股份 · 缠论多级别分析 × 游资量价战法 · 基于 {day} 真实盘面</div></div>'
+            f'<div class="de-right" style="color:#bc8cff">进入专属作战室 →</div></a>')
+
+
+def _render_chan_entry(chan_date):
+    """缠论结构分析子页入口卡 (site/chan/latest.html)。"""
+    if not chan_date:
+        return ''
+    day = _esc(chan_date)
+    return (f'<a class="dragon-entry" href="chan/latest.html" style="border-left-color:#8ab4f8">'
+            f'<div class="de-left"><div class="de-label" style="color:#8ab4f8">缠论结构 · 笔 / 中枢 / 买卖点 / 背驰</div>'
+            f'<div class="de-title">🧩 缠论结构分析 · 指数区间套 × 板块结构矩阵 × 焦点个股</div>'
+            f'<div class="de-sub">日线+周线笔与中枢 · 三买/二买/一买/背驰 · 战法板块回测 · 基于 {day} 收盘</div></div>'
+            f'<div class="de-right" style="color:#8ab4f8">查看结构 →</div></a>')
+
+
+def _render_baotuan_entry(baotuan_date):
+    """抱团周期演进与新周期试错子页入口卡 (site/baotuan/latest.html)。"""
+    if not baotuan_date:
+        return ''
+    day = _esc(baotuan_date)
+    return (f'<a class="dragon-entry" href="baotuan/latest.html" style="background:linear-gradient(135deg,#131b2e,#1e1b4b);border-left-color:#8b5cf6">'
+            f'<div class="de-left"><div class="de-label" style="color:#a78bfa">抱团周期演进 · 瓦解出清与新周期试错分析</div>'
+            f'<div class="de-title">🔄 各周期抱团演进全景谱系 · 接力链追踪 · 瓦解出清后新周期试错雷达 · 淘汰死刑黑名单</div>'
+            f'<div class="de-sub">老抱团出清即新周期试错起点 · 9.28锂电/化工/医药试水 · 8.31消费农业接力链实证 · 科技避坑死刑雷达 · 基于 {day} 真实盘面</div></div>'
+            f'<div class="de-right" style="color:#a78bfa">查看抱团谱系 →</div></a>')
+
+
+def _render_crowding_entry(crowding_date):
+    """抱团周期研究入口；只有子页生成成功时才出现。"""
+    if not crowding_date:
+        return ''
+    return (f'<a class="dragon-entry" href="crowding/latest.html" style="border-left-color:#b9a5f4">'
+            f'<div class="de-left"><div class="de-label" style="color:#b9a5f4">抱团 · 证据核验与周期试错</div>'
+            f'<div class="de-title">分周期复盘 × 旧团瓦解 × 新团试错 × 条件战法</div>'
+            f'<div class="de-sub">研究截至 {_esc(crowding_date)} · 数据时钟见子页 · 不将候选当成已确认龙头</div></div>'
+            f'<div class="de-right" style="color:#b9a5f4">查看抱团 →</div></a>')
+
+
 def _rebase_main_nav_links(html: str, target_depth: str) -> str:
     """将主报告中的子页快捷导航链接根据目标深度调整为正确的相对路径."""
     if not html:
@@ -275,9 +322,18 @@ def _rebase_main_nav_links(html: str, target_depth: str) -> str:
             ('href="site/dashboards/latest.html"', 'href="../dashboards/latest.html"'),
             ('href="今日复盘与明日预案_最新.html"', 'href="../plan/latest.html"'),
             ('href="强势板块回调跟踪_最新.html"', 'href="../pullback/latest.html"'),
+            ('href="zhao个股追踪_最新.html"', 'href="../zhao/latest.html"'),
+            ('href="抱团周期分析_最新.html"', 'href="../crowding/latest.html"'),
             ('href="site/dragon/latest.html"', 'href="../dragon/latest.html"'),
+            ('href="site/baotuan/latest.html"', 'href="../baotuan/latest.html"'),
+            ('href="baotuan/latest.html"', 'href="../baotuan/latest.html"'),
+            ('href="site/plan/latest.html"', 'href="../plan/latest.html"'),
+            ('href="site/pullback/latest.html"', 'href="../pullback/latest.html"'),
+            ('href="site/zhao/latest.html"', 'href="../zhao/latest.html"'),
+            ('href="site/crowding/latest.html"', 'href="../crowding/latest.html"'),
             ("href='./今日复盘与明日预案_最新.html'", "href='../plan/latest.html'"),
             ("href='./强势板块回调跟踪_最新.html'", "href='../pullback/latest.html'"),
+            ("href='./zhao个股追踪_最新.html'", "href='../zhao/latest.html'"),
             ('href="annual_height_research.html"', 'href="../research/annual_height_research.html"'),
             ("href='annual_height_research.html'", "href='../research/annual_height_research.html'"),
             ('href="9月底板块大洗牌与房地产战法深研.html"', 'href="../research/september_regime_and_real_estate_study.html"'),
@@ -289,9 +345,17 @@ def _rebase_main_nav_links(html: str, target_depth: str) -> str:
             ('href="site/dashboards/latest.html"', 'href="dashboards/latest.html"'),
             ('href="今日复盘与明日预案_最新.html"', 'href="plan/latest.html"'),
             ('href="强势板块回调跟踪_最新.html"', 'href="pullback/latest.html"'),
+            ('href="zhao个股追踪_最新.html"', 'href="zhao/latest.html"'),
+            ('href="抱团周期分析_最新.html"', 'href="crowding/latest.html"'),
             ('href="site/dragon/latest.html"', 'href="dragon/latest.html"'),
+            ('href="site/baotuan/latest.html"', 'href="baotuan/latest.html"'),
+            ('href="site/plan/latest.html"', 'href="plan/latest.html"'),
+            ('href="site/pullback/latest.html"', 'href="pullback/latest.html"'),
+            ('href="site/zhao/latest.html"', 'href="zhao/latest.html"'),
+            ('href="site/crowding/latest.html"', 'href="crowding/latest.html"'),
             ("href='./今日复盘与明日预案_最新.html'", "href='plan/latest.html'"),
             ("href='./强势板块回调跟踪_最新.html'", "href='pullback/latest.html'"),
+            ("href='./zhao个股追踪_最新.html'", "href='zhao/latest.html'"),
             ('href="annual_height_research.html"', 'href="research/annual_height_research.html"'),
             ("href='annual_height_research.html'", "href='research/annual_height_research.html'"),
             ('href="9月底板块大洗牌与房地产战法深研.html"', 'href="research/september_regime_and_real_estate_study.html"'),
@@ -317,7 +381,7 @@ def _render_research_entry(research_date):
 
 
 def _render_index(reports, updated_at, summary=None, dashboard_date=None, dragon_date=None, research_date=None,
-                  plan_date=None, pullback_date=None):
+                  plan_date=None, pullback_date=None, zhao_date=None, chan_date=None, baotuan_date=None, crowding_date=None):
     """生成首页 HTML。reports: [(date_str, filename)] 已按日期倒序。
 
     dashboard_date: 提供后在首页顶部插入"当日决策看板"卡片入口。
@@ -463,9 +527,14 @@ def _render_index(reports, updated_at, summary=None, dashboard_date=None, dragon
   {_render_research_entry(research_date)}
   {_render_dashboard_entry(dashboard_date)}
 
+  {_render_baotuan_entry(baotuan_date)}
+  {_render_zhao_entry(zhao_date)}
   {_render_plan_entry(plan_date)}
   {_render_pullback_entry(pullback_date)}
   {_render_dragon_entry(dragon_date)}
+  {_render_chan_entry(chan_date)}
+
+  {_render_crowding_entry(crowding_date)}
   {_render_september_study_entry()}
 
   <div class="hero">
@@ -487,7 +556,8 @@ def _render_index(reports, updated_at, summary=None, dashboard_date=None, dragon
 
 
 def publish(output_html, site_dir, report_date=None, summary=None, dashboard_html=None,
-            dragon_html=None, research_html=None, plan_html=None, pullback_html=None):
+            dragon_html=None, research_html=None, plan_html=None, pullback_html=None, zhao_html=None,
+            chan_html=None, baotuan_html=None, crowding_html=None):
     """把 output_html 归档进 site_dir 并重建首页。
 
     Args:
@@ -501,6 +571,9 @@ def publish(output_html, site_dir, report_date=None, summary=None, dashboard_htm
                         并生成 dragon/latest.html, 首页看板卡下加入口。为空 (无周期) 则不归档、不挂入口。
         plan_html:      可选明日预案子页 HTML; 提供后归档到 plan/YYYY-MM-DD.html 并生成 plan/latest.html, 首页挂入口。
         pullback_html:  可选强势板块回调跟踪独立页 HTML; 提供后归档到 pullback/YYYY-MM-DD.html 并生成 pullback/latest.html, 首页挂入口。
+        zhao_html:      可选属于zhao的个股追踪独立页 HTML; 提供后归档到 zhao/YYYY-MM-DD.html 并生成 zhao/latest.html, 首页挂入口。
+        chan_html:      可选缠论结构分析子页 HTML; 提供后归档到 chan/YYYY-MM-DD.html 并生成 chan/latest.html, 首页挂入口。
+        baotuan_html:   可选抱团周期演进与新周期试错子页 HTML; 提供后归档到 baotuan/YYYY-MM-DD.html 并生成 baotuan/latest.html, 首页挂入口。
 
     Returns:
         (archived_path, index_path) 或 None (源文件不存在时)。
@@ -528,6 +601,10 @@ def publish(output_html, site_dir, report_date=None, summary=None, dashboard_htm
             report_date = datetime.now()
 
     date_str = _fmt_date(report_date)
+    if crowding_html:
+        crowding_meta = re.search(r'<meta name="report-date" content="(\d{4}-\d{2}-\d{2})">', crowding_html)
+        if not crowding_meta or crowding_meta.group(1) != date_str:
+            raise ReportIntegrityError('抱团研究日期与主报告不一致；请按独立研究日期导出，不得伪装历史报告')
     # Every destination is known before writes; none may alias the input main page.
     destinations = [Path(site_dir) / 'reports' / f'{date_str}.html',
                     Path(site_dir) / 'latest.html', Path(site_dir) / 'index.html']
@@ -535,6 +612,11 @@ def publish(output_html, site_dir, report_date=None, summary=None, dashboard_htm
             (dashboard_html, 'dashboards', f'{date_str}.html'),
             (dragon_html, 'dragon', f'{date_str}.html'),
             (plan_html, 'plan', f'{date_str}.html'),
+            (pullback_html, 'pullback', f'{date_str}.html'),
+            (zhao_html, 'zhao', f'{date_str}.html'),
+            (chan_html, 'chan', f'{date_str}.html'),
+            (crowding_html, 'crowding', f'{date_str}.html'),
+            (baotuan_html, 'baotuan', f'{date_str}.html'),
             (research_html is not None, 'research_briefs', f'research_brief_{date_str}.html')):
         if enabled:
             destinations.extend((Path(site_dir) / directory / filename, Path(site_dir) / directory / 'latest.html'))
@@ -637,15 +719,58 @@ def publish(output_html, site_dir, report_date=None, summary=None, dashboard_htm
         pullback_date = date_str
         print(f"  [publish] 已归档强势板块回调跟踪 {date_str} → {os.path.join(pullback_dir, f'{date_str}.html')}")
 
+    # === 属于zhao的个股追踪子页归档 ===
+    zhao_date = None
+    if zhao_html:
+        zhao_dir = os.path.join(site_dir, 'zhao')
+        os.makedirs(zhao_dir, exist_ok=True)
+        for name in (f'{date_str}.html', 'latest.html'):
+            with open(os.path.join(zhao_dir, name), 'w', encoding='utf-8') as f:
+                f.write(zhao_html)
+        zhao_date = date_str
+        print(f"  [publish] 已归档属于zhao的个股追踪 {date_str} → {os.path.join(zhao_dir, f'{date_str}.html')}")
+
+    # === 缠论结构分析子页归档 ===
+    chan_date = None
+    if chan_html:
+        chan_dir = os.path.join(site_dir, 'chan')
+        os.makedirs(chan_dir, exist_ok=True)
+        for name in (f'{date_str}.html', 'latest.html'):
+            with open(os.path.join(chan_dir, name), 'w', encoding='utf-8') as f:
+                f.write(chan_html)
+        chan_date = date_str
+        print(f"  [publish] 已归档缠论结构分析 {date_str} → {os.path.join(chan_dir, f'{date_str}.html')}")
+
+    # === 抱团周期演进与新周期试错子页归档 ===
+    baotuan_date = None
+    if baotuan_html:
+        baotuan_dir = os.path.join(site_dir, 'baotuan')
+        os.makedirs(baotuan_dir, exist_ok=True)
+        for name in (f'{date_str}.html', 'latest.html'):
+            with open(os.path.join(baotuan_dir, name), 'w', encoding='utf-8') as f:
+                f.write(baotuan_html)
+        baotuan_date = date_str
+        print(f"  [publish] 已归档抱团周期分析 {date_str} → {os.path.join(baotuan_dir, f'{date_str}.html')}")
+
     reports = _scan_reports(reports_dir, max_date=date_str)
     generated_now = datetime.now()
     updated_at = (generated_now.strftime('%Y-%m-%d %H:%M') if _fmt_date(generated_now) <= date_str
                   else f'{date_str}（报告口径）')
+    # 抱团研究只在独立子页完整生成后归档，不把老缓存日期隐去。
+    crowding_date = None
+    if crowding_html:
+        crowding_dir = os.path.join(site_dir, 'crowding')
+        os.makedirs(crowding_dir, exist_ok=True)
+        from crowding_view import write_crowding_latest
+        Path(crowding_dir, f'{date_str}.html').write_text(crowding_html, encoding='utf-8')
+        crowding_date = write_crowding_latest(Path(crowding_dir, 'latest.html'), crowding_html, date_str)
+
     index_path = os.path.join(site_dir, 'index.html')
     with open(index_path, 'w', encoding='utf-8') as f:
         f.write(_render_index(reports, updated_at, summary, dashboard_date=dashboard_date,
                               dragon_date=dragon_date, research_date=research_date, plan_date=plan_date,
-                              pullback_date=pullback_date))
+                              pullback_date=pullback_date, zhao_date=zhao_date, chan_date=chan_date,
+                              baotuan_date=baotuan_date, crowding_date=crowding_date))
 
     # 允许搜索引擎抓取本站量化投研报告
     robots_path = os.path.join(site_dir, 'robots.txt')
@@ -660,12 +785,17 @@ def publish(output_html, site_dir, report_date=None, summary=None, dashboard_htm
         _local_index_html = _render_index(
             reports, updated_at, summary, dashboard_date=dashboard_date,
             dragon_date=dragon_date, research_date=research_date, plan_date=plan_date,
-            pullback_date=pullback_date
+            pullback_date=pullback_date, zhao_date=zhao_date, chan_date=chan_date,
+            baotuan_date=baotuan_date, crowding_date=crowding_date
         )
         _local_index_html = _local_index_html.replace('href="dashboards/', 'href="site/dashboards/')
+        _local_index_html = _local_index_html.replace('href="chan/', 'href="site/chan/')
+        _local_index_html = _local_index_html.replace('href="crowding/', 'href="site/crowding/')
         _local_index_html = _local_index_html.replace('href="dragon/', 'href="site/dragon/')
+        _local_index_html = _local_index_html.replace('href="baotuan/', 'href="site/baotuan/')
         _local_index_html = _local_index_html.replace('href="plan/', 'href="今日复盘与明日预案_最新.html" data-orig="plan/')
         _local_index_html = _local_index_html.replace('href="pullback/', 'href="强势板块回调跟踪_最新.html" data-orig="pullback/')
+        _local_index_html = _local_index_html.replace('href="zhao/', 'href="zhao个股追踪_最新.html" data-orig="zhao/')
         _local_index_html = _local_index_html.replace('href="research/september_regime_and_real_estate_study.html"', 'href="9月底板块大洗牌与房地产战法深研.html"')
         _local_index_html = _local_index_html.replace('href="reports/', 'href="site/reports/')
         _local_index_html = _local_index_html.replace('href="research_briefs/', 'href="site/research_briefs/')
