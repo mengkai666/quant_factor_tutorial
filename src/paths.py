@@ -98,6 +98,10 @@ CNINFO_ANN_NEG_CACHE = os.path.join(DATA_DIR, 'cninfo_announcement_negative_cach
 SECURITY_MASTER_CACHE = os.path.join(DATA_DIR, 'security_master.csv')
 PREDICTION_HISTORY = os.path.join(DATA_DIR, 'report_prediction_history.jsonl')
 DAILY_SNAPSHOT_DIR = os.path.join(DATA_DIR, 'report_daily_snapshots')
+# 缠论模块 (src/chan_analysis.py): 焦点个股/指数的腾讯前复权日K缓存 + 板块战法回测结果缓存。
+# 都是可重抓/可重算的派生物, 不进 git (个股前复权价会随除权整体改写, 入库只会制造冲突)。
+CHAN_KLINE_CACHE = os.path.join(DATA_DIR, 'chan_kline_cache.json')
+CHAN_BACKTEST_CACHE = os.path.join(DATA_DIR, 'chan_backtest_cache.json')
 
 # === 输出产物 (output/) ===
 OUTPUT_HTML = os.path.join(OUTPUT_DIR, '主线强度追踪.html')

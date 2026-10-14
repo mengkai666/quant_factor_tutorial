@@ -4829,6 +4829,21 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     except Exception as e:
         print(f"  [警告] 高标追踪模块失败 (不影响主流程): {e}")
 
+    # 缠论结构分析 (chan_analysis): 指数区间套 × 板块结构矩阵 × 天梯焦点股结构健康度, 独立增量模块。
+    # 主报告挂精简 section, 完整图表/全表在 site/chan/ 子页。含具名个股, 走可信通道。
+    chan_html = ''
+    trusted_chan_html = ''
+    chan_sanitize_marker = '<!-- trusted-chan-analysis -->'
+    try:
+        from chan_analysis import build_chan_analysis, render_chan_section_html
+        _chan_rendered = render_chan_section_html(
+            build_chan_analysis(report_date_iso, mainline_ladder=mainline_ladder))
+        if _chan_rendered:
+            trusted_chan_html = _chan_rendered
+            chan_html = chan_sanitize_marker
+    except Exception as e:
+        print(f"  [警告] 缠论结构分析模块失败 (不影响主流程): {e}")
+
     # 龙头接替·监管周期 teaser: 一张精炼入口卡, 引流到已发布的 dragon/latest.html 完整谱系子页。
     # 主报告已很长, 重内容(接替谱系/监管阶梯/情绪崩溃)不内嵌全文, teaser 只做点击器。
     # 含具名龙头, 走可信通道避免被发布策略中和器裁剪; href 用绝对 SITE_URL, 3 份副本全部可跳。
@@ -4845,6 +4860,21 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
             dragon_teaser_html = dragon_sanitize_marker
     except Exception as e:
         print(f"  [警告] 龙头接替 teaser 生成失败 (不影响主流程): {e}")
+
+    # 抱团周期演进与新周期试错 teaser: 一张精炼入口卡, 引流到已发布的 baotuan/latest.html 完整分析子页。
+    baotuan_teaser_html = ''
+    trusted_baotuan_html = ''
+    baotuan_sanitize_marker = '<!-- trusted-baotuan-teaser -->'
+    try:
+        from baotuan_cycle import build_baotuan_cycle, render_baotuan_teaser_html
+        _baotuan_report_date = dates[-1] if dates else None
+        _baotuan_result = build_baotuan_cycle(report_date=_baotuan_report_date)
+        _baotuan_teaser_rendered = render_baotuan_teaser_html(_baotuan_result)
+        if _baotuan_teaser_rendered:
+            trusted_baotuan_html = _baotuan_teaser_rendered
+            baotuan_teaser_html = baotuan_sanitize_marker
+    except Exception as e:
+        print(f"  [警告] 抱团周期与新周期试错 teaser 生成失败 (不影响主流程): {e}")
 
     # 动态生成量化择时模块：必须服从统一三态发布策略。
     timing_res = dict(timing_result or generate_timing_signal(sentiment_df, advance_decline, echelon))
@@ -4900,13 +4930,29 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
             echelon=echelon,
             advance_decline=advance_decline,
         )
-        try:
-            from next_day_plan import render_plan_teaser_html
-            tactics_panel_html = render_plan_teaser_html(_report_date_str) + tactics_panel_html
-        except Exception as _plan_err:
-            print(f"  [警告] 明日预案入口卡生成失败: {_plan_err}")
     except Exception as e:
         print(f"  [警告] 战法复盘作战室面板生成失败 (不影响主流程): {e}")
+
+    # 核心实战子研报作战室快捷矩阵 (高密度 4 卡片集成中枢)
+    war_room_hub_html = ''
+    try:
+        from subpage_hub import render_war_room_hub_html
+        war_room_hub_html = render_war_room_hub_html(
+            report_date=_report_date_str,
+            context=unified_context,
+            advance_decline=advance_decline,
+        )
+    except Exception as _hub_err:
+        print(f"  [警告] 实战研报作战室快捷矩阵生成失败 (不影响主流程): {_hub_err}")
+
+    # 今日深度复盘与尾盘实战研判 (连续全景展示)
+    fupan_sanitize_marker = '<!-- trusted-daily-fupan -->'
+    trusted_fupan_html = ''
+    try:
+        from daily_fupan_section import generate_daily_fupan_html
+        trusted_fupan_html = generate_daily_fupan_html(report_date=_report_date_str, context=unified_context)
+    except Exception as _fupan_err:
+        print(f"  [警告] 连续展示复盘报告生成失败: {_fupan_err}")
 
     # 内嵌看板已包含择时状态、情绪温度和质量门禁；成功生成后隐藏旧版雷达，
     # 避免首屏连续出现两套“发布状态”表达。看板失败时仍保留旧版雷达兜底。
@@ -5217,6 +5263,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
             <a href="今日复盘与明日预案_最新.html" style="background:#9e6a03;color:#fff;padding:6px 12px;border-radius:6px;text-decoration:none;font-size:12.5px;font-weight:600;display:inline-flex;align-items:center;gap:5px">⚔️ 今日复盘与明日预案</a>
             <a href="强势板块回调跟踪_最新.html" style="background:#0969da;color:#fff;padding:6px 12px;border-radius:6px;text-decoration:none;font-size:12.5px;font-weight:600;display:inline-flex;align-items:center;gap:5px">🌊 强势板块回调跟踪</a>
             <a href="site/dragon/latest.html" style="background:#da3633;color:#fff;padding:6px 12px;border-radius:6px;text-decoration:none;font-size:12.5px;font-weight:600;display:inline-flex;align-items:center;gap:5px">🐉 龙头接替谱系</a>
+            <a href="zhao个股追踪_最新.html" style="background:#8957e5;color:#fff;padding:6px 12px;border-radius:6px;text-decoration:none;font-size:12.5px;font-weight:700;display:inline-flex;align-items:center;gap:5px">🎯 属于zhao的个股追踪</a>
         </div>
     </div>
     <div class="dashboard-header">
@@ -5233,7 +5280,11 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
 
     {dashboard_section_html}
 
+    {war_room_hub_html}
+
     {tactics_panel_html}
+
+    {fupan_sanitize_marker}
 
     {legacy_decision_block_html}
 
@@ -5274,7 +5325,11 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
 
     {leader_tracker_html}
 
+    {chan_html}
+
     {dragon_teaser_html}
+
+    {baotuan_teaser_html}
 
     {ladder_html}
 
@@ -5340,10 +5395,16 @@ window.addEventListener('resize',function(){{c.resize();}});}})();
         html = html.replace(phase_sanitize_marker, trusted_phase_html)
     if trusted_leader_html:
         html = html.replace(leader_sanitize_marker, trusted_leader_html)
+    if trusted_chan_html:
+        html = html.replace(chan_sanitize_marker, trusted_chan_html)
     if trusted_trend_html:
         html = html.replace(trend_sanitize_marker, trusted_trend_html)
     if trusted_dragon_html:
         html = html.replace(dragon_sanitize_marker, trusted_dragon_html)
+    if trusted_baotuan_html:
+        html = html.replace(baotuan_sanitize_marker, trusted_baotuan_html)
+    if trusted_fupan_html:
+        html = html.replace(fupan_sanitize_marker, trusted_fupan_html)
     research_link = unified_context.get('research_subpage')
     if isinstance(research_link, dict) and research_link.get('href'):
         from research_subpages import add_research_entry
@@ -6931,6 +6992,55 @@ def _main_impl():
         except Exception as e:
             print(f"  [警告] 强势板块回调跟踪子页生成失败 (不影响主流程): {e}")
 
+        # === 属于zhao的个股追踪: 独立子页归档到 site/zhao/，同时在 output/ 生成本地专属报告 ===
+        _zhao_html = None
+        _zhao_res = {}
+        try:
+            from paths import OUTPUT_DIR
+            from zhao_tracker import export_zhao_standalone_reports, generate_zhao_standalone_html
+            _zhao_res = export_zhao_standalone_reports(latest_date, output_dir=OUTPUT_DIR, site_dir=SITE_DIR, report_context=_report_context)
+            _zhao_html = generate_zhao_standalone_html(latest_date, is_site_mode=True, report_context=_report_context)
+            print(f"  → 本地属于zhao的个股追踪专属报告: {_zhao_res.get('local_latest')}")
+        except Exception as e:
+            print(f"  [警告] 属于zhao的个股追踪子页生成失败 (不影响主流程): {e}")
+
+        # === 缠论结构分析: 完整子页归档到 site/chan/ (generate_html 里已算过, 这里命中进程内 memo) ===
+        _chan_page_html = None
+        try:
+            from paths import OUTPUT_DIR
+            from chan_analysis import build_chan_analysis, generate_chan_standalone_html, export_chan_standalone_reports
+            _chan_result = build_chan_analysis(latest_date, mainline_ladder=mainline_ladder)
+            _chan_page_html = generate_chan_standalone_html(_chan_result, is_site_mode=True) or None
+            _chan_local = export_chan_standalone_reports(_chan_result, OUTPUT_DIR)
+            if _chan_local:
+                print(f"  → 本地缠论结构分析报告: {_chan_local}")
+        except Exception as e:
+            print(f"  [警告] 缠论结构分析子页生成失败 (不影响主流程): {e}")
+
+        # === 抱团周期演进与新周期试错分析: 独立子页归档到 site/baotuan/，同时在 output/ 生成本地专属报告 ===
+        _baotuan_html = None
+        try:
+            from paths import OUTPUT_DIR
+            from baotuan_cycle import build_baotuan_cycle, generate_baotuan_html, export_baotuan_standalone_reports
+            _baotuan_data = build_baotuan_cycle(latest_date)
+            _baotuan_res = export_baotuan_standalone_reports(latest_date, output_dir=OUTPUT_DIR, site_dir=SITE_DIR, baotuan_data=_baotuan_data)
+            _baotuan_html = generate_baotuan_html(_baotuan_data, is_site_mode=True)
+            print(f"  → 本地专属抱团周期与新周期试错分析报告: {_baotuan_res.get('local_report')}")
+        except Exception as e:
+            print(f"  [警告] 抱团周期与新周期试错分析子页生成失败 (不影响主流程): {e}")
+
+        # 抱团周期：纯本地计算；截图注释与行情代理隔离，缺证据不生成确认信号。
+        _crowding_html = None
+        try:
+            from crowding_cycle import build_crowding_report
+            from crowding_view import export_crowding_reports, generate_crowding_html
+            _crowding_result = build_crowding_report(latest_date)
+            _crowding_files = export_crowding_reports(_crowding_result, OUTPUT_DIR)
+            _crowding_html = generate_crowding_html(_crowding_result, is_site_mode=True)
+            print(f"  → 抱团周期研究报告: {_crowding_files['local_latest']}")
+        except Exception as e:
+            print(f"  [警告] 抱团周期子页生成失败 (不影响主流程): {e}")
+
         publish_result = publish(
             OUTPUT_HTML,
             SITE_DIR,
@@ -6941,6 +7051,10 @@ def _main_impl():
             research_html=_research_html,
             plan_html=_plan_html,
             pullback_html=_pullback_html,
+            zhao_html=_zhao_html,
+            chan_html=_chan_page_html,
+            crowding_html=_crowding_html,
+            baotuan_html=_baotuan_html,
         )
         publish_succeeded = publish_result is not None
     except Exception as e:
@@ -7053,7 +7167,13 @@ def _main_impl():
                 webbrowser.open(local_url)
             else:
                 print(f"  [警告] 本地报告不存在, 跳过打开: {OUTPUT_HTML}")
-            # ② GitHub Pages 线上站点
+            # ② 属于zhao的个股追踪专属报告 (运行主线强度追踪后自动弹出)
+            _zhao_latest = os.path.join(os.path.dirname(OUTPUT_HTML), 'zhao个股追踪_最新.html')
+            if os.path.exists(_zhao_latest):
+                local_zhao_url = 'file:///' + os.path.abspath(_zhao_latest).replace('\\', '/')
+                print(f"  🎯 正在浏览器中打开属于zhao的个股追踪: {_zhao_latest}")
+                webbrowser.open(local_zhao_url)
+            # ③ GitHub Pages 线上站点
             from publish_site import open_site
             open_site(SITE_URL)
     except Exception as e:

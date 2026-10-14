@@ -1398,7 +1398,15 @@ def render_phase_resonance_html(res):
         🎯 四象限 (下跌段抗跌性 × 底部至今强度) —— 格式: 下跌段 → 底部至今
       </div>
       {_quadrant_html(res)}
-      {res.get('reps_html', '')}
+      {f'''<details style="margin-top:12px;background:#161b22;border:1px solid #30363d;border-radius:8px;padding:10px 14px;">
+        <summary style="cursor:pointer;font-weight:600;font-size:12.5px;color:#58a6ff;user-select:none;display:flex;align-items:center;justify-content:space-between;">
+          <span>👥 展开查看：四象限全市场重点个股代表明细表 (按抗跌性与反弹强度分层)</span>
+          <span style="font-size:11px;color:#8b949e;background:#21262d;padding:2px 8px;border-radius:6px;border:1px solid #30363d;">点击展开/折叠明细 ▾</span>
+        </summary>
+        <div style="margin-top:10px;overflow-x:auto;">
+          {res.get('reps_html', '')}
+        </div>
+      </details>''' if res.get('reps_html') else ''}
       <div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:12px;margin-top:12px;">
         <div style="color:#8b949e;font-size:12px;font-weight:bold;margin-bottom:6px;">🧭 结论</div>
         {_verdict(res)}

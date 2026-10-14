@@ -1003,11 +1003,7 @@ def render_tactics_review_panel(
         ''')
     targets_table_html = "".join(target_rows)
 
-    try:
-        from pullback_tracker import render_pullback_tracker_panel
-        pullback_html = render_pullback_tracker_panel(r_date)
-    except Exception:
-        pullback_html = ""
+
 
     panel_html = f'''
 <!-- tactics-review-panel:start -->
@@ -1039,32 +1035,32 @@ def render_tactics_review_panel(
         </div>
     </div>
 
-    <!-- 模块一: 游资实战与量化深研核心兵器库 -->
-    <div style="background:#161b22;border:1px solid #30363d;border-radius:10px;padding:18px 20px;margin-bottom:20px;box-shadow:0 4px 12px rgba(0,0,0,0.25);">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;border-bottom:1px solid #21262d;padding-bottom:10px;flex-wrap:wrap;gap:8px;">
-            <div style="font-size:15px;font-weight:700;color:#f0f6fc;display:flex;align-items:center;gap:8px;">
-                <span>🏛️ 宏观量化战略库 · 连板高度年度深研七大核心战法 (战法 A ~ G)</span>
-                <span style="font-size:11px;color:#8b949e;font-weight:normal;">(长周期样本实证规律)</span>
+    <!-- 模块一: 游资实战与量化深研核心兵器库 (折叠收起，保持版面清爽，点击按需查阅) -->
+    <details style="background:#161b22;border:1px solid #30363d;border-radius:10px;padding:14px 18px;margin-bottom:20px;box-shadow:0 4px 12px rgba(0,0,0,0.25);">
+        <summary style="cursor:pointer;font-size:14px;font-weight:700;color:#58a6ff;user-select:none;display:flex;align-items:center;justify-content:space-between;list-style:none;">
+            <div style="display:flex;align-items:center;gap:8px;">
+                <span>🏛️ 游资实战量化兵器库 · 宏观战法 A~G &amp; 临盘四大铁律</span>
+                <span style="font-size:11px;color:#8b949e;font-weight:normal;">(长周期样本实证规律 &amp; 竞价分时准则)</span>
             </div>
-            <a data-annual-height-study href="annual_height_research.html" target="_blank" style="font-size:11.5px;color:#58a6ff;text-decoration:none;border:1px solid rgba(88,166,255,0.3);padding:2px 8px;border-radius:10px;background:rgba(88,166,255,0.08);">
-                📊 查看年度深研与六大战法可视化总看板 ↗
-            </a>
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:12px;margin-bottom:22px;">
-            {quant_grid_html}
-        </div>
+            <div style="display:flex;align-items:center;gap:10px;">
+                <a data-annual-height-study href="annual_height_research.html" target="_blank" onclick="event.stopPropagation();" style="font-size:11.5px;color:#58a6ff;text-decoration:none;border:1px solid rgba(88,166,255,0.3);padding:2px 8px;border-radius:10px;background:rgba(88,166,255,0.08);">
+                    📊 年度深研看板 ↗
+                </a>
+                <span style="font-size:12px;color:#8b949e;background:#21262d;padding:2px 8px;border-radius:6px;border:1px solid #30363d;">点击展开理论兵器库 ▾</span>
+            </div>
+        </summary>
+        <div style="margin-top:16px;">
+            <div style="font-size:13px;font-weight:700;color:#f0f6fc;margin-bottom:10px;">🏛️ 宏观量化战略库 · 连板高度年度深研七大核心战法 (战法 A ~ G)</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:12px;margin-bottom:20px;">
+                {quant_grid_html}
+            </div>
 
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;border-bottom:1px solid #21262d;padding-bottom:8px;border-top:1px solid #21262d;padding-top:16px;">
-            <div style="font-size:14.5px;font-weight:700;color:#f0f6fc;display:flex;align-items:center;gap:8px;">
-                <span>⚡ 游资微观临盘战术库 · 顶级游资四大核心战法精要 (四大临盘执行铁律)</span>
-                <span style="font-size:11px;color:#8b949e;font-weight:normal;">(竞价与分时盘口实操)</span>
+            <div style="font-size:13px;font-weight:700;color:#f0f6fc;margin-bottom:10px;border-top:1px solid #21262d;padding-top:14px;">⚡ 游资微观临盘战术库 · 顶级游资四大核心战法精要 (四大临盘执行铁律)</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:12px;">
+                {tactics_grid_html}
             </div>
-            <span style="font-size:11.5px;color:#e3b341;">临盘决策准则</span>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:12px;">
-            {tactics_grid_html}
-        </div>
-    </div>
+    </details>
 
     <!-- 模块二: 今日盘面实战对账深度复盘 -->
     <div style="background:#161b22;border:1px solid #30363d;border-radius:10px;padding:18px 20px;margin-bottom:20px;box-shadow:0 4px 12px rgba(0,0,0,0.25);">
@@ -1097,8 +1093,7 @@ def render_tactics_review_panel(
         </div>
     </div>
 
-    <!-- 模块二(B): 强势板块放量主升回调一笔量化战法跟踪作战室 -->
-    {pullback_html}
+
 
     <!-- 模块三: 昨日预案实战检验与推演对比 -->
     <div style="background:#161b22;border:1px solid #30363d;border-radius:10px;padding:18px 20px;margin-bottom:20px;box-shadow:0 4px 12px rgba(0,0,0,0.25);">

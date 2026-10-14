@@ -33,6 +33,8 @@ data/baostock_limit_history.csv
 data/baostock_suspension.csv
 data/baostock_universe_pit.csv
 data/raw_ohlc_slices/
+data/chan_kline_cache.json
+data/chan_backtest_cache.json
 
 # === 运行时生成的输出/报告 ===
 # output/ 整目录为运行时产物 (报告/图表/回测CSV/日志), 零跟踪文件, 不入 master
