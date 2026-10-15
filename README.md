@@ -278,6 +278,15 @@ quant_factor_tutorial/
 
 ---
 
+## 👨‍💻 作者与个人主页 (Author)
+
+- **作者**：**[孟锴 (Kai Meng)](https://mengkai666.github.io/)**
+- **个人官方主页**：[https://mengkai666.github.io/](https://mengkai666.github.io/)
+- **GitHub**：[@mengkai666](https://github.com/mengkai666)
+- **定位**：AI 量化投资研究员 · 算法工程师 (Quantitative Researcher & Algorithm Engineer)
+
+---
+
 ## 📄 开源许可证 (License)
 
 本项目基于 [MIT 许可证](LICENSE) 开源，允许免费商用、修改与分发。
