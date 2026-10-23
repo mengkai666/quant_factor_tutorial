@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>2026-09-10 复盘决策看板 · 6 场景模型</title>
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0d1117; color: #e6edf3;
+      font-family: 'Microsoft YaHei', 'PingFang SC', -apple-system, sans-serif;
+      padding: 24px; line-height: 1.6; min-height: 100vh;
+    }
+    .wrap { max-width: 1200px; margin: 0 auto; }
+    .back {
+      display: inline-block; padding: 6px 14px; margin-bottom: 12px;
+      background: #161b22; color: #58a6ff; text-decoration: none;
+      border: 1px solid #30363d; border-radius: 6px; font-size: 13px;
+    }
+    .back:hover { border-color: #58a6ff; }
+    .hero {
+      background: linear-gradient(135deg, color-mix(in srgb, var(--sc) 20%, transparent),
+                                       color-mix(in srgb, var(--sc) 8%, transparent));
+      border: 2px solid var(--sc); border-radius: 16px;
+      padding: 24px 28px; margin-bottom: 20px;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 20px; flex-wrap: wrap;
+      box-shadow: 0 0 30px color-mix(in srgb, var(--sc) 22%, transparent);
+    }
+    .hero .left h1 { font-size: 28px; font-weight: 800; color: var(--sc); margin-bottom: 6px; }
+    .hero .left .sub { color: #c9d1d9; font-size: 14px; }
+    .hero .left .date { color: #8b949e; font-size: 13px; margin-top: 4px; }
+    .hero .right {
+      text-align: right;
+      background: color-mix(in srgb, var(--sc) 22%, transparent);
+      padding: 14px 22px; border-radius: 10px;
+      border: 1px solid var(--sc);
+    }
+    .hero .right .pos-label { color: color-mix(in srgb, var(--sc) 70%, #ffffff);
+                              font-size: 13px; margin-bottom: 4px; }
+    .hero .right .pos-value { font-size: 24px; font-weight: 800; color: #fff; }
+    .hero .right .win { color: #ffcc00; font-size: 13px; margin-top: 4px; }
+    .hero-desc {
+      grid-column: 1 / -1; color: #c9d1d9; font-size: 14px;
+      padding-top: 12px; margin-top: 12px;
+      border-top: 1px solid color-mix(in srgb, var(--sc) 35%, transparent);
+      width: 100%;
+    }
+    .grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 14px; margin-bottom: 24px;
+    }
+    .card {
+      background: rgba(22, 27, 34, 0.7);
+      border: 1px solid rgba(48, 54, 61, 0.8);
+      border-radius: 12px; padding: 16px 18px;
+    }
+    .card h3 {
+      font-size: 13px; color: #d29922; margin-bottom: 8px;
+      border-left: 3px solid #d29922; padding-left: 8px;
+    }
+    .kpi { font-size: 24px; font-weight: 800; color: #fff; }
+    .kpi.green { color: #3fb950; }
+    .kpi.red { color: #ff4444; }
+    .kpi.yellow { color: #ffcc00; }
+    .kpi.blue { color: #58a6ff; }
+    .hint { color: #8b949e; font-size: 12px; margin-top: 4px; }
+    .quality-card { margin: 10px 0 24px; padding: 0 16px; border: 1px solid rgba(48,54,61,0.8);
+      border-radius: 10px; background: rgba(22,27,34,0.65); }
+    .quality-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 12px 0; cursor: pointer; list-style: none; color: #c9d1d9; font-size: 13px; }
+    .quality-summary，-webkit-details-marker { display: none; }
+    .quality-summary，after { content: '展开'; color: #8b949e; font-size: 11px; }
+    .quality-card[open] .quality-summary，after { content: '收起'; }
+    .quality-title { color: #c9d1d9; font-size: 13px; font-weight: 700; }
+    .quality-summary-status { color: #8b949e; font-size: 11px; }
+    .quality-title b { color: #3fb950; }
+    .quality-note { padding: 0 0 8px; color: #8b949e; font-size: 11px; }
+    .quality-hint { color: #8b949e; font-size: 11px; margin-top: 4px; line-height: 1.4; }
+    .quality-items { display: flex; flex-wrap: wrap; gap: 8px 18px; color: #8b949e; font-size: 12px; }
+    .quality-layers { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 7px; color: #c9d1d9; font-size: 12px; }
+    .quality-issues { margin-top: 7px; color: #d29922; font-size: 12px; line-height: 1.5; }
+
+    /* 重点提炼带: 一眼看结论 */
+    .headline {
+      display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px;
+      margin-bottom: 22px;
+    }
+    .headline .box {
+      background: rgba(22, 27, 34, 0.7);
+      border: 1px solid rgba(48, 54, 61, 0.8);
+      border-radius: 14px; padding: 18px 20px;
+    }
+    .headline .box.primary { border-color: var(--sc);
+      background: linear-gradient(135deg, color-mix(in srgb, var(--sc) 14%, transparent), transparent); }
+    .headline .lbl { font-size: 12px; color: #8b949e; text-transform: uppercase;
+      letter-spacing: 0.5px; margin-bottom: 8px; }
+    .headline .big { font-size: 20px; font-weight: 800; color: #fff; line-height: 1.35; }
+    .headline .big .pk { color: var(--sc); }
+    .headline .sub2 { color: #c9d1d9; font-size: 13px; margin-top: 8px; line-height: 1.5; }
+    /* 情绪温度计 */
+    .gauge-wrap { text-align: center; }
+    .gauge-track { position: relative; height: 12px; border-radius: 6px; margin: 14px 0 6px;
+      background: linear-gradient(90deg, #ff4444 0%, #d29922 45%, #3fb950 100%); }
+    .gauge-pin { position: absolute; top: -5px; width: 4px; height: 22px;
+      background: #fff; border-radius: 2px; box-shadow: 0 0 6px rgba(255,255,255,0.7);
+      transform: translateX(-2px); }
+    .gauge-score { font-size: 30px; font-weight: 800; }
+    .gauge-legend { display: flex; justify-content: space-between; color: #6e7681;
+      font-size: 11px; margin-top: 2px; }
+    .gauge-mood { font-size: 13px; margin-top: 6px; font-weight: 700; }
+
+    /* Legacy playbook styles (not rendered as an instruction channel) */
+    .playbook { margin-bottom: 22px; }
+    .pb-title { font-size: 14px; font-weight: 700; color: #ffcc00;
+      margin-bottom: 10px; padding-left: 10px; border-left: 4px solid #ffcc00; }
+    .pb-title .pb-sub { font-size: 11px; font-weight: 400; color: #8b949e; margin-left: 8px; }
+    .pb-cmd { display: flex; align-items: flex-start; gap: 10px;
+      background: rgba(22,27,34,0.7); border: 1px solid rgba(48,54,61,0.8);
+      border-left-width: 3px; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px;
+      font-size: 13.5px; line-height: 1.5; color: #e6edf3; }
+    .pb-icon { font-size: 16px; flex-shrink: 0; line-height: 1.4; }
+    .pb-cmd.pb-hot { border-left-color: #ff4444; }
+    .pb-cmd.pb-cold { border-left-color: #58a6ff; }
+    .pb-cmd.pb-warn { border-left-color: #ff8800; }
+    .pb-cmd.pb-ok { border-left-color: #3fb950; }
+    .pb-cmd.pb-neutral { border-left-color: #6e7681; }
+
+    .section-title {
+      font-size: 18px; font-weight: 700; color: #ffcc00;
+      margin: 28px 0 14px; padding-left: 10px;
+      border-left: 4px solid #ffcc00;
+    }
+    .section-title .st-sub { font-size: 12px; font-weight: 400; color: #8b949e; margin-left: 8px; }
+    /* 证据折叠区 */
+    details.evidence { margin: 24px 0 8px; border: 1px solid rgba(48,54,61,0.6);
+      border-radius: 12px; background: rgba(22,27,34,0.4); overflow: hidden; }
+    details.evidence > summary { cursor: pointer; padding: 14px 18px; list-style: none;
+      font-size: 14px; font-weight: 700; color: #8b949e; user-select: none; }
+    details.evidence > summary，-webkit-details-marker { display: none; }
+    details.evidence > summary，before { content: '▸ '; color: #58a6ff; }
+    details.evidence[open] > summary，before { content: '▾ '; }
+    details.evidence > summary:hover { color: #c9d1d9; }
+    details.evidence .evidence-body { padding: 0 18px 16px; }
+    /* 基准场景高亮 */
+    .scen-card.scen-base { box-shadow: 0 0 0 1px currentColor, 0 0 24px color-mix(in srgb, var(--sc) 28%, transparent); }
+    .scen-base-badge { display: inline-block; font-size: 10px; font-weight: 700;
+      background: var(--sc); color: #0d1117; padding: 1px 7px; border-radius: 4px;
+      margin-left: 8px; vertical-align: middle; }
+    table.factor, table.history {
+      width: 100%; background: rgba(22, 27, 34, 0.7);
+      border-radius: 12px; border-collapse: separate;
+      border-spacing: 0; overflow: hidden; margin-bottom: 8px;
+    }
+    table.factor th, table.factor td,
+    table.history th, table.history td {
+      padding: 11px 14px; border-bottom: 1px solid rgba(48, 54, 61, 0.6);
+      text-align: left; font-size: 13.5px;
+    }
+    table.factor th, table.history th {
+      background: rgba(30, 35, 42, 0.9); color: #8b949e;
+      font-size: 12px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    table.history td { text-align: center; }
+    table.history tr.win td { color: #3fb950; }
+    table.history tr.lose td { color: #ff6666; }
+    table.history tr.neutral td { color: #d29922; }
+    .check-ok { color: #3fb950; font-weight: 700; }
+    .check-fail { color: #ff4444; font-weight: 700; }
+    .check-warn { color: #ffcc00; font-weight: 700; }
+
+    .scenario-tree {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 14px;
+    }
+    .scen-card {
+      background: rgba(22, 27, 34, 0.75);
+      border: 2px solid; border-radius: 12px;
+      padding: 16px 18px;
+    }
+    .scen-card .head {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .scen-card .name { font-size: 15px; font-weight: 700; }
+    .scen-card .prob { font-size: 12px; color: #8b949e; }
+    .scen-card .scen-stat { margin: -4px 0 7px; color: #8b949e; font-size: 11px; line-height: 1.45; }
+    .scen-card ul { margin-left: 18px; font-size: 13px; color: #e6edf3; line-height: 1.7; }
+    .scen-card .pos {
+      margin-top: 10px; padding: 6px 10px; border-radius: 6px;
+      font-size: 13px; font-weight: 700; display: inline-block;
+    }
+    .attack { border-color: #ff4444; }
+    .attack .name, .attack .pos { color: #ff4444; }
+    .attack .pos { background: rgba(255, 68, 68, 0.15); }
+    .moderate { border-color: #d29922; }
+    .moderate .name, .moderate .pos { color: #d29922; }
+    .moderate .pos { background: rgba(210, 153, 34, 0.15); }
+    .defense { border-color: #58a6ff; }
+    .defense .name, .defense .pos { color: #58a6ff; }
+    .defense .pos { background: rgba(88, 166, 255, 0.15); }
+    .critical { border-color: #ff8800; }
+    .critical .name, .critical .pos { color: #ff8800; }
+    .critical .pos { background: rgba(255, 136, 0, 0.15); }
+
+    /* focus pool styles (fp-*) */
+    .fp-block { margin-bottom: 20px; }
+    .fp-block-title {
+      font-size: 15px; font-weight: 700; color: #e6edf3;
+      padding: 10px 14px; border-radius: 8px 8px 0 0;
+      background: rgba(30, 35, 42, 0.9);
+      border-left: 4px solid;
+    }
+    .fp-space .fp-block-title { border-left-color: #ff4444; color: #ff8888; }
+    .fp-midcore .fp-block-title { border-left-color: #58a6ff; color: #79b8ff; }
+    .fp-block-sub { color: #8b949e; font-size: 12px; font-weight: 400; margin-left: 10px; }
+    table.fp-table {
+      width: 100%; background: rgba(22, 27, 34, 0.7);
+      border-radius: 0 0 8px 8px; border-collapse: separate;
+      border-spacing: 0; overflow: hidden;
+    }
+    table.fp-table th, table.fp-table td {
+      padding: 10px 14px; border-bottom: 1px solid rgba(48, 54, 61, 0.6);
+      text-align: left; font-size: 13px; vertical-align: top;
+    }
+    table.fp-table th {
+      background: rgba(30, 35, 42, 0.5); color: #8b949e;
+      font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    table.fp-table tbody tr:hover { background: rgba(88, 166, 255, 0.05); }
+    table.fp-table tbody tr:last-child td { border-bottom: none; }
+    .fp-name { width: 100px; color: #ffcc00; }
+    .fp-plate { width: 130px; color: #79b8ff; font-size: 12px; }
+    .fp-entry { color: #c9d1d9; line-height: 1.55; }
+    .fp-stop { width: 200px; color: #ff8888; font-size: 12px; }
+    .fp-cat { width: 210px; }
+    .fp-cat-tag { display: inline-block; font-size: 10.5px; font-weight: 700;
+                  color: #0d1117; background: #d29922; padding: 1px 7px;
+                  border-radius: 4px; margin-bottom: 3px; }
+    .fp-cat-text { color: #c9d1d9; font-size: 11.5px; line-height: 1.45; }
+
+    footer {
+      margin-top: 40px; padding-top: 20px; text-align: center;
+      color: #6e7681; font-size: 12px;
+      border-top: 1px solid rgba(48, 54, 61, 0.6);
+    }
+    @media (max-width: 640px) {
+      .hero { display: none; }
+      .fp-plate, .fp-stop { width: auto; }
+    }
+    </style>
+</head>
+<body>
+<div class="wrap" style="--sc:#f85149;">
+  <a class="back" href="../index.html">← 返回首页</a>
+  <div class="hero">
+    <div class="left">
+      <h1>D_冰点抄底</h1>
+      <div class="sub">盘面综合研判</div>
+      <div class="date">报告日期 2026-09-10</div>
+    </div>
+    <div class="hero-desc">涨停35家、跌停11家，上涨占比17%；盘面分化仍在，优先观察主线梯队能否继续扩散。</div>
+  </div>
+
+  <section class="decision-readiness" data-action-status="no_new_positions" style="margin:14px 0;padding:16px 18px;background:#161b22;border-left:3px solid #d29922;border-radius:6px;color:#c9d1d9"><div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap"><strong style="font-size:18px;color:#f0f6fc">操作结论 · 不开新仓</strong><span style="font-size:11px;color:#8b949e">快照 2026-09-10 · 收盘 · 盘后条件计划</span></div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:6px 0"><div data-axis="data" data-status="ready" style="min-width:0;padding:10px 0"><div style="font-size:11px;color:#8b949e">数据资格</div><strong style="display:block;font-size:15px;line-height:1.5;color:#e6edf3">通过</strong><div style="font-size:10px;color:#8b949e">核心行情</div></div><div data-axis="strategy" data-status="unverified" style="min-width:0;padding:10px 0"><div style="font-size:11px;color:#8b949e">策略资格</div><strong style="display:block;font-size:15px;line-height:1.5;color:#e6edf3">尚未验证</strong><div style="font-size:10px;color:#8b949e">新机会策略</div></div><div data-axis="signal" data-status="not_evaluable" style="min-width:0;padding:10px 0"><div style="font-size:11px;color:#8b949e">信号状态</div><strong style="display:block;font-size:15px;line-height:1.5;color:#e6edf3">不可评估</strong><div style="font-size:10px;color:#8b949e">报告快照时点</div></div><div data-axis="action" data-status="no_new_positions" style="min-width:0;padding:10px 0"><div style="font-size:11px;color:#8b949e">操作结论</div><strong style="display:block;font-size:15px;line-height:1.5;color:#e6edf3">不开新仓</strong><div style="font-size:10px;color:#8b949e">门禁与信号分别判断</div></div></div><p class="readiness-reason" style="margin:8px 0;font-size:13px;line-height:1.65"><b>为什么：</b>基础行情可用，但策略独立验证尚未通过；这是判断资格不足，不等于市场没有机会。</p><div style="font-size:12px;line-height:1.65"><b>何时重新评估：</b><ul style="margin:4px 0;padding-left:20px"><li>提供匹配策略、规则指纹与结果口径的独立样本外验证，不以历史天数或市场命中率代替。</li></ul></div><div style="font-size:11px;color:#d29922;margin-top:6px">待确认阶段：竞价、9:35、10:00、午后</div><div style="font-size:10px;color:#8b949e;margin-top:8px">核心行情通过 ≠ 全部策略数据齐全；快照信号 ≠ 下一交易日已触发。</div></section>
+  <section class="strategy-qualification" style="margin:12px 0;padding:14px 16px;background:#161b22;border:1px solid #30363d;border-radius:7px;color:#c9d1d9;font-size:12px;line-height:1.65;min-width:0"><b>逐策略资格 · 哪条路径能用，哪条还不能</b><div>AI文案不可用：使用确定性说明；不影响已独立验证策略的资格。</div><div style="color:#8b949e;font-size:11px">历史同型样本数不等于独立验证；核心行情阻断仍对全部策略生效。</div><details><summary>查看各策略依赖、独立验证与恢复条件</summary><div style="overflow:auto"><table style="width:100%;text-align:left;font-size:12px"><thead><tr><th>策略</th><th>状态</th><th>独立验证</th><th>事件依赖</th><th>何时重新评估</th></tr></thead><tbody><tr><td>广度弱、接力弱：高位退潮优先</td><td>研究观察</td><td>0 例 · 未验证</td><td>无全市场事件指标依赖</td><td>提供该策略、当前规则指纹和结果口径的独立样本外验证报告；历史天数/同型命中率不能代替。；此分支仅用于观察或防守，不生成新的交易候选。</td></tr><tr><td>风险观察：等待宽度与接力同时止跌</td><td>研究观察</td><td>0 例 · 未验证</td><td>无全市场事件指标依赖</td><td>提供该策略、当前规则指纹和结果口径的独立样本外验证报告；历史天数/同型命中率不能代替。；此分支仅用于观察或防守，不生成新的交易候选。</td></tr></tbody></table></div></details></section>
+  <section class="scenario-checkpoint" style="margin:12px 0;padding:14px 16px;background:#161b22;border:1px solid #30363d;border-radius:7px;color:#c9d1d9;font-size:12px;line-height:1.65;min-width:0"><b>逐阶段验证，不把排名当确认</b><div style="color:#8b949e;font-size:11px">目标交易日 2026-09-11 · 缺阶段保持待确认</div><ol style="display:flex;flex-wrap:wrap;gap:7px;padding:0;margin:8px 0"><li data-phase="close" data-state="observed" style="list-style:none;padding:6px 10px;border-bottom:2px solid #c9d1d9;color:#c9d1d9">收盘基准 · 已记录</li><li data-phase="auction" data-state="pending" style="list-style:none;padding:6px 10px;border-bottom:2px solid #d29922;color:#d29922">竞价 · 待确认</li><li data-phase="early_0935" data-state="pending" style="list-style:none;padding:6px 10px;border-bottom:2px solid #d29922;color:#d29922">9:35 · 待确认</li><li data-phase="confirm_1000" data-state="pending" style="list-style:none;padding:6px 10px;border-bottom:2px solid #d29922;color:#d29922">10:00 · 待确认</li><li data-phase="afternoon" data-state="pending" style="list-style:none;padding:6px 10px;border-bottom:2px solid #d29922;color:#d29922">午后 · 待确认</li></ol><div>最高排名（非操作结论）：风险观察：等待宽度与接力同时止跌</div><div>有效情景：尚未确定　·　规则确认：尚未确认</div><div style="color:#8b949e;font-size:11px">待验证路径（不代表已生效）：广度弱、接力弱：高位退潮优先</div><div><b>下一观察点 · 竞价：</b>晋级率 &lt; 报告日同口径值</div><div><b>该分支撤销条件：</b>上涨占比 ≥ 报告日同口径值；晋级率 ≥ 报告日同口径值</div><div style="color:#8b949e;font-size:11px">规则确认仅覆盖结构化字段；文字观察项、实时价格和T+1限制仍须执行前核对。</div></section>
+  <section class="decision-changes" style="margin:12px 0;padding:14px 16px;background:#161b22;border:1px solid #30363d;border-radius:7px;color:#c9d1d9;font-size:12px;line-height:1.65;min-width:0"><b>相比上一条计划，改变了什么</b><div>对照 2026-09-10 的上一条记录：操作与候选未变。</div></section>
+
+  
+    <div class="headline">
+      <div class="box primary">
+        <div class="lbl">唯一操作结论</div>
+        <div class="big">不开新仓</div>
+        <div class="sub2">基础行情可用，但策略独立验证尚未通过；这是判断资格不足，不等于市场没有机会。<br><span style="font-size:11px;color:#8b949e">盘面判断：D_冰点抄底 · 明日验证：市场宽度与主线梯队是否同步增强。</span></div>
+        
+        <div class="sub2">🏔️ 高标 · 高度不足 — 当前最高仅4板(桂林旅游), 未及高标线(6板); 情绪偏弱, 等待新龙头突破。</div>
+      </div>
+      <div class="box gauge-wrap">
+        <div class="lbl">盘面情绪温度</div>
+        <div class="gauge-score" style="color:#ff4444;">14</div>
+        <div class="gauge-track"><div class="gauge-pin" style="left:14%;"></div></div>
+        <div class="gauge-legend"><span>冰点</span><span>中性</span><span>亢奋</span></div>
+        <div class="gauge-mood" style="color:#ff4444;">冰点 · 空仓观望</div>
+      </div>
+    </div>
+
+  
+    <section class="today-three" style="margin:14px 0 18px">
+      <div style="display:flex;align-items:end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:9px">
+        <div style="color:#ffcc00;font-size:16px;font-weight:850;border-left:3px solid #ffcc00;padding-left:9px">今日只看三件事</div>
+        <div style="color:#8b949e;font-size:11px">当前默认不开新仓 · 数据日期 2026-09-10</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:9px"><article class="today-watch" style="min-width:0;padding:14px 15px;border-top:3px solid #f0b429;background:rgba(22,27,34,.66);border-radius:8px"><div style="color:#f0b429;font-size:12px;font-weight:800;margin-bottom:6px">市场开关</div><div style="color:#f0f6fc;font-size:15px;font-weight:800;line-height:1.4">当前不开新仓</div><div style="color:#c9d1d9;font-size:12px;line-height:1.55;margin-top:6px">默认动作：不开新仓，只观察条件是否成立</div><div style="color:#8b949e;font-size:11px;line-height:1.55;margin-top:6px">9:35 前观察上涨家数、跌停反馈和中位梯队承接；恶化则取消全部新仓。</div></article><article class="today-watch" style="min-width:0;padding:14px 15px;border-top:3px solid #58a6ff;background:rgba(22,27,34,.66);border-radius:8px"><div style="color:#58a6ff;font-size:12px;font-weight:800;margin-bottom:6px">唯一主线</div><div style="color:#f0f6fc;font-size:15px;font-weight:800;line-height:1.4">AI算力 · 19%</div><div style="color:#c9d1d9;font-size:12px;line-height:1.55;margin-top:6px">条件候选：暂无合格主线候选</div><div style="color:#8b949e;font-size:11px;line-height:1.55;margin-top:6px">至少出现同题材联动和梯队晋级；单一高开或孤立涨停不算确认。</div></article><article class="today-watch" style="min-width:0;padding:14px 15px;border-top:3px solid #f85149;background:rgba(22,27,34,.66);border-radius:8px"><div style="color:#f85149;font-size:12px;font-weight:800;margin-bottom:6px">风险开关</div><div style="color:#f0f6fc;font-size:15px;font-weight:800;line-height:1.4">百大集团、华脉科技、金正大</div><div style="color:#c9d1d9;font-size:12px;line-height:1.55;margin-top:6px">高标只作情绪锚，不作为追高理由。</div><div style="color:#8b949e;font-size:11px;line-height:1.55;margin-top:6px">放量断板、批量负反馈或跌停扩张时，立即维持或恢复空仓。</div></article></div>
+    </section>
+
+  <div class="market-facts" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px;margin:8px 0 18px"><div style="min-width:0;padding:9px 12px;border-left:2px solid rgba(139,148,158,.45)"><div style="color:#8b949e;font-size:10px;line-height:1.3">涨跌停</div><div style="color:#e6edf3;font-size:13px;font-weight:750;line-height:1.45;overflow-wrap:anywhere">涨停 35 / 跌停 11</div></div><div style="min-width:0;padding:9px 12px;border-left:2px solid rgba(139,148,158,.45)"><div style="color:#8b949e;font-size:10px;line-height:1.3">二进三</div><div style="color:#e6edf3;font-size:13px;font-weight:750;line-height:1.45;overflow-wrap:anywhere">2/10（20%）</div></div><div style="min-width:0;padding:9px 12px;border-left:2px solid rgba(139,148,158,.45)"><div style="color:#8b949e;font-size:10px;line-height:1.3">空间结构</div><div style="color:#e6edf3;font-size:13px;font-weight:750;line-height:1.45;overflow-wrap:anywhere">最高 4板</div></div><div style="min-width:0;padding:9px 12px;border-left:2px solid rgba(139,148,158,.45)"><div style="color:#8b949e;font-size:10px;line-height:1.3">领先主线</div><div style="color:#e6edf3;font-size:13px;font-weight:750;line-height:1.45;overflow-wrap:anywhere">AI算力 · 19%</div></div></div>
+  <details class="limit-event-coverage" style="margin:12px 0;padding:14px 16px;background:#161b22;border:1px solid #30363d;border-radius:7px;color:#c9d1d9;font-size:12px;line-height:1.65;min-width:0"><summary style="cursor:pointer"><b>涨停事件数据覆盖</b> · 收盘涨停样本 35 行 · 不是全市场炸板率</summary><div>交易日 2026-09-10 · 来源 akshare_em · 抓取时间 2026-09-10T13:05:16.798756+00:00</div><p style="color:#8b949e;font-size:11px">0/False 表示明确观测；未提供保持未知。抓取时间不等于事件发生时间。字段覆盖分母仅为上述样本，不含所有盘中封板尝试。</p><div style="overflow:auto"><table style="width:100%;font-size:12px;text-align:left"><thead><tr><th>字段</th><th>字段覆盖</th><th>缺失行数</th></tr></thead><tbody><tr><td>首次封板时间</td><td>已提供 35/35 行</td><td>0</td></tr><tr><td>最后封板时间</td><td>已提供 35/35 行</td><td>0</td></tr><tr><td>炸板次数</td><td>已提供 35/35 行</td><td>0</td></tr><tr><td>封板尝试</td><td>未提供</td><td>35</td></tr><tr><td>曾炸板</td><td>未提供</td><td>35</td></tr><tr><td>回封</td><td>未提供</td><td>35</td></tr><tr><td>板型</td><td>未提供</td><td>35</td></tr><tr><td>封单资金</td><td>已提供 35/35 行</td><td>0</td></tr><tr><td>换手率</td><td>已提供 35/35 行</td><td>0</td></tr><tr><td>成交金额</td><td>已提供 35/35 行</td><td>0</td></tr><tr><td>流通市值</td><td>已提供 35/35 行</td><td>0</td></tr></tbody></table></div></details>
+
+  <section class="action-plan" style="margin:16px 0"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px"><div style="color:#ffcc00;font-size:15px;font-weight:800">明日执行计划</div><div style="color:#8b949e;font-size:12px">当前未授权，暂不执行 · 模型参考区间 1 成</div></div><div style="font-size:11px;color:#8b949e;margin:5px 0 9px">最多1只首选、2只备选；其余保留核查。条件未确认不执行，失效即撤销。</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px"><section class="action-group" style="min-width:0;border-top:3px solid #58a6ff;padding:10px 14px;background:#161b22"><b style="color:#58a6ff;font-size:13px">风险组</b> <span style="font-size:11px;color:#8b949e">不新增仓位</span><article class="candidate-card" style="min-width:0;padding:12px 0;border-top:1px solid #30363d"><div style="display:flex;justify-content:space-between;gap:10px"><b style="color:#f0f6fc;font-size:14px">百大集团</b><span style="color:#58a6ff;font-size:11px">风险锚</span></div><div style="color:#8b949e;font-size:11px">sh600865 · 5板 · 高位风险</div><div style="font-weight:700;font-size:12px;margin:5px 0">仅作风险锚；走弱时取消新增计划</div><div style="font-size:12px;line-height:1.65;overflow-wrap:anywhere"><div><b>触发：</b>仅作情绪锚，不把孤峰回封当作追高依据</div><div><b>撤销：</b>放量断板或跌停反馈扩大</div><div><b>价格：</b>仅为报告日未复权收盘参考，不是入场价、止损价，也不代表可成交。</div><div><b>持仓：</b>未提供持仓，仅输出机会与风险规则，不生成实际加仓/减仓指令。</div><div style="color:#8b949e">A股T+1：新买标的当日不可卖出；失效条件不保证即时成交。</div></div></article><article class="candidate-card" style="min-width:0;padding:12px 0;border-top:1px solid #30363d"><div style="display:flex;justify-content:space-between;gap:10px"><b style="color:#f0f6fc;font-size:14px">华脉科技</b><span style="color:#58a6ff;font-size:11px">风险锚</span></div><div style="color:#8b949e;font-size:11px">sh603042 · 3板 · 高位风险</div><div style="font-weight:700;font-size:12px;margin:5px 0">仅作风险锚；走弱时取消新增计划</div><div style="font-size:12px;line-height:1.65;overflow-wrap:anywhere"><div><b>触发：</b>仅作情绪锚，不把孤峰回封当作追高依据</div><div><b>撤销：</b>放量断板或跌停反馈扩大</div><div><b>价格：</b>仅为报告日未复权收盘参考，不是入场价、止损价，也不代表可成交。</div><div><b>持仓：</b>未提供持仓，仅输出机会与风险规则，不生成实际加仓/减仓指令。</div><div style="color:#8b949e">A股T+1：新买标的当日不可卖出；失效条件不保证即时成交。</div></div></article></section></div><details class="candidate-audit" style="margin-top:10px;font-size:12px"><summary style="cursor:pointer">其余观察与未采用对象（59只）</summary><div style="overflow:auto;max-height:280px"><table style="width:100%;text-align:left"><thead><tr><th>标的</th><th>代码</th><th>题材</th><th>未采用原因</th></tr></thead><tbody><tr><td>鼎信通讯</td><td>sh603421</td><td>AI算力</td><td>未进入首选/备选；仅观察</td></tr><tr><td>长城电工</td><td>sh600192</td><td>新能源电网</td><td>非当前主线</td></tr><tr><td>新农开发</td><td>sh600359</td><td>农业种植</td><td>非当前主线</td></tr><tr><td>渝三峡Ａ</td><td>sz000565</td><td>周期资源</td><td>非当前主线</td></tr><tr><td>闽东电力</td><td>sz000993</td><td>新能源电网</td><td>非当前主线</td></tr><tr><td>国创高新</td><td>sz002377</td><td>沥青</td><td>非当前主线</td></tr><tr><td>桂林旅游</td><td>sz000978</td><td>AI应用</td><td>非当前主线</td></tr><tr><td>云煤能源</td><td>sh600792</td><td>周期资源</td><td>非当前主线</td></tr><tr><td>瑞尔特</td><td>sz002790</td><td>卫浴产品</td><td>非当前主线</td></tr><tr><td>金正大</td><td>sz002470</td><td>高位风险</td><td>仅作风险锚</td></tr><tr><td>华康股份</td><td>sh605077</td><td>高位风险</td><td>仅作风险锚</td></tr><tr><td>泸天化</td><td>sz000912</td><td>高位风险</td><td>仅作风险锚</td></tr><tr><td>众泰汽车</td><td>sz000980</td><td>高位风险</td><td>仅作风险锚</td></tr><tr><td>精华制药</td><td>sz002349</td><td>高位风险</td><td>仅作风险锚</td></tr><tr><td>郑州煤电</td><td>sh600121</td><td>高位风险</td><td>仅作风险锚</td></tr><tr><td>鑫科材料</td><td>sh600255</td><td>高位风险</td><td>仅作风险锚</td></tr><tr><td>新赛股份</td><td>sh600540</td><td>高位风险</td><td>仅作风险锚</td></tr><tr><td>湖南天雁</td><td>sh600698</td><td>高位风险</td><td>仅作风险锚</td></tr><tr><td>友好集团</td><td>sh600778</td><td>高位风险</td><td>仅作风险锚</td></tr><tr><td>远东股份</td><td>sh600869</td><td>高位风险</td><td>仅作风险锚</td></tr><tr><td>会稽山</td><td>sh601579</td><td>高位风险</td><td>仅作风险锚</td></tr><tr><td>招商轮船</td><td>sh601872</td><td>高位风险</td><td>仅作风险锚</td></tr><tr><td>应流股份</td><td>sh603308</td><td>高位风险</td><td>仅作风险锚</td></tr><tr><td>依顿电子</td><td>sh603328</td><td>高位风险</td><td>仅作风险锚</td></tr><tr><td>彤程新材</td><td>sh603650</td><td>高位风险</td><td>仅作风险锚</td></tr><tr><td>莱绅通灵</td><td>sh603900</td><td>高位风险</td><td>仅作风险锚</td></tr><tr><td>新中港</td><td>sh605162</td><td>高位风险</td><td>仅作风险锚</td></tr><tr><td>安德利</td><td>sh605198</td><td>高位风险</td><td>仅作风险锚</td></tr><tr><td>深粮控股</td><td>sz000019</td><td>高位风险</td><td>仅作风险锚</td></tr><tr><td>中水渔业</td><td>sz000798</td><td>高位风险</td><td>仅作风险锚</td></tr><tr><td>中基健康</td><td>sz000972</td><td>高位风险</td><td>仅作风险锚</td></tr><tr><td>国机精工</td><td>sz002046</td><td>高位风险</td><td>仅作风险锚</td></tr><tr><td>汉缆股份</td><td>sz002498</td><td>高位风险</td><td>仅作风险锚</td></tr><tr><td>万和电气</td><td>sz002543</td><td>热泵</td><td>非当前主线</td></tr><tr><td>中新赛克</td><td>sz002912</td><td>AI应用</td><td>非当前主线</td></tr><tr><td>乐山电力</td><td>sh600644</td><td>新能源电网</td><td>非当前主线</td></tr><tr><td>九鼎新材</td><td>sz002201</td><td>玻纤</td><td>非当前主线</td></tr><tr><td>京基智农</td><td>sz000048</td><td>AI算力</td><td>不符合当前策略角色</td></tr><tr><td>克明食品</td><td>sz002661</td><td>挂面</td><td>非当前主线</td></tr><tr><td>再升科技</td><td>sh603601</td><td>军工航天</td><td>非当前主线</td></tr><tr><td>凯盛新能</td><td>sh600876</td><td>AI算力</td><td>不符合当前策略角色</td></tr><tr><td>华金资本</td><td>sz000532</td><td>多元金融</td><td>非当前主线</td></tr><tr><td>华银电力</td><td>sh600744</td><td>新能源电网</td><td>非当前主线</td></tr><tr><td>南宁百货</td><td>sh600712</td><td>零售</td><td>非当前主线</td></tr><tr><td>大连重工</td><td>sz002204</td><td>军工航天</td><td>非当前主线</td></tr><tr><td>天顺风能</td><td>sz002531</td><td>造船</td><td>非当前主线</td></tr><tr><td>太极实业</td><td>sh600667</td><td>AI算力</td><td>不符合当前策略角色</td></tr><tr><td>新力金融</td><td>sh600318</td><td>多元金融</td><td>非当前主线</td></tr><tr><td>水发燃气</td><td>sh603318</td><td>周期资源</td><td>非当前主线</td></tr><tr><td>津药药业</td><td>sh600488</td><td>卤米松</td><td>非当前主线</td></tr><tr><td>游族网络</td><td>sz002174</td><td>AI应用</td><td>非当前主线</td></tr><tr><td>湖南发展</td><td>sz000722</td><td>新能源电网</td><td>非当前主线</td></tr><tr><td>环旭电子</td><td>sh601231</td><td>AI算力</td><td>不符合当前策略角色</td></tr><tr><td>百迈科</td><td>bj920268</td><td>北交所次新</td><td>非当前主线</td></tr><tr><td>美能能源</td><td>sz001299</td><td>周期资源</td><td>非当前主线</td></tr><tr><td>芯能科技</td><td>sh603105</td><td>新能源电网</td><td>非当前主线</td></tr><tr><td>诚邦股份</td><td>sh603316</td><td>AI算力</td><td>不符合当前策略角色</td></tr><tr><td>超声电子</td><td>sz000823</td><td>AI算力</td><td>不符合当前策略角色</td></tr><tr><td>金安国纪</td><td>sz002636</td><td>AI算力</td><td>不符合当前策略角色</td></tr></tbody></table></div></details></section>
+
+  
+    <details class="quality-card">
+      <summary class="quality-summary">
+        <span class="quality-title">数据状态</span>
+        <span class="quality-summary-status">部分内容待补齐</span>
+      </summary>
+      <div class="quality-note">沪深北全A · 覆盖 5538 / 5538 只</div>
+      <div class="quality-hint">炸板数据待补齐，以涨停事实为准。</div>
+    </details>
+
+  
+    <div class="review-closure" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;margin:16px 0 20px"><div style="background:rgba(22,27,34,.72);border:1px solid rgba(48,54,61,.85);border-radius:12px;padding:14px 16px;min-width:0"><div style="font-size:14px;font-weight:800;color:#f0f6fc;margin-bottom:10px">今日相对昨日</div><div style="color:#c9d1d9;font-size:12.5px;line-height:1.65"><b>梯队完整度</b>：0.67 → 1.00（+0.3333）</div><div style="color:#c9d1d9;font-size:12.5px;line-height:1.65"><b>主线集中度</b>：0.50 → 0.28（-0.2188）</div><div style="color:#c9d1d9;font-size:12.5px;line-height:1.65"><b>上涨占比</b>：0.32 → 0.17（-0.1544）</div><div style="color:#c9d1d9;font-size:12.5px;line-height:1.65"><b>空间高度</b>：5 → 4（-1）</div><div style="color:#c9d1d9;font-size:12.5px;line-height:1.65"><b>主线排名</b>：周期资源 → AI算力</div><div style="color:#c9d1d9;font-size:12.5px;line-height:1.65"><b>涨停池</b>：新增 26 · 晋级 9 · 断板 0 · 消失 39</div></div><div style="background:rgba(22,27,34,.72);border:1px solid rgba(48,54,61,.85);border-radius:12px;padding:14px 16px;min-width:0"><div style="font-size:14px;font-weight:800;color:#f0f6fc;margin-bottom:10px">昨日连板反馈</div><div style="color:#c9d1d9;font-size:12.5px;line-height:1.65"><b>百大集团</b> · 断板收跌 · 5板</div><div style="color:#c9d1d9;font-size:12.5px;line-height:1.65"><b>金正大</b> · 跌停反馈 · 3板</div><div style="color:#c9d1d9;font-size:12.5px;line-height:1.65"><b>华脉科技</b> · 跌停反馈 · 3板</div><div style="color:#c9d1d9;font-size:12.5px;line-height:1.65"><b>中百集团</b> · 断板收红 · 3板</div><div style="color:#c9d1d9;font-size:12.5px;line-height:1.65"><b>桂林旅游</b> · 晋级 · 3板 → 4板</div><div style="color:#c9d1d9;font-size:12.5px;line-height:1.65"><b>红棉股份</b> · 断板收红 · 2板</div><div style="color:#c9d1d9;font-size:12.5px;line-height:1.65"><b>泸天化</b> · 跌停反馈 · 2板</div><div style="color:#c9d1d9;font-size:12.5px;line-height:1.65"><b>精艺股份</b> · 断板收红 · 2板</div></div><div style="background:rgba(22,27,34,.72);border:1px solid rgba(48,54,61,.85);border-radius:12px;padding:14px 16px;min-width:0"><div style="font-size:14px;font-weight:800;color:#f0f6fc;margin-bottom:10px">历史预测复盘</div><div style="color:#c9d1d9;font-size:12.5px;line-height:1.65">历史记录 26 条 (日志 93 行, 同日重跑折叠 67 次) · 已到期 20 条 · 可评分 20 条 · T+3 60.00% </div></div></div>
+
+  <section class="daily-decision-journal" style="margin:12px 0;padding:14px 16px;background:#161b22;border:1px solid #30363d;border-radius:7px;color:#c9d1d9;font-size:12px;line-height:1.65;min-width:0"><b>每日决策留痕 · 包括不交易日</b><div>已记录 5 天 / 12 条修订；不把资格不足当作市场空仓。</div><details><summary style="cursor:pointer">查看最近20个报告日的结论与原因</summary><div style="overflow:auto;max-height:280px"><table style="width:100%;font-size:12px;text-align:left"><thead><tr><th>报告日</th><th>操作分类</th><th>版本</th><th>主要原因</th></tr></thead><tbody><tr><td>2026-09-10</td><td>策略资格尚未验证</td><td>2</td><td>基础行情可用，但策略独立验证尚未通过；这是判断资格不足，不等于市场没有机会。</td></tr><tr><td>2026-09-09</td><td>策略资格尚未验证</td><td>2</td><td>基础行情可用，但策略独立验证尚未通过；这是判断资格不足，不等于市场没有机会。</td></tr><tr><td>2026-09-08</td><td>策略资格尚未验证</td><td>2</td><td>基础行情可用，但策略独立验证尚未通过；这是判断资格不足，不等于市场没有机会。</td></tr><tr><td>2026-09-07</td><td>策略资格尚未验证</td><td>5</td><td>基础行情可用，但策略独立验证尚未通过；这是判断资格不足，不等于市场没有机会。</td></tr><tr><td>2026-09-04</td><td>策略资格尚未验证</td><td>1</td><td>基础行情可用，但AI文案、炸板、回封与板型、统计验证尚未通过；这是判断资格不足，不等于市场没有机会。</td></tr></tbody></table></div></details></section>
+
+  
+
+  <div class="section-title">明日验证路径<span class="st-sub">按条件确认强弱变化</span></div><div class="scenario-tree"><div class="scen-card defense"><div class="head"><span class="name">广度弱、接力弱：高位退潮优先</span><span class="prob">条件触发</span></div><ul><li>竞价：高位核心竞价低于预期时不追</li><li>竞价：观察是否出现批量低开与撤单</li><li>9:35：9:35 前跌停和炸板不再扩张</li><li>9:35：高位反馈不继续向中位传导</li></ul><div class="pos">等待验证信号</div></div><div class="scen-card defense"><div class="head"><span class="name">风险观察：等待宽度与接力同时止跌</span><span class="prob">条件触发</span></div><ul><li>竞价：竞价只记录状态，不把高开当作反转</li><li>竞价：观察核心是否出现承接</li><li>9:35：9:35 前上涨家数不再恶化</li><li>9:35：高位负反馈收敛</li></ul><div class="pos">等待验证信号</div></div></div>
+
+  <details class="evidence">
+    <summary>数据佐证 · 盘面因子明细 与 历史同型样本</summary>
+    <div class="evidence-body">
+      
+    <div class="grid">
+      <div class="card">
+        <h3>空间板</h3>
+        <div class="kpi red">4板</div>
+        <div class="hint">前 5 日压力位 6板 · 昨 5板 (-1)</div>
+      </div>
+      <div class="card">
+        <h3>涨停家数</h3>
+        <div class="kpi red">35</div>
+        <div class="hint">昨日 48 · 环比 ×0.73</div>
+      </div>
+      <div class="card">
+        <h3>跌停家数</h3>
+        <div class="kpi green">11</div>
+        <div class="hint">亏钱效应阈值: > 15 转防守</div>
+      </div>
+      <div class="card">
+        <h3>上涨占比</h3>
+        <div class="kpi yellow">0.170</div>
+        <div class="hint">上涨 917 / 下跌 4467 · A+ 门槛 &gt; 0.65</div>
+      </div>
+      <div class="card">
+        <h3>涨跌比</h3>
+        <div class="kpi yellow">0.205</div>
+        <div class="hint">上涨家数 ÷ 下跌家数</div>
+      </div>
+      <div class="card">
+        <h3>梯队分</h3>
+        <div class="kpi blue">4</div>
+        <div class="hint">h3×1 + h4×2 + h5×3 + h6+×4</div>
+      </div>
+      <div class="card">
+        <h3>突破昨日最高高度占比</h3>
+        <div class="kpi blue">0/35</div>
+        <div class="hint">分子：突破昨日最高板的个股数 · 分母：今日有效梯队个股数</div>
+      </div>
+      <div class="card">
+        <h3>高度断层</h3>
+        <div class="kpi" style="color:#3fb950;">无明显断层</div>
+        <div class="hint">风险等级：低 · 最高 4板</div>
+      </div>
+      <div class="card">
+        <h3>同型历史命中率 (T+3)</h3>
+        <div class="kpi" style="color:#8b949e;">样本不足</div>
+        <div class="hint">样本不足 · 暂无置信区间 · 盘面综合研判</div>
+      </div>
+    </div>
+      <div class="section-title">场景判定 · 三因子交叉</div>
+      <table class="factor">
+        <thead><tr><th>因子</th><th>当前读数</th><th>是否达标</th><th>辅助说明</th></tr></thead>
+        <tbody><tr><td>① 空间板突破 5 日压力</td><td><b>4板 vs 前压力 6板</b></td><td><span class="check-fail">❌ 未达</span></td><td>昨断 -1 板</td></tr><tr><td>② 上涨占比 &gt; 0.65 (A+ 门槛)</td><td><b>0.170</b></td><td><span class="check-fail">❌ 未达</span></td><td>涨停 35, 跌停 11 · 涨跌比 0.205</td></tr><tr><td>③ 梯队分 ≥ 12 (A+ 门槛)</td><td><b>4分</b></td><td><span class="check-fail">❌ 未达</span></td><td>3板 2 / 4板 1 / 5板 0 / 6+板 0</td></tr></tbody>
+      </table>
+      <div class="section-title">历史同型样本 (T+1/T+2/T+3 走势对照)</div>
+      <table class="history">
+        <thead><tr>
+          <th>日期</th><th>空间板</th><th>涨停</th><th>梯队分</th>
+          <th>T+1</th><th>T+2</th><th>T+3</th><th>结局</th>
+        </tr></thead>
+        <tbody><tr><td colspan="8" style="color:#6e7681;padding:20px;">暂无历史同型样本 (需累计更多回测)</td></tr></tbody>
+      </table>
+    </div>
+  </details>
+
+  <footer>
+    连板情绪分析 · 6 场景数据驱动模型 · 每日自动跑批生成
+    <br>数据基于 173 天历史回测, 为经验统计, 仅供研究参考, 不构成投资建议
+  </footer>
+</div>
+</body>
+</html>
