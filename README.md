@@ -54,6 +54,7 @@
 
 | **时间** | **特性 / 更新内容** |
 |:---|:---|
+| 2026.10 | 🆕 [**盯盘数据接口体系与移动端 1:1 复刻**](docs/howto/dingpan-api-inventory.md)：财联社 / 开盘啦全接口实测封装 + 东方财富·同花顺第三备用源，三源逐块降级，盯盘页 1:1 还原 |
 | 2026.10 | 🆕 [**独立抱团周期研究模块**](docs/howto/crowding-cycle.md)：两个月分周期复盘、固定核心篮子路径核对、滚动强势代理与试错升级检查 |
 | 2026.09 | 🆕 [**多板块观察子页体系**](docs/howto/multi-sector-brief.md)：每板块3只重点股、近期多板表下钻与主报告双向导航 |
 | 2026.09 | [**今日复盘与明日预案闭环**](docs/howto/recap-scenario-closure.md)：单一事实结论、逐策略资格独立验证与真实盘中事件采集 |
@@ -189,6 +190,11 @@ quant_factor_tutorial/
 │   ├── 主线强度追踪.py            # 🎯 主程序运行入口
 │   ├── app.py                     # 四阶段应用编排
 │   ├── data_sources/              # 日历、universe、行情价格及质量 Provider
+│   │   ├── cls_client.py          # 财联社 CLS 盯盘接口 (市场概况/涨停表现/资金热力图/风口/主线/直播)
+│   │   ├── kaipanla_client.py     # 开盘啦 涨停天梯/涨跌停家数/炸板率/盘面异动
+│   │   └── em_dingpan_client.py   # 第三源(备用)：东方财富 push2ex + 同花顺 封板率同比
+│   ├── dingpan_service.py         # 盯盘三源降级聚合 (产出 tab_dingpan)
+│   ├── mobile_service.py          # 移动端数据融合服务 (产出 bundle.json)
 │   ├── pipeline/                  # 数据管道与报告前质量闸门
 │   ├── lianban_analysis.py        # 连板高度与梯队分析模块
 │   ├── fupan_report.py            # 复盘报告生成 API
@@ -257,6 +263,7 @@ quant_factor_tutorial/
 ## 📖 相关文档
 
 - 🧭 [文档总览索引](docs/index.md)
+- 📡 [盯盘数据接口清单（财联社 / 开盘啦 / 东方财富备用源）](docs/howto/dingpan-api-inventory.md)
 - 🔬 [抱团周期与新周期试错模块说明](docs/howto/crowding-cycle.md)
 - 📊 [多板块观察子页使用说明](docs/howto/multi-sector-brief.md)
 - 📝 [今日复盘与明日推演：候选、验证和结果闭环](docs/howto/recap-scenario-closure.md)

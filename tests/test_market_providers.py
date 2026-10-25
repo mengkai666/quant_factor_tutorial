@@ -168,7 +168,7 @@ def test_limit_pool_default_chain_contains_direct_and_independent_fallbacks():
     provider = LimitPoolProvider()
 
     assert [name for name, _ in provider.zt_sources] == [
-        "akshare_em", "eastmoney_push2ex", "ths_limit_up"
+        "akshare_em", "eastmoney_push2ex", "ths_limit_up", "kaipanla_tianti", "cls_up_down"
     ]
     assert [name for name, _ in provider.dt_sources] == [
         "akshare_em", "eastmoney_push2ex"

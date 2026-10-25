@@ -129,3 +129,12 @@ data/limit_events/
 
 # Explicit strategy-validation evidence may contain private research/trade samples
 data/strategy_validation.json
+
+# Temporary UI dump & external test scrapers
+ui_dump.xml
+ui_now.xml
+wechat_autoreply/
+data/crowding_external_snapshots/
+data/crowding_external_evidence.json
+*.bak
+

@@ -605,6 +605,10 @@ def publish(output_html, site_dir, report_date=None, summary=None, dashboard_htm
         crowding_meta = re.search(r'<meta name="report-date" content="(\d{4}-\d{2}-\d{2})">', crowding_html)
         if not crowding_meta or crowding_meta.group(1) != date_str:
             raise ReportIntegrityError('抱团研究日期与主报告不一致；请按独立研究日期导出，不得伪装历史报告')
+    if baotuan_html:
+        baotuan_meta = re.search(r'<meta name="report-date" content="(\d{4}-\d{2}-\d{2})">', baotuan_html)
+        if not baotuan_meta or baotuan_meta.group(1) != date_str:
+            raise ReportIntegrityError('抱团周期日期与主报告不一致；请按独立研究日期导出')
     # Every destination is known before writes; none may alias the input main page.
     destinations = [Path(site_dir) / 'reports' / f'{date_str}.html',
                     Path(site_dir) / 'latest.html', Path(site_dir) / 'index.html']
@@ -746,10 +750,9 @@ def publish(output_html, site_dir, report_date=None, summary=None, dashboard_htm
     if baotuan_html:
         baotuan_dir = os.path.join(site_dir, 'baotuan')
         os.makedirs(baotuan_dir, exist_ok=True)
-        for name in (f'{date_str}.html', 'latest.html'):
-            with open(os.path.join(baotuan_dir, name), 'w', encoding='utf-8') as f:
-                f.write(baotuan_html)
-        baotuan_date = date_str
+        from crowding_view import write_crowding_latest
+        Path(baotuan_dir, f'{date_str}.html').write_text(baotuan_html, encoding='utf-8')
+        baotuan_date = write_crowding_latest(Path(baotuan_dir, 'latest.html'), baotuan_html, date_str)
         print(f"  [publish] 已归档抱团周期分析 {date_str} → {os.path.join(baotuan_dir, f'{date_str}.html')}")
 
     reports = _scan_reports(reports_dir, max_date=date_str)

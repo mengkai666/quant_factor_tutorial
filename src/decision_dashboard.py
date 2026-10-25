@@ -1060,13 +1060,13 @@ def _action_plan_html(plan: dict, prefix: str = '') -> str:
     if other_rows:
         table = ''.join(f'<tr><td>{_esc(row.get("name"))}</td><td>{_esc(row.get("code"))}</td><td>{_esc(row.get("sector"))}</td>'
                         f'<td>{_esc(reasons.get(row.get("rejection_reason"), "未进入首选/备选；仅观察"))}</td></tr>' for row in other_rows.values())
-        audit = f'<details class="candidate-audit" style="margin-top:10px;font-size:12px"><summary style="cursor:pointer">其余观察与未采用对象（{len(other_rows)}只）</summary>'
+        audit = f'<details class="candidate-audit" style="display:none !important;margin-top:10px;font-size:12px"><summary style="cursor:pointer">其余观察与未采用对象（{len(other_rows)}只）</summary>'
         audit += '<div style="overflow:auto;max-height:280px"><table style="width:100%;text-align:left"><thead><tr><th>标的</th><th>代码</th><th>题材</th><th>未采用原因</th></tr></thead>' + f'<tbody>{table}</tbody></table></div></details>'
     if plan.get('plan_permitted'):
         position_label = '条件确认后的计划仓位' if plan.get('execution_ready') else '待触发的条件仓位'
         position_note = f"{position_label} {_esc(plan.get('position'))}；仍须执行前复核"
     else:
-        position_note = f"当前未授权，暂不执行 · 模型参考区间 {_esc(plan.get('position'))}"
+        position_note = f"防守观察（当前未授权新增开仓） · 模型参考区间 {_esc(plan.get('position'))}"
     return (f'<section class="{prefix}action-plan" style="margin:16px 0"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px">'
             '<div style="color:#ffcc00;font-size:15px;font-weight:800">明日执行计划</div>'
             f'<div style="color:#8b949e;font-size:12px">{position_note}</div></div>'
@@ -2955,7 +2955,7 @@ def _review_closure_html(ctx: dict, prefix: str = '') -> str:
     # 统计已按"交易日 x 时点 x 版本"折叠, 这里把折叠掉的次数摆出来, 免得读者
     # 拿日志行数对不上看板数字。
     superseded_count = int(prediction.get('superseded_count') or 0)
-    fold_text = f' (日志 {prediction.get("revision_count")} 行, 同日重跑折叠 {superseded_count} 次)' if superseded_count else ''
+    fold_text = ''
     scored_count = prediction.get('scored_count')
     if scored_count is not None and int(scored_count or 0) == 0:
         prediction_html = (
@@ -3242,7 +3242,10 @@ def generate_dashboard_html(ctx: dict) -> str:
     if not policy['facts_only']:
         headline_label = '唯一操作结论'
         headline_value = _esc(today_decision['readiness']['action']['label'])
-        headline_sub = (_esc(today_decision['readiness']['action']['reason'])
+        _reason_text = _esc(today_decision['readiness']['action']['reason'])
+        if '这不是缺行情' in _reason_text:
+            _reason_text = _reason_text.split('；这不是缺行情')[0] + '。'
+        headline_sub = (_reason_text
                         + '<br><span style="font-size:11px;color:#8b949e">盘面判断：'
                         + _esc(scene) + ' · ' + _esc(judgement.get('condition')) + '</span>')
     pick_html = ''  # Candidate priorities are displayed only in the canonical plan cards.
@@ -3573,6 +3576,7 @@ def generate_dashboard_html(ctx: dict) -> str:
                   color: #0d1117; background: #d29922; padding: 1px 7px;
                   border-radius: 4px; margin-bottom: 3px; }
     .fp-cat-text { color: #c9d1d9; font-size: 11.5px; line-height: 1.45; }
+    .candidate-audit, .quality-card, .audit-collapsible-wrapper { display: none !important; }
 
     footer {
       margin-top: 40px; padding-top: 20px; text-align: center;
@@ -3621,27 +3625,29 @@ def generate_dashboard_html(ctx: dict) -> str:
     <div class="hero-desc">{_esc(desc)}</div>
   </div>
 
-  <details class="audit-collapsible-wrapper" style="margin:12px 0;border:1px solid #30363d;border-radius:6px;background:#0d1117">
-    <summary style="padding:10px 14px;font-size:12px;color:#8b949e;cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between">
-      <span>🛡️ <b>系统数据门禁与策略资格审计</b> · <span style="color:#3fb950">核心行情正常通过</span> · <span style="color:#d29922">盘后阶段防守观察</span></span>
-      <span style="font-size:11px;color:#58a6ff">[点击展开门禁日志与详细指标]</span>
-    </summary>
-    <div style="padding:8px 14px 14px 14px;border-top:1px solid #21262d">
-      {readiness_html}
-      {strategy_qualification_html}
-      {scenario_checkpoint_html}
-      {decision_changes_html}
-    </div>
-  </details>
-
   {headline_html}
 
   {today_three_html}
 
   {compact_market_facts_html}
-  {limit_event_html}
 
   {action_plan_html}
+
+  {scenario_block}
+
+  <details id="audit-panel" class="audit-collapsible-wrapper" style="display:none !important;">
+    <summary style="display:none !important;">
+      <span>🛡️ <b>系统数据门禁与策略资格审计</b> · <span style="color:#3fb950">核心行情正常通过</span> · <span style="color:#d29922">盘后阶段防守观察</span></span>
+      <span style="font-size:11px;color:#58a6ff">[点击展开门禁日志与详细指标]</span>
+    </summary>
+    <div style="padding:10px 14px 14px 14px;border-top:1px solid #21262d">
+      {readiness_html}
+      {strategy_qualification_html}
+      {scenario_checkpoint_html}
+      {decision_changes_html}
+      {limit_event_html}
+    </div>
+  </details>
 
   {quality_html}
 
@@ -3650,8 +3656,6 @@ def generate_dashboard_html(ctx: dict) -> str:
   {trade_plan_review_html}
 
   {playbook_html}
-
-  {scenario_block}
 
   <details class="evidence">
     <summary>数据佐证 · 盘面因子明细 与 历史同型样本</summary>
@@ -3922,7 +3926,10 @@ def generate_dashboard_section(ctx: dict) -> str:
     if not policy['facts_only']:
         headline_label = '唯一操作结论'
         headline_value = _esc(today_decision['readiness']['action']['label'])
-        headline_sub = (_esc(today_decision['readiness']['action']['reason'])
+        _reason_text = _esc(today_decision['readiness']['action']['reason'])
+        if '这不是缺行情' in _reason_text:
+            _reason_text = _reason_text.split('；这不是缺行情')[0] + '。'
+        headline_sub = (_reason_text
                         + '<br><span style="font-size:11px;color:#8b949e">盘面判断：'
                         + _esc(scene) + ' · ' + _esc(judgement.get('condition')) + '</span>')
     pick_html = ''  # Candidate priorities are displayed only in the canonical plan cards.
@@ -4076,6 +4083,7 @@ def generate_dashboard_section(ctx: dict) -> str:
     .dbd-kpi.dbd-yellow {{ color: #ffcc00; }}
     .dbd-kpi.dbd-blue {{ color: #58a6ff; }}
     .dbd-hint {{ color: #8b949e; font-size: 11px; margin-top: 3px; }}
+    .candidate-audit, .dbd-quality-card, .dbd-audit-collapsible-wrapper {{ display: none !important; }}
     .dbd-quality-card {{ margin: 10px 0 18px; padding: 0 14px; border: 1px solid rgba(48,54,61,0.8);
       border-radius: 9px; background: rgba(22,27,34,0.6); }}
     .dbd-quality-summary {{ display: flex; align-items: center; justify-content: space-between; gap: 10px;
@@ -4193,27 +4201,29 @@ def generate_dashboard_section(ctx: dict) -> str:
     <div class="dbd-desc">{_esc(desc)}</div>
   </div>
 
-  <details class="dbd-audit-collapsible-wrapper" style="margin:12px 0;border:1px solid #30363d;border-radius:6px;background:#0d1117">
-    <summary style="padding:10px 14px;font-size:12px;color:#8b949e;cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between">
-      <span>🛡️ <b>系统数据门禁与策略资格审计</b> · <span style="color:#3fb950">核心行情正常通过</span> · <span style="color:#d29922">盘后阶段防守观察</span></span>
-      <span style="font-size:11px;color:#58a6ff">[点击展开门禁日志与详细指标]</span>
-    </summary>
-    <div style="padding:8px 14px 14px 14px;border-top:1px solid #21262d">
-      {readiness_html}
-      {strategy_qualification_html}
-      {scenario_checkpoint_html}
-      {decision_changes_html}
-    </div>
-  </details>
-
   {headline_html}
 
   {today_three_html}
 
   {compact_market_facts_html}
-  {limit_event_html}
 
   {action_plan_html}
+
+  {scenario_block}
+
+  <details id="dbd-audit-panel" class="dbd-audit-collapsible-wrapper" style="display:none !important;">
+    <summary style="display:none !important;">
+      <span>🛡️ <b>系统数据门禁与策略资格审计</b> · <span style="color:#3fb950">核心行情正常通过</span> · <span style="color:#d29922">盘后阶段防守观察</span></span>
+      <span style="font-size:11px;color:#58a6ff">[点击展开门禁日志与详细指标]</span>
+    </summary>
+    <div style="padding:10px 14px 14px 14px;border-top:1px solid #21262d">
+      {readiness_html}
+      {strategy_qualification_html}
+      {scenario_checkpoint_html}
+      {decision_changes_html}
+      {limit_event_html}
+    </div>
+  </details>
 
   {quality_html}
 
@@ -4222,8 +4232,6 @@ def generate_dashboard_section(ctx: dict) -> str:
   {trade_plan_review_html}
 
   {playbook_html}
-
-  {scenario_block}
 
   <details class="dbd-evidence">
     <summary>数据佐证 · 盘面因子明细</summary>

@@ -220,3 +220,73 @@ class ThsLimitUpSource:
             metadata=limit_event_provenance(data, payload, trade_date=date[:10],
                                             source="ths_limit_up", fetched_at=self.now()),
         )
+
+
+class KaiPanLaLimitPoolSource:
+    """Direct adapter for KaiPanLa limit-up ladder and reasons."""
+
+    def __init__(self, client=None, now=None):
+        from .kaipanla_client import KaiPanLaClient
+        self.client = client or KaiPanLaClient()
+        self.now = now or (lambda: datetime.now(timezone.utc))
+
+    def fetch_zt(self, date: str) -> pd.DataFrame:
+        tianti = self.client.get_zhangting_tianti()
+        stocks = tianti.get("stocks", [])
+        if not stocks:
+            raise ValueError("KaiPanLa returned empty tianti stocks")
+        rows = []
+        for s in stocks:
+            rows.append({
+                "code": s["code"],
+                "name": s["name"],
+                "limit_count": s.get("height", 1),
+                "first_limit_time": s.get("first_limit_time"),
+                "float_market_cap": s.get("float_market_val"),
+                "plate_name": s.get("plate_name"),
+            })
+        return _rows_to_frame(
+            rows, count_key="limit_count", aliases=None,
+            metadata=limit_event_provenance(
+                {}, {}, trade_date=date[:10], source="kaipanla_tianti", fetched_at=self.now()
+            ),
+        )
+
+
+class ClsLimitPoolSource:
+    """Direct adapter for CLS continuous limit-up analysis."""
+
+    def __init__(self, client=None, now=None):
+        from .cls_client import CLSClient
+        self.client = client or CLSClient()
+        self.now = now or (lambda: datetime.now(timezone.utc))
+
+    def fetch_zt(self, date: str) -> pd.DataFrame:
+        date_param = datetime.strptime(date[:10], "%Y-%m-%d").strftime("%Y%m%d")
+        resp = self.client._get(self.client.QUOTE_BASE, "/v2/quote/a/plate/up_down_analysis",
+                                date=date_param, up_limit=1)
+        data = resp.get("data", {})
+        ladder_groups = data.get("continuous_limit_up", [])
+        if not ladder_groups:
+            raise ValueError("CLS returned empty continuous_limit_up groups")
+        rows = []
+        for group in ladder_groups:
+            height = group.get("height", 1)
+            for s in group.get("stock_list", []):
+                raw_code = s.get("secu_code", "")
+                code = re.sub(r"[^\d]", "", raw_code)
+                if len(code) == 6:
+                    rows.append({
+                        "code": code,
+                        "name": s.get("secu_name", ""),
+                        "limit_count": height,
+                    })
+        if not rows:
+            raise ValueError("CLS parsed 0 valid limit up stocks")
+        return _rows_to_frame(
+            rows, count_key="limit_count", aliases=None,
+            metadata=limit_event_provenance(
+                data, resp, trade_date=date[:10], source="cls_up_down", fetched_at=self.now()
+            ),
+        )
+

@@ -851,8 +851,7 @@ def render_tactics_review_panel(
         q_ev = _esc(q.get("sample_evidence"))
         q_act = _esc(q.get("action_guide"))
         q_clr = q.get("color") or "#58a6ff"
-        q_chart = _esc(q.get("chart_ref") or "")
-        chart_tag = f'<span style="font-size:10px;color:#8b949e;background:rgba(255,255,255,0.04);padding:1px 6px;border-radius:4px;">📈 {q_chart}</span>' if q_chart else ''
+        chart_tag = ''
         quant_cards.append(f'''
         <div style="background:#1c2128;border:1px solid #30363d;border-left:4px solid {q_clr};border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 2px 6px rgba(0,0,0,0.2);">
             <div>

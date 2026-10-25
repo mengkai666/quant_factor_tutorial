@@ -292,6 +292,11 @@ jobs:
         # 原来的 cmp --silent 因此自 2026-09-23 起每次都失败。改为比对元数据与页面文字。
         python tools/verify_published_report.py "$OUTPUT_HTML" output/site "$REPORT_DATE"
 
+    - name: 生成移动端 App 与 API Bundle (开盘啦/财联社/真实K线)
+      if: steps.idempotency.outputs.skip != 'true'
+      run: |
+        python src/mobile_service.py
+
     - name: 部署报告站点到 GitHub Pages
       if: steps.idempotency.outputs.skip != 'true'
       # 把 output/site/ (当日报告 + 历史归档 + 首页) 推到 gh-pages 分支

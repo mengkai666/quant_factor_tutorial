@@ -23,6 +23,7 @@ from __future__ import annotations
 import os
 import sys
 import json
+import time
 from html import escape
 from datetime import datetime
 from typing import Any
@@ -31,8 +32,23 @@ import pandas as pd
 import numpy as np
 import requests
 
-from paths import OUTPUT_DIR, SITE_DIR, PRICE_CACHE, ZT_CACHE_FILE
+from paths import OUTPUT_DIR, SITE_DIR, PRICE_CACHE, ZT_CACHE_FILE, CHAN_KLINE_CACHE
 from web_assets import echarts_head_html
+
+try:
+    from data_sources.http_session import get_session
+except ImportError:
+    def get_session() -> requests.Session:
+        s = requests.Session()
+        s.trust_env = False
+        s.proxies = {'http': None, 'https': None}  # type: ignore[assignment]
+        return s
+
+_TENCENT_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    'Referer': 'https://gu.qq.com/',
+    'Accept': '*/*',
+}
 
 # 缠论内核: 本项目 chan_engine (逐函数对齐 waditu/czsc, 纯 Python)。
 # 原先这里 import 的是 github缠论项目分析/.venv 下的 czsc, 那个目录并不存在, HAVE_CZSC 恒为 False,
@@ -183,66 +199,201 @@ ZHAO_PORTFOLIO_CONFIG = [
 
 
 def fetch_realtime_quotes(codes: list[str]) -> dict[str, dict[str, Any]]:
-    """拉取腾讯行情接口最新实时行情快照"""
+    """拉取腾讯行情接口最新实时行情快照 (带代理穿透与连接复用)"""
+    if not codes:
+        return {}
     url = 'http://qt.gtimg.cn/q=' + ','.join(codes)
     quotes: dict[str, dict[str, Any]] = {}
-    try:
-        r = requests.get(url, timeout=5)
-        r.encoding = 'gbk'
-        lines = r.text.strip().split(';')
-        for line in lines:
-            line = line.strip()
-            if not line:
+    session = get_session()
+    for attempt in range(2):
+        try:
+            r = session.get(url, headers=_TENCENT_HEADERS, timeout=8)
+            if r.status_code != 200:
                 continue
-            parts = line.split('=')
-            if len(parts) < 2:
+            r.encoding = 'gbk'
+            text = (r.text or '').strip()
+            if not text:
                 continue
-            code = parts[0].split('_')[-1]
-            raw = parts[1].strip('"').split('~')
-            if len(raw) > 38:
-                quotes[code] = {
-                    'code': code,
-                    'name': raw[1],
-                    'price': float(raw[3]) if raw[3] else 0.0,
-                    'pre_close': float(raw[4]) if raw[4] else 0.0,
-                    'open': float(raw[5]) if raw[5] else 0.0,
-                    'high': float(raw[33]) if raw[33] else 0.0,
-                    'low': float(raw[34]) if raw[34] else 0.0,
-                    'change_pct': float(raw[32]) if raw[32] else 0.0,
-                    'change_amt': float(raw[31]) if raw[31] else 0.0,
-                    'volume': float(raw[6]) if raw[6] else 0.0,
-                    'amount': float(raw[37]) if raw[37] else 0.0,
-                    'turnover': float(raw[38]) if len(raw) > 38 and raw[38] else 0.0,
-                    'pe': float(raw[39]) if len(raw) > 39 and raw[39] else 0.0,
-                    'pb': float(raw[46]) if len(raw) > 46 and raw[46] else 0.0,
-                    'total_cap': float(raw[45]) if len(raw) > 45 and raw[45] else 0.0,
-                    'timestamp': raw[30] if len(raw) > 30 else '',
-                }
-    except Exception as e:
-        print(f"  [zhao_tracker] 实时行情拉取提示: {e}")
+            lines = text.split(';')
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                parts = line.split('=')
+                if len(parts) < 2:
+                    continue
+                code = parts[0].split('_')[-1]
+                raw = parts[1].strip('"').split('~')
+                if len(raw) > 38:
+                    quotes[code] = {
+                        'code': code,
+                        'name': raw[1],
+                        'price': float(raw[3]) if raw[3] else 0.0,
+                        'pre_close': float(raw[4]) if raw[4] else 0.0,
+                        'open': float(raw[5]) if raw[5] else 0.0,
+                        'high': float(raw[33]) if raw[33] else 0.0,
+                        'low': float(raw[34]) if raw[34] else 0.0,
+                        'change_pct': float(raw[32]) if raw[32] else 0.0,
+                        'change_amt': float(raw[31]) if raw[31] else 0.0,
+                        'volume': float(raw[6]) if raw[6] else 0.0,
+                        'amount': float(raw[37]) if raw[37] else 0.0,
+                        'turnover': float(raw[38]) if len(raw) > 38 and raw[38] else 0.0,
+                        'pe': float(raw[39]) if len(raw) > 39 and raw[39] else 0.0,
+                        'pb': float(raw[46]) if len(raw) > 46 and raw[46] else 0.0,
+                        'total_cap': float(raw[45]) if len(raw) > 45 and raw[45] else 0.0,
+                        'timestamp': raw[30] if len(raw) > 30 else '',
+                    }
+            if quotes:
+                return quotes
+        except Exception as e:
+            if attempt == 1:
+                print(f"  [zhao_tracker] 实时行情拉取提示: {e}")
+            else:
+                time.sleep(0.3)
     return quotes
 
 
-def fetch_stock_kline(code: str, count: int = 60) -> pd.DataFrame:
-    """拉取标的前复权日K线数据"""
-    url = f'https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={code},day,,,{count},qfq'
+def _fetch_tencent_kline(code: str, count: int = 250) -> pd.DataFrame:
+    """从腾讯接口拉取前复权日K线数据 (直连快速路径, 严格防范空响应与非JSON解析异常)."""
+    url = f'https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={code},day,,,{int(count)},qfq'
+    session = get_session()
+    for attempt in range(2):
+        try:
+            r = session.get(url, headers=_TENCENT_HEADERS, timeout=8)
+            if r.status_code != 200:
+                continue
+            text = (r.text or '').strip()
+            # 关键保护: 校验返回是否包含有效 JSON 字符，防范空串或代理 502/HTML 抛出 JSONDecodeError
+            if not text or not text.startswith('{'):
+                continue
+            data = r.json()
+            data_block = (data.get('data') or {}).get(code) or {}
+            kdata = data_block.get('qfqday') or data_block.get('day') or []
+            if not kdata:
+                continue
+            df = pd.DataFrame(kdata).iloc[:, :6]
+            df.columns = ['dt', 'open', 'close', 'high', 'low', 'vol']
+            for col in ['open', 'close', 'high', 'low', 'vol']:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+            df['dt'] = pd.to_datetime(df['dt'])
+            df['symbol'] = code
+            df['amount'] = df['vol'] * df['close']
+            df = df.dropna(subset=['dt', 'close'])
+            if not df.empty:
+                return df
+        except Exception:
+            if attempt == 0:
+                time.sleep(0.3)
+    return pd.DataFrame()
+
+
+def _fetch_akshare_kline(code: str, count: int = 250) -> pd.DataFrame:
+    """备用源: 通过 AkShare (新浪前复权源) 拉取日K线数据."""
     try:
-        r = requests.get(url, timeout=5).json()
-        data_block = r.get('data', {}).get(code, {})
-        kdata = data_block.get('qfqday', data_block.get('day', []))
-        if not kdata:
+        import akshare as ak
+        raw = ak.stock_zh_a_daily(symbol=code, adjust="qfq")
+        if raw is None or raw.empty:
             return pd.DataFrame()
-        df = pd.DataFrame(kdata).iloc[:, :6]
-        df.columns = ['dt', 'open', 'close', 'high', 'low', 'vol']
+        df = raw.tail(count).copy()
+        df['dt'] = pd.to_datetime(df['date'])
+        for col in ['open', 'close', 'high', 'low']:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+        df['vol'] = pd.to_numeric(df['volume'], errors='coerce')
+        df['symbol'] = code
+        df['amount'] = pd.to_numeric(df['amount'], errors='coerce')
+        out = df[['dt', 'open', 'close', 'high', 'low', 'vol', 'symbol', 'amount']].dropna(subset=['dt', 'close'])
+        return out.reset_index(drop=True)
+    except Exception:
+        return pd.DataFrame()
+
+
+def _fetch_cached_kline(code: str, count: int = 250) -> pd.DataFrame:
+    """离线降级: 从本地 CHAN_KLINE_CACHE 读取历史K线缓存."""
+    try:
+        from paths import CHAN_KLINE_CACHE
+        if not os.path.exists(CHAN_KLINE_CACHE):
+            return pd.DataFrame()
+        with open(CHAN_KLINE_CACHE, 'r', encoding='utf-8') as f:
+            cache = json.load(f)
+        item = cache.get(code)
+        if not item or not item.get('rows'):
+            return pd.DataFrame()
+        rows = item['rows'][-count:]
+        if not rows:
+            return pd.DataFrame()
+        df = pd.DataFrame(rows)
+        df['dt'] = pd.to_datetime(df['date'])
+        df['symbol'] = code
         for col in ['open', 'close', 'high', 'low', 'vol']:
             df[col] = pd.to_numeric(df[col], errors='coerce')
-        df['dt'] = pd.to_datetime(df['dt'])
-        df['symbol'] = code
         df['amount'] = df['vol'] * df['close']
-        return df
-    except Exception as e:
-        print(f"  [zhao_tracker] K线拉取异常 ({code}): {e}")
+        out = df[['dt', 'open', 'close', 'high', 'low', 'vol', 'symbol', 'amount']].dropna(subset=['dt', 'close'])
+        return out.reset_index(drop=True)
+    except Exception:
         return pd.DataFrame()
+
+
+def _update_kline_cache(code: str, df: pd.DataFrame) -> None:
+    """持久化更新日K线到 CHAN_KLINE_CACHE，供离线容灾或缠论分析复用."""
+    if df is None or df.empty:
+        return
+    try:
+        from paths import CHAN_KLINE_CACHE
+        cache = {}
+        if os.path.exists(CHAN_KLINE_CACHE):
+            try:
+                with open(CHAN_KLINE_CACHE, 'r', encoding='utf-8') as f:
+                    cache = json.load(f)
+            except Exception:
+                cache = {}
+        existing_rows = (cache.get(code) or {}).get('rows') or []
+        rows_by_date = {r['date']: r for r in existing_rows if isinstance(r, dict) and 'date' in r}
+        for d, o, c, h, l, v in zip(df['dt'], df['open'], df['close'], df['high'], df['low'], df['vol']):
+            dt_str = d.strftime('%Y-%m-%d')
+            rows_by_date[dt_str] = {
+                'date': dt_str,
+                'open': float(o), 'close': float(c),
+                'high': float(h), 'low': float(l), 'vol': float(v),
+            }
+        merged_rows = [rows_by_date[k] for k in sorted(rows_by_date.keys())][-400:]
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        cache[code] = {
+            'rows': merged_rows,
+            'checked': today_str,
+            'used': today_str,
+        }
+        tmp = CHAN_KLINE_CACHE + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(cache, f, ensure_ascii=False, separators=(',', ':'))
+        os.replace(tmp, CHAN_KLINE_CACHE)
+    except Exception:
+        pass
+
+
+def fetch_stock_kline(code: str, count: int = 60) -> pd.DataFrame:
+    """拉取标的前复权日K线数据 (腾讯接口为主 -> AkShare新浪兜底 -> 本地缓存降级)."""
+    # 1. 腾讯接口 (直连快速路径)
+    df = _fetch_tencent_kline(code, count=count)
+    if not df.empty and len(df) >= 10:
+        _update_kline_cache(code, df)
+        return df
+
+    # 2. 备用源: AkShare (新浪前复权源)
+    try:
+        df = _fetch_akshare_kline(code, count=count)
+        if not df.empty and len(df) >= 10:
+            _update_kline_cache(code, df)
+            return df
+    except Exception:
+        pass
+
+    # 3. 本地历史缓存容灾降级 (确保哪怕彻底离线也有数据画图)
+    df = _fetch_cached_kline(code, count=count)
+    if not df.empty:
+        return df
+
+    print(f"  [zhao_tracker] K线拉取异常 ({code}): 全部数据源均不可用或无数据")
+    return pd.DataFrame()
 
 
 # 只比对买卖点类别; "中枢"/"背驰" 这种泛词会让 "三买" 预设与 "中枢震荡" 计算被判一致

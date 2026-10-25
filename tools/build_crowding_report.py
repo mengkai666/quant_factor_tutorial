@@ -1,6 +1,7 @@
 """独立生成抱团报告；默认不联网、不发布、不执行交易。
 
 例: python tools/build_crowding_report.py --as-of 2026-10-08 --link-local
+加 --refresh-external-evidence 获取开盘啦 / 财联社补充信息；不回填历史资格。
 加 --refresh-reference-quotes 才更新独立个股研究缓存，不覆盖全市场价格。
 """
 from __future__ import annotations
@@ -90,16 +91,25 @@ def main(argv=None):
     parser.add_argument('--output-dir',default=OUTPUT_DIR)
     parser.add_argument('--data-dir',default=DATA_DIR)
     parser.add_argument('--refresh-reference-quotes',action='store_true')
+    parser.add_argument('--refresh-external-evidence',action='store_true',help='显式联网获取开盘啦/财联社外部证据')
     parser.add_argument('--link-local',action='store_true')
+    parser.add_argument('--tracking-rules',help='可选JSON参数文件；仅覆盖跟踪阈值，不提供股票名单')
     args=parser.parse_args(argv)
     as_of=day(args.as_of)
     if args.refresh_reference_quotes:
         refresh_reference_quotes(as_of,args.data_dir)
-    result=build_crowding_report(as_of,data_dir=args.data_dir)
+    if args.refresh_external_evidence:
+        from crowding_external import refresh_external_evidence
+        try:
+            refresh_external_evidence(as_of,args.data_dir)
+        except RuntimeError as exc:
+            print(str(exc),file=sys.stderr)
+    rules=json.loads(Path(args.tracking_rules).read_text(encoding='utf-8')) if args.tracking_rules else None
+    result=build_crowding_report(as_of,data_dir=args.data_dir,tracking_rules=rules)
     files=export_crowding_reports(result,args.output_dir,site_dir=Path(args.output_dir)/'site')
     if args.link_local:
         files['linked_local_entries']=link_local_outputs(args.output_dir,as_of)
-    print(json.dumps(dict(files=files,clocks=result['sources_as_of'],quality=result['quality']),ensure_ascii=False,indent=2))
+    print(json.dumps(dict(files=files,clocks=result['sources_as_of'],quality=result['quality'],external_evidence=result['external_evidence'].get('summary',{}),external_mode=result['external_evidence']['mode']),ensure_ascii=False,indent=2))
     return 0
 
 

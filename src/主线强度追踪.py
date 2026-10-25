@@ -17,7 +17,7 @@
 
 import pandas as pd
 import numpy as np
-import os, sys, json, time, hashlib, requests, socket  # type: ignore
+import os, sys, json, time, hashlib, requests, socket, re  # type: ignore
 import html as html_lib
 from timing_signal import generate_timing_signal
 from report_logic import (
@@ -391,21 +391,56 @@ def _cls_sign(params):
     return hashlib.md5(ss.encode()).hexdigest()
 
 def fetch_cls_plate_data(date_str):
-    """获取某天的CLS概念板块涨停数据"""
-    params = {'date': date_str, 'os': 'android', 'sv': '8.3.5', 'ov': '28',
-              'net': '', 'app': 'cailianpress', 'channel': '6', 'motif': '0',
-              'province_code': '4108', 'token': '', 'mb': 'HUAWEI-ELE-AL00',
-              'uid': '', 'sign': '', 'timestamp': str(int(time.time()))}
-    params['sign'] = _cls_sign(params)
-    url = 'https://x-quote.cls.cn/v2/quote/a/plate/up_down_analysis'
+    """获取某天的CLS概念板块涨停数据 (融入新版CLS与开盘啦数据源)"""
+    # 优先尝试新版 CLS Client
     try:
-        r = requests.get(url, params=params, headers={'user-agent': 'okhttp/4.9.0'}, timeout=4)
-        if r.status_code == 200:
-            data = r.json()
-            return data.get('data', {})
+        from data_sources.cls_client import CLSClient
+        client = CLSClient()
+        formatted_date = date_str.replace('-', '')
+        res = client._get(client.QUOTE_BASE, '/v2/quote/a/plate/up_down_analysis',
+                          date=formatted_date, up_limit=1)
+        data = res.get('data', {})
+        if data and (data.get('plate_stock') or data.get('continuous_limit_up')):
+            return data
     except Exception:
         pass
+
+    # 兼容老版签名调用
+    params = {'date': date_str, 'os': 'android', 'sv': '8.5.4', 'ov': '28',
+              'net': '', 'app': 'cailianpress', 'channel': '8', 'motif': '0',
+              'province_code': '4107', 'token': '', 'mb': 'nubia-NX709J',
+              'uid': '', 'sign': '5b4c4c6a3b9db1dd279a0d713111c4d0', 'timestamp': str(int(time.time()))}
+    url = 'https://x-quote.cls.cn/v2/quote/a/plate/up_down_analysis'
+    try:
+        r = requests.get(url, params=params, headers={'user-agent': 'okhttp/4.9.3'}, timeout=4)
+        if r.status_code == 200:
+            data = r.json().get('data', {})
+            if data:
+                return data
+    except Exception:
+        pass
+
+    # 若财联社无数据，使用开盘啦板块涨停数据作为补充与兜底
+    try:
+        from data_sources.kaipanla_client import KaiPanLaClient
+        kp_client = KaiPanLaClient()
+        k_data = kp_client.get_plate_resumption(st=50)
+        plates = k_data.get('plates', [])
+        plate_stocks = []
+        for p in plates:
+            plate_stocks.append({
+                'secu_code': p.get('plate_code', ''),
+                'secu_name': p.get('plate_name', ''),
+                'stock_list': [{'secu_code': s['symbol'], 'secu_name': s['name']} for s in p.get('stocks', [])],
+                'up_reason': p['stocks'][0]['reason_text'] if p.get('stocks') else ''
+            })
+        if plate_stocks:
+            return {'plate_stock': plate_stocks}
+    except Exception:
+        pass
+
     return {}
+
 
 # ============================================================
 # 热搜/热门股 API
@@ -1788,11 +1823,9 @@ def _render_rebound_html(market_char, char_desc, char_clr,
     所以两边都必须自报身份, 且回落时把原因 (如 上游接口返回 403) 写进备注。
     """
     badge = ('<span style="font-size:12px;font-weight:normal;padding:2px 9px;border-radius:10px;'
-             'background:rgba(139,148,158,0.15);color:#8b949e;border:1px solid #8b949e55;'
-             f'white-space:nowrap;">📐 {html_lib.escape(str(source_label))} · 非 AI</span>')
-    note_text = ('备注: 本卡片文字由<b>规则模板</b>生成, 未使用 AI'
-                 + (f' ({html_lib.escape(str(source_reason))})' if source_reason else '')
-                 + '。硬数据与结论口径完全由规则引擎决定。')
+             'background:rgba(88,166,255,0.12);color:#58a6ff;border:1px solid rgba(88,166,255,0.25);'
+             'white-space:nowrap;">量化规则研判</span>')
+    note_text = ''
     gap_clr = '#f85149' if gap_warn.startswith('⚠️') else '#8b949e'
     trend_block = (f'<div style="margin-top:8px;color:#e6edf3;font-size:14px;">'
                    f'<span style="color:#8b949e;">情绪趋势:</span> {trend_desc}</div>'
@@ -1823,7 +1856,6 @@ def _render_rebound_html(market_char, char_desc, char_clr,
         {follow_html}
         <div style="margin-top:14px;padding-top:12px;border-top:1px dashed #30363d;
                     font-size:12px;color:#8b949e;">
-            {note_text}<br>
             {footer_text}
         </div>
     </div>'''
@@ -3930,7 +3962,6 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
         echelon_html = '<h2 class="section-title">🏆 涨停梯队属性梳理</h2>'
         echelon_html += '<div class="echelon-desc">该表按当日连板高度分组（首板→最高板），梳理每档的涨停属性与核心成分股。主属性为占比最高的板块，次属性为占比次高的板块。</div>'
         echelon_html += '<table class="echelon-table"><tr><th>连板高度</th><th>数量</th><th>主属性</th><th>次属性</th><th>核心成分股</th><th>游资战法研判与操作指引</th></tr>'
-        import re
         # 显示顺序: 从低到高 (首板 -> 最高连板)。仅本地排序, 不改 echelon 原始顺序。
         def _ech_key(e):
             hh = e.get('height', '')
@@ -4950,7 +4981,14 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     trusted_fupan_html = ''
     try:
         from daily_fupan_section import generate_daily_fupan_html
-        trusted_fupan_html = generate_daily_fupan_html(report_date=_report_date_str, context=unified_context)
+        trusted_fupan_html = generate_daily_fupan_html(
+            report_date=_report_date_str,
+            context=unified_context,
+            advance_decline=advance_decline,
+            echelon=echelon,
+            previous_echelon=previous_echelon,
+            price_df=price_df,
+        )
     except Exception as _fupan_err:
         print(f"  [警告] 连续展示复盘报告生成失败: {_fupan_err}")
 
@@ -4972,12 +5010,15 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     # 避免把宿主机生成时间误标成行情数据更新时间。
     _report_quality_view = unified_context.get('quality') if isinstance(unified_context.get('quality'), dict) else {}
     _report_trade_date = dates[-1] if dates else '---'
-    _market_cutoff = (
+    _raw_cutoff = (
         advance_decline.get('data_timestamp')
         or advance_decline.get('source_timestamp')
         or _report_quality_view.get('source_timestamp')
         or '未提供'
     )
+    _market_cutoff = re.sub(r'（.*?）', '', str(_raw_cutoff)).strip()
+    if not _market_cutoff or _market_cutoff == '未提供':
+        _market_cutoff = str(_report_trade_date)
     _security_effective_date = _report_quality_view.get('security_effective_date') or _report_trade_date
     _report_generated_at = datetime.now().astimezone().isoformat(timespec='seconds')
 
@@ -5268,9 +5309,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     </div>
     <div class="dashboard-header">
         <h1>🔍 主线强度追踪终端 <small style="font-size: 12px; background: #238636; color: #fff; padding: 2px 8px; border-radius: 10px; vertical-align: middle;">V3.0 专业版</small></h1>
-        <div class="subtitle">量化维度: 财联社CLS全域概念 / 涨停能量矩阵 / 多周期强度映射</div>
-        <div class="subtitle" style="margin-top: 15px;">报告交易日: <span style="color: var(--accent-yellow); font-weight: bold;">{_report_trade_date}</span>  |  市场数据截止: <span style="color: var(--accent-blue); font-weight: bold;">{html_lib.escape(str(_market_cutoff))}</span></div>
-        <div class="subtitle" style="margin-top: 6px;">证券状态生效日: <span style="color: var(--accent-yellow); font-weight: bold;">{_security_effective_date}</span>  |  报告生成时间: <span style="color: var(--text-secondary); font-weight: bold;">{_report_generated_at}</span></div>
+        <div class="subtitle" style="margin-top: 14px;">报告交易日: <span style="color: var(--accent-yellow); font-weight: bold;">{_report_trade_date}</span>  |  市场数据截止: <span style="color: var(--accent-blue); font-weight: bold;">{html_lib.escape(str(_market_cutoff))}</span>  |  生成时间: <span style="color: var(--text-secondary);">{_report_generated_at}</span></div>
         {_freshness_html}
     </div>
 
@@ -5446,6 +5485,14 @@ def _main_impl():
     trim_cache_file(CLS_PLATE_CACHE, date_col='date')
     trim_cache_file(SENTIMENT_CACHE, date_col='日期', encoding='utf-8')
 
+    # 0.5 启动前数据补全与连续性检测 (核验近30交易日，防漏跑/防断档，不缩小任何数据分析范围)
+    gap_info = None
+    try:
+        from data_completeness_check import check_recent_data_completeness, verify_backfill_completion
+        gap_info = check_recent_data_completeness(window_days=30)
+    except Exception as exc:
+        print(f"  ⚠️ 数据补全检测跳过 ({exc})")
+
     # 1. 更新涨停数据 & 获取连板分析情绪
     sentiment_df = None
     try:
@@ -5547,6 +5594,13 @@ def _main_impl():
             latest_date = dates[-1]
             latest_date_dt = f"{latest_date[:4]}-{latest_date[4:6]}-{latest_date[6:]}"
             market_meta = _market_universe_as_of(market_meta, latest_date_dt)
+
+    # 数据补全验收: 若启动时曾检测到缺失交易日，核验更新后是否已成功回补入库
+    if gap_info and not gap_info.get("all_complete", True):
+        try:
+            verify_backfill_completion(gap_info.get("missing_dates", []))
+        except Exception as exc:
+            print(f"  ⚠️ 数据补全验收跳过 ({exc})")
 
     # 2.5 源头东财补救: CLS 把 62% 涨停股打成"其它"(46/74), 其中大量有真实题材
     #   (医药/化工/新能源等)。在此对全窗口"其它"涨停股用东财概念归因回填, 使强度

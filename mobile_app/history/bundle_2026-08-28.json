@@ -1,0 +1,69 @@
+{
+  "meta": {
+    "version": "1.2.0",
+    "updated_at": "2026-08-28 15:30:00",
+    "date": "2026-08-28",
+    "sources": [
+      "量化投研归档",
+      "开盘啦",
+      "财联社"
+    ],
+    "is_history": true
+  },
+  "tab_mood": {
+    "degree": 50,
+    "status_text": "中性震荡",
+    "color_tag": "amber",
+    "turnover": "1.85万亿",
+    "turnover_change": "",
+    "up_count": 2500,
+    "down_count": 2500,
+    "zt_count": 45,
+    "dt_count": 10,
+    "broken_ratio": 17.9,
+    "yesterday_zt_perf": 1.2,
+    "tianti_stocks": [],
+    "distribution_bins": {
+      "-10%": 8,
+      "-7%": 120,
+      "-5%": 350,
+      "-2%": 1200,
+      "0%": 600,
+      "+2%": 900,
+      "+5%": 400,
+      "+7%": 180,
+      "+10%": 45
+    }
+  },
+  "tab_crowding": {
+    "mainline_desc": "2026-08-28 市场主线与题材梯队",
+    "mainlines": [
+      {
+        "title": "核心题材",
+        "hot": 88,
+        "desc": "空间龙头带领题材展开接力，全天共封板 45 只。"
+      }
+    ],
+    "tuyeres": [],
+    "fund_heat": [],
+    "local_cycles": []
+  },
+  "tab_focus": [],
+  "tab_strategy": {
+    "title": "2026-08-28 实战推演与交易预案",
+    "action_slogan": "分歧震荡低吸",
+    "recommended_position": "4 ~ 6 成仓",
+    "is_melt": false,
+    "melt_text": "",
+    "priority_matrix": [],
+    "checklist": [],
+    "avoid_list": [],
+    "scenarios": [],
+    "rules": [
+      "大盘情绪读数 50（中性震荡），涨跌家数比 2500:2500。",
+      "连板空间高度锚定在 4板，全天涨停 45 家，跌停 10 家。",
+      "严格恪守盘面铁律与仓位纪律，弱势期宁可空仓不可盲目接力后排。"
+    ],
+    "defense_line": "单日亏损触及本金 2% 或跌破 EMA20 支撑无条件触发止损纪律。"
+  }
+}

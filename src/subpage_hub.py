@@ -74,12 +74,9 @@ def render_war_room_hub_html(
                     涨停 {zt} 家 / 跌停 {dt} 家 · 空间最高 {max_h} 板。集合竞价信标 (09:25) · 盘中应变分支 (P0~P3) · 禁买雷区与一键复制晨会卡片。
                 </div>
             </div>
-            <div style="display:flex;gap:8px;padding-top:10px;border-top:1px solid #21262d;">
-                <a href="今日复盘与明日预案_最新.html" style="flex:1;text-align:center;background:#1f6feb;color:#ffffff;text-decoration:none;font-size:12px;font-weight:700;padding:6px 0;border-radius:6px;box-shadow:0 2px 6px rgba(31,111,235,0.3);">
-                    📁 本地直接打开 →
-                </a>
-                <a href="site/plan/latest.html" target="_blank" style="flex:1;text-align:center;background:#21262d;color:#58a6ff;border:1px solid #30363d;text-decoration:none;font-size:12px;font-weight:600;padding:6px 0;border-radius:6px;">
-                    🌐 在线预案页 ↗
+            <div style="padding-top:10px;border-top:1px solid #21262d;">
+                <a href="site/plan/latest.html" style="display:block;text-align:center;background:#1f6feb;color:#ffffff;text-decoration:none;font-size:12.5px;font-weight:700;padding:7px 0;border-radius:6px;box-shadow:0 2px 6px rgba(31,111,235,0.3);">
+                    ⚔️ 进入复盘与预案作战室 →
                 </a>
             </div>
         </div>
@@ -100,12 +97,9 @@ def render_war_room_hub_html(
                     相对大盘强弱比 RS ≥ 115% · 突破平台不破颈线确认。覆盖 AI算力硬件 / 精细化工 / 核心主线龙头共振低吸买点与风控防守线。
                 </div>
             </div>
-            <div style="display:flex;gap:8px;padding-top:10px;border-top:1px solid #21262d;">
-                <a href="强势板块回调跟踪_最新.html" style="flex:1;text-align:center;background:#0969da;color:#ffffff;text-decoration:none;font-size:12px;font-weight:700;padding:6px 0;border-radius:6px;box-shadow:0 2px 6px rgba(9,105,218,0.3);">
-                    📁 本地直接打开 →
-                </a>
-                <a href="site/pullback/latest.html" target="_blank" style="flex:1;text-align:center;background:#21262d;color:#39c5bb;border:1px solid #30363d;text-decoration:none;font-size:12px;font-weight:600;padding:6px 0;border-radius:6px;">
-                    🌐 在线回调页 ↗
+            <div style="padding-top:10px;border-top:1px solid #21262d;">
+                <a href="site/pullback/latest.html" style="display:block;text-align:center;background:#0969da;color:#ffffff;text-decoration:none;font-size:12.5px;font-weight:700;padding:7px 0;border-radius:6px;box-shadow:0 2px 6px rgba(9,105,218,0.3);">
+                    🌊 进入强势回调作战室 →
                 </a>
             </div>
         </div>
@@ -126,12 +120,9 @@ def render_war_room_hub_html(
                     吉华集团 · 华映科技 · 焦作万方 · 深圳燃气 · 易明医药 · 锦鸡股份。日线与30分缠论中枢笔透视 × 游资量价攻防 × 斩钉截铁临盘指令。
                 </div>
             </div>
-            <div style="display:flex;gap:8px;padding-top:10px;border-top:1px solid #21262d;">
-                <a href="zhao个股追踪_最新.html" style="flex:1;text-align:center;background:#8957e5;color:#ffffff;text-decoration:none;font-size:12px;font-weight:700;padding:6px 0;border-radius:6px;box-shadow:0 2px 6px rgba(137,87,229,0.3);">
-                    📁 本地直接打开 →
-                </a>
-                <a href="site/zhao/latest.html" target="_blank" style="flex:1;text-align:center;background:#21262d;color:#bc8cff;border:1px solid #30363d;text-decoration:none;font-size:12px;font-weight:600;padding:6px 0;border-radius:6px;">
-                    🌐 在线个股页 ↗
+            <div style="padding-top:10px;border-top:1px solid #21262d;">
+                <a href="site/zhao/latest.html" style="display:block;text-align:center;background:#8957e5;color:#ffffff;text-decoration:none;font-size:12.5px;font-weight:700;padding:7px 0;border-radius:6px;box-shadow:0 2px 6px rgba(137,87,229,0.3);">
+                    🎯 进入个股追踪专属室 →
                 </a>
             </div>
         </div>
@@ -152,12 +143,9 @@ def render_war_room_hub_html(
                     旧抱团瓦解出清 vs 新周期试错竞争。连板总龙身位晋级、监管周期阶梯、近岸蛋白/善水科技等趋势候选证据核验与证伪。
                 </div>
             </div>
-            <div style="display:flex;gap:8px;padding-top:10px;border-top:1px solid #21262d;">
-                <a href="抱团周期分析_最新.html" style="flex:1;text-align:center;background:#d29922;color:#ffffff;text-decoration:none;font-size:12px;font-weight:700;padding:6px 0;border-radius:6px;box-shadow:0 2px 6px rgba(210,153,34,0.3);">
-                    📁 抱团分析 →
-                </a>
-                <a href="site/dragon/latest.html" target="_blank" style="flex:1;text-align:center;background:#21262d;color:#e3b341;border:1px solid #30363d;text-decoration:none;font-size:12px;font-weight:600;padding:6px 0;border-radius:6px;">
-                    🐉 龙头谱系 ↗
+            <div style="padding-top:10px;border-top:1px solid #21262d;">
+                <a href="site/dragon/latest.html" style="display:block;text-align:center;background:#d29922;color:#ffffff;text-decoration:none;font-size:12.5px;font-weight:700;padding:7px 0;border-radius:6px;box-shadow:0 2px 6px rgba(210,153,34,0.3);">
+                    🐉 进入龙头接替谱系室 →
                 </a>
             </div>
         </div>

@@ -8,6 +8,8 @@
 
 - [逐策略资格、独立验证与条件预案](howto/strategy-qualification.md)
 
+- [盯盘数据接口清单](howto/dingpan-api-inventory.md)：财联社 / 开盘啦全部实测可用接口、东方财富·同花顺第三备用源、三源逐块降级规则与前端渲染契约。
+
 ## 报表优化总纲与验收
 
 - [最初报表行动性方案](audits/2026-09-06-report-actionability-review.md)：统一事实、候选优先级与一页行动单。

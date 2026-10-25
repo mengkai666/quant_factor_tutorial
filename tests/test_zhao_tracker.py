@@ -125,3 +125,56 @@ def test_render_zhao_teaser_html():
     assert "属于zhao的个股追踪" in teaser
     assert "zhao个股追踪_最新.html" in teaser
     assert "吉华集团" in teaser
+
+
+def test_fetch_stock_kline_handles_empty_response_and_fallbacks(monkeypatch, tmp_path):
+    """验证 K线接口遇到空响应、非JSON、代理报错等极端情况不会抛出 JSONDecodeError，且平滑降级."""
+    from unittest.mock import MagicMock
+    import zhao_tracker
+
+    # 1. 模拟腾讯接口返回空内容 (原本触发 Expecting value: line 1 column 1 (char 0) 的场景)
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.text = ""
+    mock_session = MagicMock()
+    mock_session.get.return_value = mock_resp
+    monkeypatch.setattr(zhao_tracker, "get_session", lambda: mock_session)
+
+    # 模拟 akshare 成功兜底
+    import pandas as pd
+    ak_df = pd.DataFrame({
+        'date': pd.bdate_range('2026-01-01', periods=30).strftime('%Y-%m-%d'),
+        'open': [10.0] * 30,
+        'close': [10.5] * 30,
+        'high': [11.0] * 30,
+        'low': [9.5] * 30,
+        'volume': [100000] * 30,
+        'amount': [1000000] * 30,
+    })
+    monkeypatch.setattr(zhao_tracker, "_fetch_akshare_kline", lambda code, count=250: ak_df.copy())
+
+    # 拉取吉华集团
+    df = zhao_tracker.fetch_stock_kline("sh603980", count=30)
+    assert not df.empty
+    assert len(df) == 30
+    assert "close" in df.columns
+
+    # 2. 模拟腾讯和 akshare 均失败，测试从本地缓存兜底
+    monkeypatch.setattr(zhao_tracker, "_fetch_akshare_kline", lambda code, count=250: pd.DataFrame())
+    cached_df = pd.DataFrame({
+        'dt': pd.bdate_range('2026-01-01', periods=20),
+        'open': [9.0] * 20,
+        'close': [9.2] * 20,
+        'high': [9.5] * 20,
+        'low': [8.8] * 20,
+        'vol': [50000] * 20,
+        'symbol': ['sh603980'] * 20,
+        'amount': [460000] * 20,
+    })
+    monkeypatch.setattr(zhao_tracker, "_fetch_cached_kline", lambda code, count=250: cached_df.copy())
+
+    df_cached = zhao_tracker.fetch_stock_kline("sh603980", count=20)
+    assert not df_cached.empty
+    assert len(df_cached) == 20
+    assert df_cached['close'].iloc[0] == 9.2
+

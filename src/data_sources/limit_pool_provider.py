@@ -56,10 +56,15 @@ class LimitPoolProvider:
 
         zt_sources = [("akshare_em", fetch_zt or cls._default_zt)]
         if fetch_zt is None:
+            from .limit_pool_sources import KaiPanLaLimitPoolSource, ClsLimitPoolSource
             ths = ThsLimitUpSource()
+            kaipanla = KaiPanLaLimitPoolSource()
+            cls_source = ClsLimitPoolSource()
             zt_sources.extend([
                 ("eastmoney_push2ex", eastmoney.fetch_zt),
                 ("ths_limit_up", ths.fetch_zt),
+                ("kaipanla_tianti", kaipanla.fetch_zt),
+                ("cls_up_down", cls_source.fetch_zt),
             ])
 
         dt_sources = [("akshare_em", fetch_dt or cls._default_dt)]

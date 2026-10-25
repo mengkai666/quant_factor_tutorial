@@ -1,0 +1,194 @@
+{
+  "meta": {
+    "version": "1.2.0",
+    "updated_at": "2026-09-24 15:30:00",
+    "date": "2026-09-24",
+    "sources": [
+      "量化投研归档",
+      "开盘啦",
+      "财联社"
+    ],
+    "is_history": true
+  },
+  "tab_mood": {
+    "degree": 14,
+    "status_text": "冰点 · 空仓观望",
+    "color_tag": "emerald",
+    "turnover": "1.85万亿",
+    "turnover_change": "",
+    "up_count": 1069,
+    "down_count": 4242,
+    "zt_count": 152,
+    "dt_count": 13,
+    "broken_ratio": 7.8,
+    "yesterday_zt_perf": -1.5,
+    "tianti_stocks": [
+      {
+        "name": "新华文轩",
+        "symbol": "",
+        "height": 5,
+        "plate_name": "全市场空间天花板",
+        "first_time": "09:30"
+      },
+      {
+        "name": "新华传媒",
+        "symbol": "",
+        "height": 4,
+        "plate_name": "双子星同身位PK (淘汰率 67%)",
+        "first_time": "09:30"
+      },
+      {
+        "name": "泰慕士",
+        "symbol": "",
+        "height": 4,
+        "plate_name": "双子星同身位PK (淘汰率 67%)",
+        "first_time": "09:30"
+      },
+      {
+        "name": "奥佳华",
+        "symbol": "",
+        "height": 4,
+        "plate_name": "双子星同身位PK (淘汰率 67%)",
+        "first_time": "09:30"
+      },
+      {
+        "name": "天威视讯",
+        "symbol": "",
+        "height": 3,
+        "plate_name": "中位换手推进",
+        "first_time": "09:30"
+      },
+      {
+        "name": "福建水泥",
+        "symbol": "",
+        "height": 2,
+        "plate_name": "低位承接与晋级活口 (同身位竞争)",
+        "first_time": "09:30"
+      },
+      {
+        "name": "上工申贝",
+        "symbol": "",
+        "height": 2,
+        "plate_name": "低位承接与晋级活口 (同身位竞争)",
+        "first_time": "09:30"
+      },
+      {
+        "name": "金辰股份",
+        "symbol": "",
+        "height": 2,
+        "plate_name": "低位承接与晋级活口 (同身位竞争)",
+        "first_time": "09:30"
+      },
+      {
+        "name": "雪龙集团",
+        "symbol": "",
+        "height": 2,
+        "plate_name": "低位承接与晋级活口 (同身位竞争)",
+        "first_time": "09:30"
+      }
+    ],
+    "distribution_bins": {
+      "-10%": 10,
+      "-7%": 120,
+      "-5%": 350,
+      "-2%": 1200,
+      "0%": 600,
+      "+2%": 900,
+      "+5%": 400,
+      "+7%": 180,
+      "+10%": 152
+    }
+  },
+  "tab_crowding": {
+    "mainline_desc": "2026-09-24 市场主线与题材梯队",
+    "mainlines": [
+      {
+        "title": "全市场空间天花板",
+        "hot": 45,
+        "desc": "空间龙头带领题材展开接力，全天共封板 152 只。"
+      }
+    ],
+    "tuyeres": [],
+    "fund_heat": [],
+    "local_cycles": []
+  },
+  "tab_focus": [
+    {
+      "name": "福建水泥",
+      "code": "sh600802",
+      "sector": "attack",
+      "pool_type": "【铁律 3 : 双子星卡位生死律】",
+      "entry_rule": "满足观察条件后进入确认名单：首次回封且同题材至少 2 只保持红盘",
+      "defense_rule": "跌破昨日收盘且题材无跟随",
+      "status": "yellow",
+      "is_custom": false
+    },
+    {
+      "name": "上工申贝",
+      "code": "sh600843",
+      "sector": "attack",
+      "pool_type": "【铁律 3 : 双子星卡位生死律】",
+      "entry_rule": "满足观察条件后进入确认名单：首次回封且同题材至少 2 只保持红盘",
+      "defense_rule": "跌破昨日收盘且题材无跟随",
+      "status": "yellow",
+      "is_custom": false
+    },
+    {
+      "name": "金辰股份",
+      "code": "sh603396",
+      "sector": "attack",
+      "pool_type": "【铁律 3 : 双子星卡位生死律】",
+      "entry_rule": "满足观察条件后进入确认名单：首次回封且同题材至少 2 只保持红盘",
+      "defense_rule": "跌破昨日收盘且题材无跟随",
+      "status": "yellow",
+      "is_custom": false
+    },
+    {
+      "name": "雪龙集团",
+      "code": "sh603949",
+      "sector": "attack",
+      "pool_type": "【铁律 3 : 双子星卡位生死律】",
+      "entry_rule": "满足观察条件后进入确认名单：首次回封且同题材至少 2 只保持红盘",
+      "defense_rule": "跌破昨日收盘且题材无跟随",
+      "status": "yellow",
+      "is_custom": false
+    },
+    {
+      "name": "华茂股份",
+      "code": "sz000850",
+      "sector": "attack",
+      "pool_type": "【铁律 3 : 双子星卡位生死律】",
+      "entry_rule": "满足观察条件后进入确认名单：首次回封且同题材至少 2 只保持红盘",
+      "defense_rule": "跌破昨日收盘且题材无跟随",
+      "status": "yellow",
+      "is_custom": false
+    },
+    {
+      "name": "康强电子",
+      "code": "sz002119",
+      "sector": "attack",
+      "pool_type": "【铁律 3 : 双子星卡位生死律】",
+      "entry_rule": "满足观察条件后进入确认名单：首次回封且同题材至少 2 只保持红盘",
+      "defense_rule": "跌破昨日收盘且题材无跟随",
+      "status": "yellow",
+      "is_custom": false
+    }
+  ],
+  "tab_strategy": {
+    "title": "2026-09-24 实战推演与交易预案",
+    "action_slogan": "防守防风险，静待冰点出清",
+    "recommended_position": "0 ~ 2 成轻仓",
+    "is_melt": true,
+    "melt_text": "防守熔断：跌停 13 家，严格控制仓位！",
+    "priority_matrix": [],
+    "checklist": [],
+    "avoid_list": [],
+    "scenarios": [],
+    "rules": [
+      "大盘情绪读数 14（冰点 · 空仓观望），涨跌家数比 1069:4242。",
+      "连板空间高度锚定在 5板，全天涨停 152 家，跌停 13 家。",
+      "严格恪守盘面铁律与仓位纪律，弱势期宁可空仓不可盲目接力后排。"
+    ],
+    "defense_line": "单日亏损触及本金 2% 或跌破 EMA20 支撑无条件触发止损纪律。"
+  }
+}

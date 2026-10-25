@@ -1,46 +1,17 @@
 # -*- coding: utf-8 -*-
-"""抱团周期与新周期试错分析模块 (baotuan_cycle) — 独立专业投研子系统。
+"""抱团周期兼容入口：实时判断统一使用价格研究引擎，历史案例仅作回顾。
 
-一、交易哲学与核心认知 (基于实战复盘手稿深度提炼):
-  1. 周期的本质是生命周期闭环:
-     老抱团瓦解出清 ➔ 新周期混沌试错 ➔ 主线确立与共振启动 ➔ 主升抱团发酵 ➔ 高位分歧与梯队接力补涨 ➔ 彻底瓦解出清。
-  2. 瓦解即孕育 (老抱团出清日 = 新周期试错起点):
-     - 老龙头断板/跌停出清之日 (如 8.31, 9.15, 9.28)，老周期流动性被释放，先知先觉资金开始在全市场多方向试探点火。
-     - 典型试错分支:
-       * 8.31: 农业(万向德农)、消费(国芳集团)、算力(海鸥股份)、数字经济(楚天龙);
-       * 9.28: 锂电(时代万恒、尚水智能)、化工/染料(善水科技)、医药(近岸蛋白)。
-  3. 试错环境决定操作姿态:
-     - "目前环境太差，什么能走出来依旧看不清。准备等市场转暖，资金想好进攻什么再跟随也不迟。"
-     - 若缩量弱势、无指数大阳线、梯队散乱，则属于"低胜率试错期"，切忌重仓，需耐心等待转暖共振;
-     - 若伴随关键大阳线 (如 9.16 大阳线，93家涨停)，风格从投机确立或转向趋势，则可果断跟随新抱团主线。
-  4. 接力链与补涨树 (抱团演进脉络):
-     - 消费线: 国芳集团 (龙一 5板, 9.4断板) ➔ 百大集团 (龙二 5板, 9.10断板) ➔ 桂林旅游 (补涨 4板, 9.11断板)
-     - 农业线: 万向德农 (领跑 6板) ➔ 亚盛集团 (助攻 4板) ➔ 金健米业 (低位补涨, 9.15出清)
-     - 伴生杂毛: 9.10 电力(闽东电力), 9.17 次新(沈鼓集团)
-  5. 淘汰与判死刑板块机制 (假反抽防坑雷达):
-     - "至于科技，半个月前已经判死刑了。。。"
-     - 退潮旧主线 (如科技 AI应用/算力液冷/PCB) 套牢盘重，其异动脉冲仅为超跌抽血与诱多，直接画大红叉判死刑，严禁伸手！
-  6. 节后去伪存真大洗牌 (9.28试错验证):
-     - 善水科技 (301190): 9.28混沌首板试水 ➔ 3连板20cm ➔ 节后加速狂飙翻倍(+136%)，成功晋级创业板独立抱团第一妖王！
-     - 近岸蛋白 (688137): 9.28超跌探路 ➔ 节后医药板块整体退潮缺乏梯队助攻 ➔ 单边破位下杀(-15%)，试错彻底宣告失败淘汰！
-
-三段式标准接口:
-  build_baotuan_cycle(report_date=None) -> dict
-  generate_baotuan_html(result, is_site_mode=True) -> str
-  render_baotuan_teaser_html(result) -> str
-  export_baotuan_standalone_reports(report_date=None, ...) -> dict
+保留构建、入口卡、HTML与导出接口；不将固定案例价格、主观评分或
+事后赢家外推为当前信号。历史显示边界是推定值，不是事前发布证据。
 """
 from __future__ import annotations
 
 import os
 import sys
-import json
-import time
 from html import escape
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
-
-import pandas as pd
+from typing import Any, Dict, List, Optional
+from pathlib import Path
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
@@ -298,850 +269,131 @@ BAOTUAN_HISTORICAL_CYCLES: List[Dict[str, Any]] = [
             }
         ],
         "takeaway": "试错期结束后的关键法则：‘去伪存真、弃弱抱强’！善水科技之所以能走出+136%大妖行情，是因为其在首板后迅速以20cm连板凝聚了全市场投机合力；而近岸蛋白缺乏板块助攻，冲高后迅速沦为弃子。面对妖股（善水科技、时代万恒）高位巨震应以防守锁利为主，对破位弱股（近岸蛋白）绝不抱有幻想抢反弹！"
+    },
+    {
+        "id": "cycle_october_reconstruction",
+        "name": "周期五：退潮出清后的新一轮低位重构与空间试错期 (最新)",
+        "date_range": "2026.10.14 - 至今",
+        "start_date": "20261014",
+        "end_date": "20261020",
+        "theme_name": "机器人(16板) / AI算力与半导体(11板) / 汽车零部件 / 吉大正元空间试错",
+        "style_desc": "高位退潮出清与低位梯队重构: 老周期高标退潮出清完毕，跌停收窄至6家；吉大正元4板打破空间压制，长春一东/东安动力等3板梯队扩容，大容量中军涨停支撑指数",
+        "core_stage": "退潮出清 ➔ 低位重构与空间试错期",
+        "stage_badge": "低位重构试错",
+        "stage_color": "#3fb950",
+        "anchor_event": "跌停家数收窄至6家，吉大正元晋级4板成为全市场最高空间标杆，机器人16家涨停引爆低位集群，大容量中军(瑞芯微、九阳股份、移远通信)放量涨停支撑指数",
+        "summary": "10.13高位妖股天量大分歧后，市场经历充分退潮释放，跌停家数由高位大幅收敛至6家。吉大正元以4连板打破空间压制，成为全市场唯一连板空间标杆；中位梯队健康展开，长春一东、东安动力、大业股份、京城股份、海洋王等5只标的晋级3板；大容量中军瑞芯微(38.3亿)、九阳股份(23.9亿)、移远通信(21.9亿)强势涨停，机器人与AI算力形成强大低位做多合力。盘面进入新一轮低位试错与主线重构阶段。",
+        "succession_chains": [
+            {
+                "track": "主板连板空间破局链",
+                "nodes": [
+                    {"name": "吉大正元 (003022)", "role": "空间总龙 (4连板)", "desc": "突破前期高位压制，晋级4板成为全市场唯一空间天花板标杆"},
+                    {"name": "长春一东 (600148)", "role": "中位晋级 (3连板)", "desc": "军工+汽车零部件，放量换手晋级3板领跑梯队"},
+                    {"name": "东安动力 (600178)", "role": "中位晋级 (3连板)", "desc": "汽车零部件身位卡位，3进4候选标的"}
+                ]
+            },
+            {
+                "track": "大容量主线中军与硬件科技链",
+                "nodes": [
+                    {"name": "瑞芯微 (603893)", "role": "芯片半导体中军", "desc": "放量成交38.3亿封死涨停，引领硬科技多头中枢回升"},
+                    {"name": "九阳股份 (002242)", "role": "消费白马容量", "desc": "成交23.9亿换手涨停，承接大资金做多动能"},
+                    {"name": "移远通信 (603236)", "role": "算力通信中军", "desc": "成交21.9亿强势涨停，助攻AI硬件修复"}
+                ]
+            },
+            {
+                "track": "高位断板退潮出清链 (风险警戒)",
+                "nodes": [
+                    {"name": "东方嘉盛 (002889)", "role": "3进4落败断板", "desc": "昨日3板同身位竞争落败，放量重挫-6.67%，资金踩踏出逃"},
+                    {"name": "万丰奥威 (002085)", "role": "低空断板", "desc": "冲高回落跌-4.54%，高位断板负反馈明显"},
+                    {"name": "老周期龙头", "role": "新华传媒/时代万恒", "desc": "老周期赶顶结束后步入退潮震荡，严禁盲目追高老题材"}
+                ]
+            }
+        ],
+        "trial_sectors": [
+            {"sector": "机器人 / 自动化", "lead_stocks": ["嘉晨智能", "雷赛智能", "大业股份"], "result": "🤖 爆发领跑！日内16家涨停，低位最强集群进攻"},
+            {"sector": "空间接力 / 连板破局", "lead_stocks": ["吉大正元 (003022)"], "result": "👑 空间标杆！4连板破局，锚定市场短线高度"},
+            {"sector": "半导体 / AI算力中军", "lead_stocks": ["瑞芯微 (603893)", "移远通信 (603236)"], "result": "💻 容量托底！大成交涨停，多头中枢企稳回升"},
+            {"sector": "汽车零部件 / 中位接力", "lead_stocks": ["长春一东 (600148)", "东安动力 (600178)"], "result": "🚗 梯队有序！3板扩容至5家，形成健康承接"}
+        ],
+        "discarded_sectors": [
+            {
+                "sector": "高位断板与同身位落败股",
+                "killed_stocks": ["东方嘉盛 (-6.67%)", "万丰奥威 (-4.54%)"],
+                "verdict": "❌ 坚决回避 (断板踩踏)",
+                "reason": "退潮期高位断板标的面临剧烈筹码分歧与获利盘砸盘，严禁盲目抄底抢反抽！"
+            },
+            {
+                "sector": "老周期加速赶顶妖股",
+                "killed_stocks": ["新华传媒", "时代万恒", "善水科技"],
+                "verdict": "⚠️ 进入兑现出清期",
+                "reason": "老妖股已在10.12-10.13完成天量赶顶，资金正向低位新题材切换，坚决不接老周期最后一棒。"
+            }
+        ],
+        "takeaway": "退潮出清后的核心法则：‘喜新厌旧、高低切换’！老周期高标（新华传媒、时代万恒、善水科技）赶顶出清后，市场跌停迅速收窄至6家，低位吉大正元顶出4板打破压制，机器人16家涨停引爆新集群。战术上坚决回避高位断板股，积极围绕低位新梯队（吉大正元、长春一东、东安动力）与容量中军（瑞芯微、九阳股份）展开试错！"
     }
 ]
 
-def build_baotuan_cycle(report_date: Optional[str] = None) -> Dict[str, Any]:
-    res: Dict[str, Any] = {
-        "status": "ok",
-        "report_date": "",
-        "report_date_fmt": "",
-        "current_stage": "",
-        "stage_badge": "",
-        "stage_color": "#6366f1",
-        "market_temp_score": 38,
-        "market_temp_desc": "极度冰点 / 环境较差",
-        "cleansing_score": 92,
-        "cleansing_desc": "老抱团已基本出清完毕",
-        "tactical_guidance": "",
-        "cycles": BAOTUAN_HISTORICAL_CYCLES,
-        "current_cycle": {},
-        "today_trials": [],
-        "today_discarded": [],
-        "today_succession": [],
-        "stats": {
-            "total_zt": 0,
-            "total_dt": 0,
-            "max_height": 0,
-            "highest_stocks": []
-        }
-    }
+def build_baotuan_cycle(report_date: Optional[str] = None, *, research_report: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    from copy import deepcopy
+    from zoneinfo import ZoneInfo
+    from crowding_cycle import REFERENCE_DATE, build_crowding_report, day
 
-    date_col = 'date'
-    height_col = 'height'
-    name_col = 'name'
-    try:
-        from breakthrough_verify import load_zt_cache
-        zt_df = load_zt_cache()
-        if zt_df is not None and not zt_df.empty:
-            if '日期' in zt_df.columns:
-                date_col = '日期'
-            if '连板数' in zt_df.columns:
-                height_col = '连板数'
-            if '名称' in zt_df.columns:
-                name_col = '名称'
-    except Exception:
-        zt_df = pd.DataFrame()
+    requested = day(report_date) if report_date else (
+        research_report['requested_date'] if research_report is not None else
+        datetime.now(ZoneInfo('Asia/Shanghai')).strftime('%Y-%m-%d'))
+    research = research_report if research_report is not None else build_crowding_report(requested)
+    if research['requested_date'] != requested:
+        raise ValueError('研究报告截止日与请求日不一致。')
+    latest = research['daily'][-1] if research['daily'] else {}
+    available = research['quality'] == 'research_only' and latest.get('coverage_ok', False)
+    stage = latest.get('stage', '数据不足') if available else '数据不足 / 未知'
+    cases = []
+    for original in BAOTUAN_HISTORICAL_CYCLES:
+        known_at = max(REFERENCE_DATE, day(original['end_date']))
+        if known_at > requested:
+            continue
+        case = deepcopy(original)
+        case.update(known_at=None, visibility_date=known_at, claim_as_of=day(case['end_date']),
+                    knowledge_status='retrospective_visibility_boundary', authority='历史研究观点，未经外部行情核验')
+        case['name'] = case['name'].replace(' (最新)', '').replace('(最新)', '')
+        case['date_range'] = f"{day(case['start_date'])} — {day(case['end_date'])}"
+        cases.append(case)
+    stats = dict(total_zt=None, total_dt=None, max_height=None, highest_stocks=[])
+    trials = [dict(sector='全市场价格持续性候选', stocks=f"{item['name']} ({item['code']})",
+                   status='价格研究候选，非新周期确认', type='待验证',
+                   as_of=latest.get('date'), execution_status='not_qualified')
+              for item in latest.get('top', []) if available]
+    return dict(status='ok', report_date=requested.replace('-', ''), report_date_fmt=requested,
+                data_as_of=research['sources_as_of'], claim_as_of=latest.get('date'), known_at=None,
+                knowledge_status='reconstructed_from_current_cache',
+                authority='价格证据研究，非交易信号', current_stage=stage,
+                stage_badge=stage, stage_color='#6366f1', market_temp_score=None,
+                market_temp_desc='不输出未经计算和校准的主观温度评分', cleansing_score=None,
+                cleansing_desc='价格止跌不等于资金出清完成', tactical_guidance='检查数据时钟、固定篮子与核心失效；量能和可成交性未验证，不升级交易判断。',
+                cycles=cases, current_cycle={}, today_trials=trials, today_discarded=[], today_succession=[],
+                stats=stats, research_report=research)
 
-    latest_dt = '20261012'
-    if zt_df is not None and not zt_df.empty and date_col in zt_df.columns:
-        zt_dates = sorted(zt_df[date_col].astype(str).unique())
-        if zt_dates:
-            latest_dt = zt_dates[-1]
-
-    req_date = _norm_date(report_date) if report_date else latest_dt
-    if len(req_date) != 8:
-        req_date = latest_dt
-
-    res["report_date"] = req_date
-    res["report_date_fmt"] = _fmt_date(req_date)
-
-    if zt_df is not None and not zt_df.empty and date_col in zt_df.columns:
-        zt_sub = zt_df[zt_df[date_col].astype(str) == req_date]
-        res["stats"]["total_zt"] = len(zt_sub)
-        if not zt_sub.empty and height_col in zt_sub.columns:
-            m_h = zt_sub[height_col].max()
-            res["stats"]["max_height"] = int(m_h) if pd.notnull(m_h) else 0
-            high_stk = zt_sub[zt_sub[height_col] == m_h][name_col].tolist()
-            res["stats"]["highest_stocks"] = high_stk
-
-    try:
-        from paths import SENTIMENT_CACHE_FILE
-        if os.path.exists(SENTIMENT_CACHE_FILE):
-            sent_df = pd.read_csv(SENTIMENT_CACHE_FILE, encoding='utf-8-sig')
-            s_date_col = '日期' if '日期' in sent_df.columns else ('date' if 'date' in sent_df.columns else None)
-            if s_date_col:
-                sent_sub = sent_df[sent_df[s_date_col].astype(str).str.replace('-', '') == req_date]
-                if not sent_sub.empty and 'dt' in sent_sub.columns:
-                    res["stats"]["total_dt"] = int(sent_sub.iloc[0].get('dt', 0))
-    except Exception:
-        pass
-
-    # 动态从 PRICE_CACHE 解析该日期的标的收盘价
-    dash_date = f"{req_date[:4]}-{req_date[4:6]}-{req_date[6:]}" if len(req_date) == 8 else req_date
-    dyn_prices: dict[str, float] = {}
-    from paths import PRICE_CACHE
-    if os.path.exists(PRICE_CACHE):
-        try:
-            df_p = pd.read_csv(PRICE_CACHE, dtype=str)
-            sub_p = df_p[df_p['date'] == dash_date]
-            for _, r in sub_p.iterrows():
-                try:
-                    dyn_prices[r['code']] = float(r['close_raw'])
-                except Exception:
-                    pass
-        except Exception:
-            pass
-
-    if req_date >= '20261008':
-        curr = BAOTUAN_HISTORICAL_CYCLES[4]
-        p_ss = dyn_prices.get('sz301190', 49.20)
-        p_xh = dyn_prices.get('sh600825', 13.78)
-        p_sd = dyn_prices.get('sh600241', 12.86)
-        p_qa = dyn_prices.get('sh688137', 137.16)
-        ss_gain = ((p_ss / 20.79) - 1.0) * 100.0 if p_ss else 136.65
-
-        res["current_stage"] = "试错确立 ➔ 抱团极致分化与高位巨震期"
-        res["stage_badge"] = "抱团极致分化 (去伪存真)"
-        res["stage_color"] = "#f59e0b"
-        res["market_temp_score"] = 50
-        res["market_temp_desc"] = "冰火两重天 · 极度分化"
-        res["cleansing_score"] = 98
-        res["cleansing_desc"] = "老周期出清完毕，新抱团分化确立"
-        res["tactical_guidance"] = (
-            f"9.28混沌试错期已结束，盘面完成'去伪存真'大洗牌：善水科技(301190)从试错杀出成为20cm翻倍独立妖王(20.79→{p_ss:.2f}元，+{ss_gain:.1f}%)，"
-            f"新华传媒(600825)顶出10板空间总龙({p_xh:.2f}元)，时代万恒(600241)走出6板后高位巨量分歧({p_sd:.2f}元，换手34%)；而近岸蛋白(688137)等试错弱标因缺乏板块梯队助攻彻底破位淘汰({p_qa:.2f}元，跌-14.5%)。"
-            f"当前大盘科技与权重抽血破位，资金极度抱团于少数妖股。善水科技与时代万恒已处于加速赶顶与天量分歧区，"
-            f"切忌追高接盘，重点观察高位分歧承接，淘汰破位股(如近岸蛋白)坚决止损不抢反抽！"
-        )
-        res["today_trials"] = [
-            {"sector": "化工 (染料/中间体)", "stocks": f"善水科技 (301190 · {p_ss:.2f}元)", "status": f"20cm翻倍妖王 (+{ss_gain:.1f}%)", "type": "独立抱团大龙头"},
-            {"sector": "并购重组 / 传媒", "stocks": f"新华传媒 (600825 · {p_xh:.2f}元)", "status": "10连板空间总龙", "type": "空间天花板突破"},
-            {"sector": "锂电储能", "stocks": f"时代万恒 (600241 · {p_sd:.2f}元)", "status": "6连板天量分歧 (换手34%)", "type": "主升高位分歧"},
-            {"sector": "生物医药", "stocks": f"近岸蛋白 (688137 · {p_qa:.2f}元)", "status": "试错失败破位退潮 (-15%)", "type": "淘汰出清样本"}
-        ]
-        res["today_discarded"] = curr.get("discarded_sectors", [])
-        res["today_succession"] = curr.get("succession_chains", [])
-    elif req_date >= '20260928':
-        curr = BAOTUAN_HISTORICAL_CYCLES[3]
-        res["current_stage"] = "瓦解出清后的新周期混沌试错期"
-        res["stage_badge"] = "混沌试错 (等待转暖)"
-        res["stage_color"] = "#8b5cf6"
-        res["market_temp_score"] = 35
-        res["market_temp_desc"] = "环境较差 / 迷雾期"
-        res["cleansing_score"] = 95
-        res["cleansing_desc"] = "9.28老抱团出清完毕"
-        res["tactical_guidance"] = (
-            "9.28日老抱团出清时，就可以开始试错新周期了。但目前环境太差，什么能走出来依旧看不清。"
-            "准备等市场转暖，资金想好进攻什么再跟随也不迟！至于科技，半个月前已经判死刑了，绝不碰假反弹！"
-        )
-        res["today_trials"] = [
-            {"sector": "锂电储能", "stocks": "时代万恒 (首板)、尚水智能", "status": "试水点火", "type": "新能源分支"},
-            {"sector": "化工 (染料)", "stocks": "善水科技 (首板)", "status": "周期品探路", "type": "独立试错"},
-            {"sector": "生物医药", "stocks": "近岸蛋白", "status": "超跌探路", "type": "底部试错"}
-        ]
-        res["today_discarded"] = curr.get("discarded_sectors", [])
-        res["today_succession"] = curr.get("succession_chains", [])
-    elif req_date >= '20260916':
-        curr = BAOTUAN_HISTORICAL_CYCLES[2]
-        res["current_stage"] = "共振启动 ➔ 主升抱团期"
-        res["stage_badge"] = "趋势共振主升"
-        res["stage_color"] = "#10b981"
-        res["market_temp_score"] = 82
-        res["market_temp_desc"] = "大阳线放量共振"
-        res["cleansing_score"] = 100
-        res["cleansing_desc"] = "老消费农业已全出清"
-        res["tactical_guidance"] = "9.16大阳线放量确立新周期，风格转向投机+趋势共振，锁定电力(闽东电力)与次新装备(沈鼓集团)前排！"
-        res["today_trials"] = curr.get("trial_sectors", [])
-        res["today_discarded"] = curr.get("discarded_sectors", [])
-        res["today_succession"] = curr.get("succession_chains", [])
-    else:
-        curr = BAOTUAN_HISTORICAL_CYCLES[1]
-        res["current_stage"] = "消费农业接力与出清期"
-        res["stage_badge"] = "梯队接力补涨"
-        res["stage_color"] = "#f59e0b"
-        res["market_temp_score"] = 55
-        res["market_temp_desc"] = "局部结构抱团"
-        res["cleansing_score"] = 60
-        res["cleansing_desc"] = "国芳百大接力演进中"
-        res["tactical_guidance"] = "国芳集团断板后龙二百大接力，农业亚盛助攻，注意科技被彻底判死刑，切忌参与任何科技反抽。"
-        res["today_trials"] = curr.get("trial_sectors", [])
-        res["today_discarded"] = curr.get("discarded_sectors", [])
-        res["today_succession"] = curr.get("succession_chains", [])
-
-    res["current_cycle"] = curr
-    return res
 
 def render_baotuan_teaser_html(result: Optional[Dict[str, Any]] = None) -> str:
-    if not result or result.get("status") != "ok":
-        result = build_baotuan_cycle()
+    result = result if result is not None else build_baotuan_cycle()
+    return f'''<section class="baotuan-teaser" style="margin:18px 0;padding:18px;border:1px solid #796bb7;border-radius:10px;background:#172132;color:#e6edf3">
+      <strong>抱团周期演进与新周期试错雷达 · 证据核验版</strong>
+      <p>操盘心法与定性：历史案例不覆盖当日判断；缺价未知，核心可失效，旧团可修复。</p>
+      <p>截止 {_e(result['report_date_fmt'])} · {_e(result['current_stage'])} · 研究观察，不是买卖信号</p>
+      <a href="baotuan/latest.html" style="color:#c9b9ff">进入抱团周期研究 →</a></section>'''
 
-    dt = result.get("report_date_fmt", "")
-    stage = result.get("current_stage", "新周期混沌试错期")
-    badge = result.get("stage_badge", "混沌试错")
-    badge_clr = result.get("stage_color", "#8b5cf6")
-    guidance = result.get("tactical_guidance", "")
-    temp_score = result.get("market_temp_score", 35)
-    temp_desc = result.get("market_temp_desc", "环境较差")
-
-    trials = result.get("today_trials", [])
-    trial_pills = ""
-    for t in trials[:4]:
-        sec = _e(t.get("sector", ""))
-        stk = _e(t.get("stocks", t.get("lead_stocks", "")))
-        trial_pills += f'<span style="display:inline-flex;align-items:center;background:rgba(99,102,241,0.12);border:1px solid rgba(99,102,241,0.25);border-radius:6px;padding:3px 8px;margin-right:6px;font-size:12px;color:#c7d2fe;"><strong>{sec}</strong>&nbsp;({stk})</span>'
-
-    return f'''
-    <div style="margin:20px 0;background:linear-gradient(135deg,#0d1117 0%,#161b22 100%);border:1px solid #30363d;border-left:4px solid {badge_clr};border-radius:12px;padding:16px 20px;box-shadow:0 8px 24px rgba(0,0,0,0.35);font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
-        <div style="display:flex;align-items:center;gap:10px;">
-          <span style="font-size:18px;">🔄</span>
-          <span style="font-size:16px;font-weight:700;color:#f0f6fc;letter-spacing:0.5px;">抱团周期演进与新周期试错雷达</span>
-          <span style="display:inline-block;background:{badge_clr};color:#fff;font-size:11px;font-weight:600;padding:2px 8px;border-radius:12px;">{_e(badge)}</span>
-          <span style="font-size:12px;color:#8b949e;">截至 {dt}</span>
-        </div>
-        <div>
-          <a href="baotuan/latest.html" style="display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#4f46e5,#6366f1);color:#fff;text-decoration:none;font-size:12px;font-weight:600;padding:6px 14px;border-radius:6px;box-shadow:0 2px 8px rgba(79,70,229,0.4);transition:all 0.2s ease;">
-            查看各周期抱团全景谱系与试错池 →
-          </a>
-        </div>
-      </div>
-
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-bottom:12px;">
-        <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:10px 14px;">
-          <div style="font-size:11px;color:#8b949e;margin-bottom:4px;">当前所处周期阶段</div>
-          <div style="font-size:14px;font-weight:600;color:#e6edf3;">{_e(stage)}</div>
-        </div>
-        <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:10px 14px;">
-          <div style="font-size:11px;color:#8b949e;margin-bottom:4px;">试错环境温度</div>
-          <div style="font-size:14px;font-weight:600;color:#f59e0b;">🌡️ {temp_score}分 · {_e(temp_desc)}</div>
-        </div>
-        <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:10px 14px;">
-          <div style="font-size:11px;color:#8b949e;margin-bottom:4px;">老抱团出清状态</div>
-          <div style="font-size:14px;font-weight:600;color:#10b981;">🧹 {result.get("cleansing_desc", "已出清")}</div>
-        </div>
-      </div>
-
-      <div style="background:rgba(239,68,68,0.08);border:1px dashed rgba(239,68,68,0.3);border-radius:8px;padding:10px 14px;margin-bottom:10px;">
-        <div style="display:flex;align-items:flex-start;gap:8px;">
-          <span style="color:#ef4444;font-size:14px;font-weight:700;">🎯 操盘心法与定性:</span>
-          <div style="font-size:13px;color:#fca5a5;line-height:1.5;">{_e(guidance)}</div>
-        </div>
-      </div>
-
-      <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;font-size:12px;color:#8b949e;">
-        <span>🔍 正在抱团/试探的核心先锋:</span>
-        {trial_pills}
-        <span style="color:#f87171;font-weight:600;margin-left:auto;">❌ 科技大票抽血重灾区判死刑 (避坑)</span>
-      </div>
-    </div>
-    '''
 
 def generate_baotuan_html(result: Optional[Dict[str, Any]] = None, is_site_mode: bool = True) -> str:
-    if not result or result.get("status") != "ok":
-        result = build_baotuan_cycle()
+    from crowding_view import generate_crowding_html
 
-    dt = result.get("report_date_fmt", "")
-    stage = result.get("current_stage", "新周期混沌试错期")
-    badge = result.get("stage_badge", "混沌试错")
-    badge_clr = result.get("stage_color", "#8b5cf6")
-    guidance = result.get("tactical_guidance", "")
-    temp_score = result.get("market_temp_score", 35)
-    temp_desc = result.get("market_temp_desc", "环境较差")
-    cycles = result.get("cycles", BAOTUAN_HISTORICAL_CYCLES)
+    result = result if result is not None else build_baotuan_cycle()
+    document = generate_crowding_html(result['research_report'], is_site_mode=is_site_mode)
+    cases = ''.join(f"<details><summary>{_e(case['name'])}</summary>"
+                    f"<p>适用区间：{_e(case['date_range'])} · 回顾显示边界：{_e(case['visibility_date'])}（推定，非真实发布时点）</p>"
+                    f"<p>{_e(case['authority'])}</p><p>{_e(case.get('summary', ''))}</p></details>" for case in result['cycles'])
+    appendix = '<section id="historical-cases"><h2>抱团周期全景演进 · 历史案例库</h2><p class="muted">以下为事后叙事，不参与当日价格判断；不外推固定价格、评分或板块永久失效结论。</p>' + cases + '</section>'
+    return document.replace('</main>', appendix + '</main>', 1)
 
-    cycles_cards_html = ""
-    for idx, c in enumerate(cycles):
-        c_name = _e(c.get("name", ""))
-        c_range = _e(c.get("date_range", ""))
-        c_theme = _e(c.get("theme_name", ""))
-        c_style = _e(c.get("style_desc", ""))
-        c_anchor = _e(c.get("anchor_event", ""))
-        c_sum = _e(c.get("summary", ""))
-        c_takeaway = _e(c.get("takeaway", ""))
-        c_badge = _e(c.get("stage_badge", ""))
-        c_clr = c.get("stage_color", "#6366f1")
-
-        chains_html = ""
-        for ch in c.get("succession_chains", []):
-            ch_track = _e(ch.get("track", ""))
-            nodes_html = ""
-            nodes = ch.get("nodes", [])
-            for n_idx, n in enumerate(nodes):
-                n_name = _e(n.get("name", ""))
-                n_role = _e(n.get("role", ""))
-                n_desc = _e(n.get("desc", ""))
-                arrow = '<div style="color:#6366f1;font-size:18px;margin:0 8px;">➔</div>' if n_idx < len(nodes) - 1 else ''
-                nodes_html += f'''
-                <div style="flex:1;min-width:180px;background:#1e293b;border:1px solid #334155;border-radius:8px;padding:10px 12px;box-shadow:0 4px 12px rgba(0,0,0,0.2);">
-                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-                    <span style="font-weight:700;color:#f8fafc;font-size:14px;">{n_name}</span>
-                    <span style="font-size:11px;color:#cbd5e1;background:rgba(99,102,241,0.2);padding:1px 6px;border-radius:4px;">{n_role}</span>
-                  </div>
-                  <div style="font-size:12px;color:#94a3b8;line-height:1.4;">{n_desc}</div>
-                </div>
-                {arrow}
-                '''
-            chains_html += f'''
-            <div style="margin-bottom:14px;">
-              <div style="font-size:13px;font-weight:600;color:#cbd5e1;margin-bottom:6px;display:flex;align-items:center;gap:6px;">
-                <span style="color:#6366f1;">🔗</span> {ch_track}
-              </div>
-              <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;">
-                {nodes_html}
-              </div>
-            </div>
-            '''
-
-        discarded_html = ""
-        for d in c.get("discarded_sectors", []):
-            d_sec = _e(d.get("sector", ""))
-            d_verdict = _e(d.get("verdict", ""))
-            d_reason = _e(d.get("reason", ""))
-            stks = "".join([f"<li>{_e(s)}</li>" for s in d.get("killed_stocks", [])])
-            discarded_html += f'''
-            <div style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.25);border-radius:8px;padding:12px 16px;margin-top:10px;">
-              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-                <span style="font-size:13px;font-weight:700;color:#fca5a5;">🛑 淘汰/死刑警示: {d_sec}</span>
-                <span style="font-size:11px;background:#ef4444;color:#fff;padding:2px 8px;border-radius:4px;font-weight:600;">{d_verdict}</span>
-              </div>
-              <ul style="margin:4px 0 8px 18px;font-size:12px;color:#cbd5e1;line-height:1.5;">{stks}</ul>
-              <div style="font-size:12px;color:#f87171;line-height:1.4;background:rgba(0,0,0,0.2);padding:6px 10px;border-radius:4px;">
-                <strong>死刑逻辑:</strong> {d_reason}
-              </div>
-            </div>
-            '''
-
-        trial_box_html = ""
-        if c.get("trial_sectors"):
-            t_rows = ""
-            for t in c.get("trial_sectors", []):
-                t_sec = _e(t.get("sector", ""))
-                t_leads = _e(", ".join(t.get("lead_stocks", [])))
-                t_res = _e(t.get("result", ""))
-                t_rows += f'''
-                <tr style="border-bottom:1px solid rgba(255,255,255,0.05);font-size:12px;">
-                  <td style="padding:8px;color:#f1f5f9;font-weight:600;">{t_sec}</td>
-                  <td style="padding:8px;color:#94a3b8;">{t_leads}</td>
-                  <td style="padding:8px;color:#c7d2fe;">{t_res}</td>
-                </tr>
-                '''
-            trial_box_html = f'''
-            <div style="margin-top:12px;">
-              <div style="font-size:13px;font-weight:600;color:#cbd5e1;margin-bottom:6px;">🧪 试错分支与演进结果</div>
-              <table style="width:100%;border-collapse:collapse;background:#0f172a;border-radius:6px;overflow:hidden;">
-                <thead>
-                  <tr style="background:#1e293b;color:#94a3b8;font-size:11px;text-align:left;">
-                    <th style="padding:8px;">试错板块</th>
-                    <th style="padding:8px;">探路先锋标的</th>
-                    <th style="padding:8px;">最终演进演化</th>
-                  </tr>
-                </thead>
-                <tbody>{t_rows}</tbody>
-              </table>
-            </div>
-            '''
-
-        cycles_cards_html += f'''
-        <div id="{c.get('id')}" style="background:#0f172a;border:1px solid #1e293b;border-left:4px solid {c_clr};border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 10px 30px rgba(0,0,0,0.4);">
-          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
-            <div>
-              <span style="font-size:18px;font-weight:700;color:#f8fafc;">{c_name}</span>
-              <span style="font-size:13px;color:#64748b;margin-left:8px;">({c_range})</span>
-            </div>
-            <div>
-              <span style="background:{c_clr};color:#fff;font-size:12px;font-weight:600;padding:3px 10px;border-radius:20px;">{c_badge}</span>
-            </div>
-          </div>
-
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;background:#1e293b;padding:12px 16px;border-radius:8px;margin-bottom:14px;font-size:13px;">
-            <div><span style="color:#64748b;">抱团主线:</span> <strong style="color:#38bdf8;">{c_theme}</strong></div>
-            <div><span style="color:#64748b;">风格特征:</span> <strong style="color:#e2e8f0;">{c_style}</strong></div>
-            <div style="grid-column:1/-1;"><span style="color:#64748b;">核心锚点事件:</span> <strong style="color:#f59e0b;">{c_anchor}</strong></div>
-          </div>
-
-          <div style="font-size:13px;color:#cbd5e1;line-height:1.6;margin-bottom:16px;">
-            {c_sum}
-          </div>
-
-          {chains_html}
-          {trial_box_html}
-          {discarded_html}
-
-          <div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:8px;padding:10px 14px;margin-top:14px;">
-            <div style="font-size:12px;color:#a5b4fc;line-height:1.5;">
-              <strong style="color:#6366f1;">💡 周期规律总结:</strong> {c_takeaway}
-            </div>
-          </div>
-        </div>
-        '''
-
-    home_link = '../index.html' if is_site_mode else 'javascript:history.back()'
-
-    html = f'''<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>抱团周期演进与新周期试错全景分析 | 量化主线追踪</title>
-  <style>
-    * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-    body {{
-      background-color: #0b0f19;
-      color: #e2e8f0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      line-height: 1.5;
-      padding: 24px;
-    }}
-    .container {{
-      max-width: 1200px;
-      margin: 0 auto;
-    }}
-    a {{ color: #6366f1; text-decoration: none; }}
-    a:hover {{ text-decoration: underline; }}
-    .header {{
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 16px;
-      padding-bottom: 20px;
-      border-bottom: 1px solid #1e293b;
-      margin-bottom: 24px;
-    }}
-    .header-title {{
-      font-size: 24px;
-      font-weight: 800;
-      color: #f8fafc;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      letter-spacing: -0.5px;
-    }}
-    .back-btn {{
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      background: #1e293b;
-      color: #cbd5e1;
-      padding: 8px 16px;
-      border-radius: 8px;
-      font-size: 13px;
-      font-weight: 600;
-      border: 1px solid #334155;
-      transition: all 0.2s ease;
-    }}
-    .back-btn:hover {{
-      background: #334155;
-      color: #fff;
-      text-decoration: none;
-    }}
-    .hero-card {{
-      background: linear-gradient(135deg, #131b2e 0%, #1e1b4b 100%);
-      border: 1px solid #3730a3;
-      border-radius: 16px;
-      padding: 24px;
-      margin-bottom: 30px;
-      box-shadow: 0 12px 36px rgba(0,0,0,0.5);
-    }}
-    .timeline-bar {{
-      display: flex;
-      align-items: center;
-      overflow-x: auto;
-      padding: 16px 0;
-      margin: 20px 0;
-      border-top: 1px dashed #334155;
-      border-bottom: 1px dashed #334155;
-      gap: 12px;
-    }}
-    .time-node {{
-      background: #0f172a;
-      border: 1px solid #334155;
-      border-radius: 8px;
-      padding: 10px 14px;
-      min-width: 170px;
-      flex-shrink: 0;
-      text-align: center;
-    }}
-    .time-node.active {{
-      border-color: #f59e0b;
-      background: rgba(245,158,11,0.15);
-      box-shadow: 0 0 12px rgba(245,158,11,0.3);
-    }}
-    .time-node .t-date {{ font-size: 11px; color: #94a3b8; margin-bottom: 2px; }}
-    .time-node .t-name {{ font-size: 13px; font-weight: 700; color: #f8fafc; }}
-    .time-arrow {{ color: #64748b; font-size: 16px; flex-shrink: 0; }}
-    .nav-tabs {{
-      display: flex;
-      gap: 8px;
-      overflow-x: auto;
-      margin-bottom: 24px;
-      padding-bottom: 8px;
-    }}
-    .tab-btn {{
-      background: #1e293b;
-      color: #94a3b8;
-      border: 1px solid #334155;
-      padding: 8px 16px;
-      border-radius: 8px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      white-space: nowrap;
-      transition: all 0.2s ease;
-    }}
-    .tab-btn:hover, .tab-btn.active {{
-      background: #4f46e5;
-      color: #fff;
-      border-color: #4f46e5;
-      text-decoration: none;
-    }}
-    .quote-box {{
-      background: rgba(245,158,11,0.08);
-      border-left: 4px solid #f59e0b;
-      padding: 14px 18px;
-      border-radius: 0 8px 8px 0;
-      margin: 16px 0;
-      font-size: 14px;
-      color: #fde68a;
-      line-height: 1.6;
-    }}
-    .card-grid {{
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      gap: 20px;
-      margin-bottom: 30px;
-    }}
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <div class="header-title">
-        <span>🔄</span>
-        <span>抱团周期全景演进 · 瓦解出清与新周期试错分析</span>
-      </div>
-      <div>
-        <a class="back-btn" href="{home_link}">← 返回主复盘报告</a>
-      </div>
-    </div>
-
-    <!-- 顶层态势全景 Hero Card -->
-    <div class="hero-card">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
-        <div style="display:flex;align-items:center;gap:10px;">
-          <span style="font-size:20px;">🛡️</span>
-          <span style="font-size:18px;font-weight:700;color:#f8fafc;">最新盘面抱团状态诊断 (截至 {dt})</span>
-          <span style="background:{badge_clr};color:#fff;font-size:12px;font-weight:600;padding:3px 10px;border-radius:12px;">{_e(badge)}</span>
-        </div>
-        <div style="font-size:12px;color:#94a3b8;">
-          涨停家数: <strong style="color:#ef4444;">{result['stats']['total_zt']}</strong> 家 &nbsp;|&nbsp;
-          跌停家数: <strong style="color:#10b981;">{result['stats']['total_dt']}</strong> 家 &nbsp;|&nbsp;
-          空间高度: <strong style="color:#f59e0b;">{result['stats']['max_height']}板</strong>
-        </div>
-      </div>
-
-      <div class="quote-box">
-        <strong>📜 核心战法心法 (实战复盘精髓):</strong><br>
-        “9.28日老抱团出清时，就可以开始试错新周期了。但目前环境太差，什么能走出来依旧看不清。准备等市场转暖，资金想好进攻什么再跟随也不迟！节后实盘检验表明：善水科技从9.28试错杀出成为20cm翻倍独立妖王；而近岸蛋白无梯队助攻彻底破位淘汰。至于科技，半个月前已经判死刑了，绝不碰假反弹！”
-      </div>
-
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px;margin-top:20px;">
-        <div style="background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:14px;">
-          <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">当前所处周期</div>
-          <div style="font-size:16px;font-weight:700;color:#f1f5f9;">{_e(stage)}</div>
-        </div>
-        <div style="background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:14px;">
-          <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">试错环境评分</div>
-          <div style="font-size:16px;font-weight:700;color:#f59e0b;">🌡️ {temp_score}分 · {_e(temp_desc)}</div>
-        </div>
-        <div style="background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:14px;">
-          <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">抱团分化与出清状态</div>
-          <div style="font-size:16px;font-weight:700;color:#10b981;">🧹 {result.get("cleansing_desc")}</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 演化时间轴交互 Bar -->
-    <div style="margin-bottom:24px;">
-      <div style="font-size:15px;font-weight:700;color:#f8fafc;margin-bottom:8px;display:flex;align-items:center;gap:8px;">
-        <span>⏳</span> <span>周期演进全景时间线 (从老出清到新试错再到成妖分化)</span>
-      </div>
-      <div class="timeline-bar">
-        <div class="time-node">
-          <div class="t-date">8.15 - 8.30</div>
-          <div class="t-name">老医药出清退潮</div>
-          <div style="font-size:10px;color:#94a3b8;">深中华断板/神奇跌停</div>
-        </div>
-        <div class="time-arrow">➔</div>
-        <div class="time-node">
-          <div class="t-date">8.31 - 9.04</div>
-          <div class="t-name">国芳集团 5板领跑</div>
-          <div style="font-size:10px;color:#38bdf8;">消费农业双抱团</div>
-        </div>
-        <div class="time-arrow">➔</div>
-        <div class="time-node">
-          <div class="t-date">9.04 断板</div>
-          <div class="t-name">国芳断板 ➔ 百大接力</div>
-          <div style="font-size:10px;color:#f59e0b;">龙二接力 (5板)</div>
-        </div>
-        <div class="time-arrow">➔</div>
-        <div class="time-node">
-          <div class="t-date">9.10 - 9.15</div>
-          <div class="t-name">百大断板 ➔ 桂林补涨</div>
-          <div style="font-size:10px;color:#e2e8f0;">低位补涨逐级递减</div>
-        </div>
-        <div class="time-arrow">➔</div>
-        <div class="time-node">
-          <div class="t-date">9.15 出清</div>
-          <div class="t-name">金健国芳彻底出清</div>
-          <div style="font-size:10px;color:#ef4444;">老消费周期闭环</div>
-        </div>
-        <div class="time-arrow">➔</div>
-        <div class="time-node">
-          <div class="t-date">9.16 大阳线</div>
-          <div class="t-name">闽东电力 6板引爆</div>
-          <div style="font-size:10px;color:#10b981;">放量共振 · 投机转趋势</div>
-        </div>
-        <div class="time-arrow">➔</div>
-        <div class="time-node">
-          <div class="t-date">9.28 试错</div>
-          <div class="t-name">老抱团出清 ➔ 混沌试水</div>
-          <div style="font-size:10px;color:#c084fc;">锂电/化工/医药多点试探</div>
-        </div>
-        <div class="time-arrow">➔</div>
-        <div class="time-node active">
-          <div class="t-date">10.08 - 至今</div>
-          <div class="t-name">去伪存真 ➔ 善水成妖</div>
-          <div style="font-size:10px;color:#f59e0b;">善水翻倍+136% | 近岸淘汰破位</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 导航切换 Tabs -->
-    <div class="nav-tabs">
-      <a class="tab-btn active" href="#cycle_october_bifurcation">🔥 最新: 节后去伪存真 · 善水科技成妖与极致分化</a>
-      <a class="tab-btn" href="#cycle_current_chaos_trial">🧪 9.28老抱团出清与混沌试错</a>
-      <a class="tab-btn" href="#cycle_power_subnew_trend">⚡ 9.16大阳线趋势共振周期</a>
-      <a class="tab-btn" href="#cycle_consumer_agri">🛒 消费农业国芳百大接力周期</a>
-      <a class="tab-btn" href="#cycle_medicine_collapse">💀 周期零: 医药老抱团瓦解出清</a>
-    </div>
-
-    <!-- 核心板块 0: 节后去伪存真实战复盘 (善水科技 vs 近岸蛋白) -->
-    <div id="baotuan_focus_duel" style="background:linear-gradient(135deg, #111827 0%, #171f30 100%);border:1px solid #3b82f6;border-radius:14px;padding:22px;margin-bottom:28px;box-shadow:0 12px 32px rgba(0,0,0,0.45);">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
-        <div style="font-size:18px;font-weight:800;color:#f8fafc;display:flex;align-items:center;gap:10px;">
-          <span>⚔️</span> <span>9.28试错先锋实战追踪：善水科技 (翻倍成妖) vs 近岸蛋白 (淘汰破位) 深度量化对决</span>
-        </div>
-        <span style="background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;font-size:12px;font-weight:700;padding:4px 12px;border-radius:6px;">
-          抱团生命周期 · 真实盘面检验
-        </span>
-      </div>
-
-      <div style="font-size:13px;color:#94a3b8;line-height:1.6;margin-bottom:18px;">
-        在 9.28 日老抱团出清时，资金试水点火了三个主要方向（锂电、化工染料、医药）。经历国庆假期舆情发酵与节后（10.08～10.13）实盘检验，试错方向呈现极度冰火两重天的生死大分化：<strong>善水科技穿越分歧走出翻倍妖王行情，而近岸蛋白因缺乏梯队助攻彻底破位淘汰！</strong>
-      </div>
-
-      <!-- 对决卡片网格 -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(360px, 1fr));gap:18px;margin-bottom:20px;">
-        <!-- 善水科技卡片 -->
-        <div style="background:#0f172a;border:2px solid #10b981;border-radius:12px;padding:18px;position:relative;overflow:hidden;">
-          <div style="position:absolute;top:0;right:0;background:#10b981;color:#fff;font-size:11px;font-weight:700;padding:3px 12px;border-bottom-left-radius:8px;">
-            👑 独立抱团妖王 · 晋级成功
-          </div>
-          <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px;">
-            <span style="font-size:20px;font-weight:800;color:#f8fafc;">善水科技</span>
-            <span style="font-size:13px;color:#94a3b8;">sz301190 · 创业板 20cm</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:16px;background:rgba(16,185,129,0.08);border-radius:8px;padding:10px 14px;margin-bottom:12px;">
-            <div>
-              <div style="font-size:11px;color:#94a3b8;">现价 (10.13)</div>
-              <div style="font-size:20px;font-weight:800;color:#34d399;">49.20 元</div>
-            </div>
-            <div>
-              <div style="font-size:11px;color:#94a3b8;">9.28启动价</div>
-              <div style="font-size:16px;font-weight:700;color:#cbd5e1;">20.79 元</div>
-            </div>
-            <div>
-              <div style="font-size:11px;color:#94a3b8;">区间最大涨幅</div>
-              <div style="font-size:18px;font-weight:800;color:#ef4444;">+136.65% 🚀</div>
-            </div>
-          </div>
-          <div style="font-size:12px;color:#cbd5e1;line-height:1.6;margin-bottom:12px;">
-            <div style="margin-bottom:4px;"><strong style="color:#6ee7b7;">演进路径:</strong> 9.28首板(24.95) ➔ 9.29-9.30三连板(35.93) ➔ 节后加速(48.45) ➔ 10.13冲高49.90元。</div>
-            <div style="margin-bottom:4px;"><strong style="color:#6ee7b7;">成妖密码:</strong> ① 染料及中间体(还原物/6-硝基)持续涨价催化；② 科技大票抽血重创时，游资退守小市值20cm抱团；③ 具备极佳辨识度，形成资金信仰。</div>
-            <div><strong style="color:#f59e0b;">当下特征与预案:</strong> 逼近50元大关，换手11.20%，分时振幅10.11%，多空高位激烈博弈。<strong>防守位设在45.50元(5日线)</strong>。底仓宜逢高分批兑现，切忌追高接盘！</div>
-          </div>
-        </div>
-
-        <!-- 近岸蛋白卡片 -->
-        <div style="background:#0f172a;border:2px solid #ef4444;border-radius:12px;padding:18px;position:relative;overflow:hidden;">
-          <div style="position:absolute;top:0;right:0;background:#ef4444;color:#fff;font-size:11px;font-weight:700;padding:3px 12px;border-bottom-left-radius:8px;">
-            ❌ 试错失败 · 破位出清
-          </div>
-          <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px;">
-            <span style="font-size:20px;font-weight:800;color:#f8fafc;">近岸蛋白</span>
-            <span style="font-size:13px;color:#94a3b8;">sh688137 · 科创板 20cm</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:16px;background:rgba(239,68,68,0.08);border-radius:8px;padding:10px 14px;margin-bottom:12px;">
-            <div>
-              <div style="font-size:11px;color:#94a3b8;">现价 (10.13)</div>
-              <div style="font-size:20px;font-weight:800;color:#f87171;">137.16 元</div>
-            </div>
-            <div>
-              <div style="font-size:11px;color:#94a3b8;">节前高点</div>
-              <div style="font-size:16px;font-weight:700;color:#cbd5e1;">160.39 元</div>
-            </div>
-            <div>
-              <div style="font-size:11px;color:#94a3b8;">节后高位回撤</div>
-              <div style="font-size:18px;font-weight:800;color:#ef4444;">-14.48% 📉</div>
-            </div>
-          </div>
-          <div style="font-size:12px;color:#cbd5e1;line-height:1.6;margin-bottom:12px;">
-            <div style="margin-bottom:4px;"><strong style="color:#fca5a5;">演进路径:</strong> 9.28超跌试探(128.08) ➔ 9.30冲高(160.39未封板) ➔ 节后单边跌破5日/10日线 ➔ 10.13跌-6.67%创节后新低。</div>
-            <div style="margin-bottom:4px;"><strong style="color:#fca5a5;">淘汰死因:</strong> ① 医药整体退潮(易明医药、津药药业跌停)，无板块梯队共振；② 科创板门槛高缺乏游资流动性接力；③ 资金去弱留强，冲高未板即遭无情弃用。</div>
-            <div><strong style="color:#f87171;">技术定性与预案:</strong> 处于典型破位阴跌通道，下方考验9.28起涨支撑128元。<strong>操盘铁律：试错失败坚决离场，破位绝不抄底！</strong></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 盘面全景抱团格局快照 -->
-      <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:14px;">
-        <div style="font-size:13px;font-weight:700;color:#f1f5f9;margin-bottom:8px;">🌐 同期全市场抱团生态横向对比快照 (截至 10.13 收盘)</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:10px;font-size:12px;">
-          <div style="background:#1e293b;padding:8px 12px;border-radius:6px;border-left:3px solid #ef4444;">
-            <div style="color:#94a3b8;">空间总龙 (10连板)</div>
-            <div style="font-weight:700;color:#f8fafc;">新华传媒 (600825)</div>
-            <div style="color:#ef4444;margin-top:2px;">并购重组+文化，顶格打开全市场高度</div>
-          </div>
-          <div style="background:#1e293b;padding:8px 12px;border-radius:6px;border-left:3px solid #f59e0b;">
-            <div style="color:#94a3b8;">换手高标 (6连板巨震)</div>
-            <div style="font-weight:700;color:#f8fafc;">时代万恒 (600241)</div>
-            <div style="color:#f59e0b;margin-top:2px;">锂电探路转主升，换手33.94%高位剧震</div>
-          </div>
-          <div style="background:#1e293b;padding:8px 12px;border-radius:6px;border-left:3px solid #3b82f6;">
-            <div style="color:#94a3b8;">消费接力 (6连板放量)</div>
-            <div style="font-weight:700;color:#f8fafc;">九阳股份 (002242)</div>
-            <div style="color:#93c5fd;margin-top:2px;">承接分歧流动性，10.13放量冲高+6.19%</div>
-          </div>
-          <div style="background:#1e293b;padding:8px 12px;border-radius:6px;border-left:3px solid #dc2626;">
-            <div style="color:#94a3b8;">核按钮警示 (极度风险)</div>
-            <div style="font-weight:700;color:#fca5a5;">襄阳轴承 / 园林股份</div>
-            <div style="color:#f87171;margin-top:2px;">跌停核按钮，中位跟风股惨烈通杀出清</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 核心板块 1: 9.28 瓦解后新周期试错雷达 -->
-    <div style="background:#111827;border:1px solid #1f2937;border-radius:12px;padding:20px;margin-bottom:28px;">
-      <div style="font-size:16px;font-weight:700;color:#f8fafc;margin-bottom:12px;display:flex;align-items:center;gap:8px;">
-        <span>🧪</span> <span>9.28 瓦解出清后的新周期试错方向全景矩阵</span>
-      </div>
-      <div style="font-size:13px;color:#94a3b8;margin-bottom:16px;line-height:1.5;">
-        当老抱团彻底出清时，资金流动性释放，最敏感的一批资金会在当日发动首板试探。以下为 9.28 日真实盘面多点试水的核心探路标的：
-      </div>
-
-      <div class="card-grid">
-        <div style="background:#1f2937;border:1px solid #374151;border-radius:10px;padding:16px;">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-            <span style="font-size:14px;font-weight:700;color:#38bdf8;">🔋 锂电储能分支</span>
-            <span style="background:rgba(56,189,248,0.2);color:#38bdf8;font-size:11px;padding:2px 8px;border-radius:4px;">首板探路</span>
-          </div>
-          <div style="font-size:13px;color:#f1f5f9;margin-bottom:6px;"><strong>探路先锋:</strong> 时代万恒 (600241)、尚水智能 (301513)</div>
-          <div style="font-size:12px;color:#94a3b8;line-height:1.5;">
-            特征: 时代万恒打出首板，尚水智能盘中脉冲。尝试以超跌新能源赛道发起试错，后续晋级为6连板高标。
-          </div>
-        </div>
-
-        <div style="background:#1f2937;border:1px solid #374151;border-radius:10px;padding:16px;">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-            <span style="font-size:14px;font-weight:700;color:#a855f7;">🧪 化工 (染料) 分支</span>
-            <span style="background:rgba(168,85,247,0.2);color:#c084fc;font-size:11px;padding:2px 8px;border-radius:4px;">独立试错</span>
-          </div>
-          <div style="font-size:13px;color:#f1f5f9;margin-bottom:6px;"><strong>探路先锋:</strong> 善水科技 (301190)</div>
-          <div style="font-size:12px;color:#94a3b8;line-height:1.5;">
-            特征: 染料及精细化工原料题材，创业板 20cm 试水涨停。后续穿越大盘分歧，一路飙升翻倍成为创业板第一妖王！
-          </div>
-        </div>
-
-        <div style="background:#1f2937;border:1px solid #374151;border-radius:10px;padding:16px;">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-            <span style="font-size:14px;font-weight:700;color:#10b981;">💊 生物医药分支</span>
-            <span style="background:rgba(16,185,129,0.2);color:#34d399;font-size:11px;padding:2px 8px;border-radius:4px;">底部试水</span>
-          </div>
-          <div style="font-size:13px;color:#f1f5f9;margin-bottom:6px;"><strong>探路先锋:</strong> 近岸蛋白 (688137)</div>
-          <div style="font-size:12px;color:#94a3b8;line-height:1.5;">
-            特征: 科创板超跌创新药原料试探，属于超跌资金的防御性试水。节后缺乏梯队共振，最终试错失败破位出清。
-          </div>
-        </div>
-      </div>
-
-      <!-- 试错环境判断总结 -->
-      <div style="background:rgba(239,68,68,0.08);border:1px dashed #ef4444;border-radius:8px;padding:14px;display:flex;align-items:flex-start;gap:12px;">
-        <span style="font-size:24px;">⚠️</span>
-        <div>
-          <div style="font-size:14px;font-weight:700;color:#fca5a5;margin-bottom:4px;">为什么当前不可重仓参与试错？</div>
-          <div style="font-size:13px;color:#cbd5e1;line-height:1.6;">
-            “目前环境太差，什么能走出来依旧看不清。准备等市场转暖，资金想好进攻什么再跟随也不迟。”<br>
-            量化逻辑证明：在试错混沌期，首板晋级率不足 15%，资金处于彼此互道珍重的试水摸奖状态。只有当某一个方向<strong>打破连板高度压制</strong>或<strong>伴随大盘大阳线共振</strong>时，才是右侧胜率最高的确定性跟随节点！
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 核心板块 2: 淘汰板块判死刑专题 (避坑雷达) -->
-    <div style="background:#111827;border:1px solid #7f1d1d;border-radius:12px;padding:20px;margin-bottom:28px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
-        <div style="font-size:16px;font-weight:700;color:#f87171;display:flex;align-items:center;gap:8px;">
-          <span>❌</span> <span>淘汰与判死刑板块复盘：科技类为何画大红叉？</span>
-        </div>
-        <span style="background:#dc2626;color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:4px;">
-          死刑黑名单 · 严防诱多
-        </span>
-      </div>
-
-      <div style="font-size:13px;color:#cbd5e1;line-height:1.6;margin-bottom:14px;">
-        在 8.31～9.12 的周期演进中，资金在科技类（AI应用、算力液冷、PCB、CPO芯片）频频尝试反抽，但手稿中明确画出了<strong>大红叉</strong>并批注：<br>
-        <span style="color:#f87171;font-weight:700;font-size:14px;">“至于科技，半个月前已经判死刑了。。。”</span>
-      </div>
-
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;font-size:12px;">
-        <div style="background:rgba(0,0,0,0.3);border:1px solid #374151;border-radius:8px;padding:12px;">
-          <div style="color:#ef4444;font-weight:700;margin-bottom:4px;">8.31 AI应用分支 (淘汰)</div>
-          <div style="color:#cbd5e1;">代表票: 龙版传媒、芒果超媒</div>
-          <div style="color:#94a3b8;margin-top:4px;">脉冲一日游，缺乏资金合力，高位套牢盘沉重。</div>
-        </div>
-        <div style="background:rgba(0,0,0,0.3);border:1px solid #374151;border-radius:8px;padding:12px;">
-          <div style="color:#ef4444;font-weight:700;margin-bottom:4px;">8.31 算力液冷分支 (淘汰)</div>
-          <div style="color:#cbd5e1;">代表票: 海鸥股份 ➔ 集泰股份，康盛股份 ➔ 远东股份</div>
-          <div style="color:#94a3b8;margin-top:4px;">中军破位，个股冲高均遭遇核按钮压制。</div>
-        </div>
-        <div style="background:rgba(0,0,0,0.3);border:1px solid #374151;border-radius:8px;padding:12px;">
-          <div style="color:#ef4444;font-weight:700;margin-bottom:4px;">9.7-9.12 PCB与芯片 (淘汰)</div>
-          <div style="color:#cbd5e1;">代表票: 超声电子、崇达技术、风华高科</div>
-          <div style="color:#94a3b8;margin-top:4px;">属于大周期下行中的超跌反抽，反弹即卖点，伸手必套。</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 历史各周期详细分析档案 -->
-    <div style="margin-bottom:20px;">
-      <div style="font-size:18px;font-weight:800;color:#f8fafc;margin-bottom:16px;display:flex;align-items:center;gap:8px;">
-        <span>📚</span> <span>各抱团周期深度解构档案 (点击对应锚点查阅)</span>
-      </div>
-      {cycles_cards_html}
-    </div>
-
-    <!-- 底部版权与免责声明 -->
-    <div style="text-align:center;padding:30px 0;border-top:1px solid #1e293b;font-size:12px;color:#64748b;">
-      量化主线追踪系统 · 抱团周期与新周期试错分析专项研究 · 基于真实量化盘面与游资战法实证
-    </div>
-  </div>
-</body>
-</html>
-'''
-    return html
 
 def export_baotuan_standalone_reports(
     report_date: Optional[str] = None,
@@ -1149,12 +401,16 @@ def export_baotuan_standalone_reports(
     site_dir: Optional[str] = None,
     baotuan_data: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, str]:
+    from crowding_view import archive_candidate_snapshots, archive_tracking_snapshots, archive_replay_snapshots, write_crowding_latest
+
     out_dir = output_dir or OUTPUT_DIR
     st_dir = site_dir or SITE_DIR
     os.makedirs(out_dir, exist_ok=True)
 
     if baotuan_data is None:
         baotuan_data = build_baotuan_cycle(report_date)
+    elif report_date and _fmt_date(report_date) != baotuan_data['report_date_fmt']:
+        raise ValueError('导出请求日与抱团研究报告不一致。')
 
     dt_str = baotuan_data.get("report_date", "")
     dt_fmt = baotuan_data.get("report_date_fmt", "")
@@ -1170,17 +426,22 @@ def export_baotuan_standalone_reports(
     os.makedirs(baotuan_site_dir, exist_ok=True)
 
     site_latest = os.path.join(baotuan_site_dir, "latest.html")
-    with open(site_latest, "w", encoding="utf-8") as f:
-        f.write(site_html)
+    write_crowding_latest(Path(site_latest), site_html, dt_fmt)
 
     site_dated = os.path.join(baotuan_site_dir, f"{dt_fmt}.html")
     with open(site_dated, "w", encoding="utf-8") as f:
         f.write(site_html)
+    snapshot_dir = archive_candidate_snapshots(baotuan_data['research_report'], out_dir)
+    tracking_dir = archive_tracking_snapshots(baotuan_data['research_report'], out_dir)
+    replay_dir = archive_replay_snapshots(baotuan_data['research_report'], out_dir)
 
     return {
         "local_report": local_path,
         "site_latest": site_latest,
         "site_dated": site_dated,
+        "candidate_snapshots": str(snapshot_dir.resolve()),
+        "tracking_snapshots": str(tracking_dir.resolve()),
+        "replay_snapshots": str(replay_dir.resolve()),
         "report_date": dt_str
     }
 

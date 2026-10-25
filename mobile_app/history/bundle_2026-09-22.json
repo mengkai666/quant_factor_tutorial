@@ -1,0 +1,208 @@
+{
+  "meta": {
+    "version": "1.2.0",
+    "updated_at": "2026-09-22 15:30:00",
+    "date": "2026-09-22",
+    "sources": [
+      "量化投研归档",
+      "开盘啦",
+      "财联社"
+    ],
+    "is_history": true
+  },
+  "tab_mood": {
+    "degree": 40,
+    "status_text": "偏冷 · 防守",
+    "color_tag": "blue",
+    "turnover": "1.85万亿",
+    "turnover_change": "",
+    "up_count": 2283,
+    "down_count": 2935,
+    "zt_count": 163,
+    "dt_count": 3,
+    "broken_ratio": 1.8,
+    "yesterday_zt_perf": -1.5,
+    "tianti_stocks": [
+      {
+        "name": "华瓷股份",
+        "symbol": "",
+        "height": 6,
+        "plate_name": "全市场空间天花板",
+        "first_time": "09:30"
+      },
+      {
+        "name": "内蒙新华",
+        "symbol": "",
+        "height": 5,
+        "plate_name": "中位换手推进",
+        "first_time": "09:30"
+      },
+      {
+        "name": "南华生物",
+        "symbol": "",
+        "height": 4,
+        "plate_name": "中位换手推进",
+        "first_time": "09:30"
+      },
+      {
+        "name": "新华文轩",
+        "symbol": "",
+        "height": 3,
+        "plate_name": "双子星同身位PK (淘汰率 75%)",
+        "first_time": "09:30"
+      },
+      {
+        "name": "博通集成",
+        "symbol": "",
+        "height": 3,
+        "plate_name": "双子星同身位PK (淘汰率 75%)",
+        "first_time": "09:30"
+      },
+      {
+        "name": "大亚圣象",
+        "symbol": "",
+        "height": 3,
+        "plate_name": "双子星同身位PK (淘汰率 75%)",
+        "first_time": "09:30"
+      },
+      {
+        "name": "三羊马",
+        "symbol": "",
+        "height": 3,
+        "plate_name": "双子星同身位PK (淘汰率 75%)",
+        "first_time": "09:30"
+      },
+      {
+        "name": "华丽家族",
+        "symbol": "",
+        "height": 2,
+        "plate_name": "低位承接与晋级活口 (同身位竞争)",
+        "first_time": "09:30"
+      },
+      {
+        "name": "哈药股份",
+        "symbol": "",
+        "height": 2,
+        "plate_name": "低位承接与晋级活口 (同身位竞争)",
+        "first_time": "09:30"
+      },
+      {
+        "name": "百花医药",
+        "symbol": "",
+        "height": 2,
+        "plate_name": "低位承接与晋级活口 (同身位竞争)",
+        "first_time": "09:30"
+      },
+      {
+        "name": "华远控股",
+        "symbol": "",
+        "height": 2,
+        "plate_name": "低位承接与晋级活口 (同身位竞争)",
+        "first_time": "09:30"
+      }
+    ],
+    "distribution_bins": {
+      "-10%": 2,
+      "-7%": 120,
+      "-5%": 350,
+      "-2%": 1200,
+      "0%": 600,
+      "+2%": 900,
+      "+5%": 400,
+      "+7%": 180,
+      "+10%": 163
+    }
+  },
+  "tab_crowding": {
+    "mainline_desc": "2026-09-22 市场主线与题材梯队",
+    "mainlines": [
+      {
+        "title": "全市场空间天花板",
+        "hot": 45,
+        "desc": "空间龙头带领题材展开接力，全天共封板 163 只。"
+      }
+    ],
+    "tuyeres": [],
+    "fund_heat": [],
+    "local_cycles": []
+  },
+  "tab_focus": [
+    {
+      "name": "南威软件",
+      "code": "sh603636",
+      "sector": "attack",
+      "pool_type": "【铁律 3 : 双子星卡位生死律】",
+      "entry_rule": "满足观察条件后进入确认名单：首次回封且同题材至少 2 只保持红盘",
+      "defense_rule": "跌破昨日收盘且题材无跟随",
+      "status": "yellow",
+      "is_custom": false
+    },
+    {
+      "name": "华丽家族",
+      "code": "sh600503",
+      "sector": "attack",
+      "pool_type": "【铁律 3 : 双子星卡位生死律】",
+      "entry_rule": "满足观察条件后进入确认名单：首次回封且同题材至少 2 只保持红盘",
+      "defense_rule": "跌破昨日收盘且题材无跟随",
+      "status": "yellow",
+      "is_custom": false
+    },
+    {
+      "name": "哈药股份",
+      "code": "sh600664",
+      "sector": "attack",
+      "pool_type": "【铁律 3 : 双子星卡位生死律】",
+      "entry_rule": "满足观察条件后进入确认名单：首次回封且同题材至少 2 只保持红盘",
+      "defense_rule": "跌破昨日收盘且题材无跟随",
+      "status": "yellow",
+      "is_custom": false
+    },
+    {
+      "name": "百花医药",
+      "code": "sh600721",
+      "sector": "attack",
+      "pool_type": "【铁律 3 : 双子星卡位生死律】",
+      "entry_rule": "满足观察条件后进入确认名单：首次回封且同题材至少 2 只保持红盘",
+      "defense_rule": "跌破昨日收盘且题材无跟随",
+      "status": "yellow",
+      "is_custom": false
+    },
+    {
+      "name": "华远控股",
+      "code": "sh600743",
+      "sector": "attack",
+      "pool_type": "【铁律 3 : 双子星卡位生死律】",
+      "entry_rule": "满足观察条件后进入确认名单：首次回封且同题材至少 2 只保持红盘",
+      "defense_rule": "跌破昨日收盘且题材无跟随",
+      "status": "yellow",
+      "is_custom": false
+    },
+    {
+      "name": "新华传媒",
+      "code": "sh600825",
+      "sector": "attack",
+      "pool_type": "【铁律 3 : 双子星卡位生死律】",
+      "entry_rule": "满足观察条件后进入确认名单：首次回封且同题材至少 2 只保持红盘",
+      "defense_rule": "跌破昨日收盘且题材无跟随",
+      "status": "yellow",
+      "is_custom": false
+    }
+  ],
+  "tab_strategy": {
+    "title": "2026-09-22 实战推演与交易预案",
+    "action_slogan": "分歧震荡低吸",
+    "recommended_position": "0 ~ 2 成轻仓",
+    "is_melt": false,
+    "melt_text": "",
+    "priority_matrix": [],
+    "checklist": [],
+    "avoid_list": [],
+    "scenarios": [],
+    "rules": [
+      "大盘情绪读数 40（偏冷 · 防守），涨跌家数比 2283:2935。",
+      "连板空间高度锚定在 6板，全天涨停 163 家，跌停 3 家。",
+      "严格恪守盘面铁律与仓位纪律，弱势期宁可空仓不可盲目接力后排。"
+    ],
+    "defense_line": "单日亏损触及本金 2% 或跌破 EMA20 支撑无条件触发止损纪律。"
+  }
+}

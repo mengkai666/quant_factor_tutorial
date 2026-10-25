@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,7 @@ from paths import DATA_DIR
 from stock_code import infer_exchange
 
 REFERENCE_DATE = '2026-10-08'
+RULE_VERSION = 'crowding-price-proxy/2026-10-24'
 NAMES = {
     'sh600721': '百花医药', 'sh600664': '哈药股份', 'sh600613': '神奇制药',
     'sz002412': '汉森制药', 'sz000017': '深中华A', 'sh600371': '万向德农',
@@ -154,21 +156,34 @@ def normalize_limits(frame: pd.DataFrame, cutoff: str) -> pd.DataFrame:
     return d[(d.date <= cutoff) & d.code.ne('')].drop_duplicates(['date', 'code', 'type'], keep='last')
 
 
-def assess_cohort(metrics: list[dict], *, stable_days: int = 0, was_broken: bool = False) -> dict:
+def assess_cohort(metrics: list[dict], *, stable_days: int = 0, was_broken: bool = False,
+                  recovery_days: int = 0) -> dict:
     """固定篮子价格代理，不声称真实资金退出/出清完成；任何成员缺失均阻断升级。"""
     if not metrics or any(any(m.get(k) is None for k in ('r1', 'r5', 'dd20', 'above_ma5')) for m in metrics):
-        return {'stage': '数据不足', 'weak_share': None, 'reason': '固定篮子有缺价或历史不足；不能据此认定出清。'}
+        return dict(stage='数据不足', weak_share=None, strong_share=None,
+                    reason='固定篮子有缺价或历史不足；不能据此认定出清。',
+                    supporting_evidence=[], opposing_evidence=[], missing_evidence=['固定成员完整价格窗口'],
+                    next_condition='补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。')
     weak = sum(m['dd20'] <= -10 and not m['above_ma5'] for m in metrics) / len(metrics)
+    strong = sum(m['above_ma5'] and m['r5'] > 0 for m in metrics) / len(metrics)
     if weak >= .6 and np.median([m['r1'] for m in metrics]) < -2:
         stage, reason = '瓦解', '多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。'
     elif was_broken:
-        stage = '出清观察' if stable_days >= 2 else '瓦解观察'
-        reason = '至少2日不再普遍创新低，只能说明抛压暂稳，不等于出清完成。' if stable_days >= 2 else '等待旧篮子连续止跌，不急于推断新周期。'
-    elif sum(m['above_ma5'] and m['r5'] > 0 for m in metrics) / len(metrics) >= .7:
+        if strong >= .7 and weak < .6 and recovery_days >= 2:
+            stage = '旧团修复' if recovery_days >= 3 else '修复待验证'
+            reason = '同一固定篮子多数成员连续恢复MA5和正5日收益；保留瓦解历史，不视为新团。'
+        else:
+            stage = '出清观察' if stable_days >= 2 else '瓦解观察'
+            reason = '至少2日不再普遍创新低，只能说明抛压暂稳，不等于出清完成。' if stable_days >= 2 else '等待旧篮子连续止跌，不急于推断新周期。'
+    elif strong >= .7:
         stage, reason = '强化', '固定篮子多数在5日均线上且5日收益为正；需量能与广度交叉确认。'
     else:
         stage, reason = '分歧', '固定篮子强弱分化；断板不等于整体瓦解。'
-    return {'stage': stage, 'weak_share': round(weak, 3), 'reason': reason}
+    return dict(stage=stage, weak_share=round(weak, 3), strong_share=round(strong, 3), reason=reason,
+                supporting_evidence=[f'强势成员{round(strong * len(metrics))}/{len(metrics)}', f'连续止跌{stable_days}日'],
+                opposing_evidence=[f'深度回撤且在MA5下{round(weak * len(metrics))}/{len(metrics)}'],
+                missing_evidence=['成交集中、量能及可成交证据'],
+                next_condition='同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。')
 
 
 def price_matrices(prices: pd.DataFrame, dates: list[str]) -> dict:
@@ -178,7 +193,7 @@ def price_matrices(prices: pd.DataFrame, dates: list[str]) -> dict:
     r20 = (p / p.shift(20) - 1).where(p.notna().rolling(21).sum().eq(21)) * 100
     ma5 = p.rolling(5, min_periods=5).mean()
     peak = p.rolling(20, min_periods=5).max()
-    dd20 = (p / peak - 1) * 100
+    dd20 = ((p / peak - 1) * 100).where(p.notna().rolling(20).sum().eq(20))
     rank5, rank20 = r5.rank(axis=1, pct=True), r20.rank(axis=1, pct=True)
     persistence = rank5.ge(.85).rolling(5, min_periods=5).sum()
     score = (rank5 * 40 + rank20 * 40 + persistence * 4).where(r5.gt(4) & r20.gt(8) & persistence.ge(2))
@@ -207,7 +222,7 @@ def stock_stats(series: pd.Series, start: str, end: str) -> dict:
     dd = (draw / draw.cummax() - 1) * 100
     return dict(first_date=str(valid.index[0]) if not valid.empty else None,
                 last_date=str(valid.index[-1]) if not valid.empty else None,
-                return_pct=number((end_value / base - 1) * 100) if pd.notna(base) else None,
+                return_pct=number((end_value / base - 1) * 100) if pd.notna(base) and window.notna().all() else None,
                 max_drawdown_pct=number(dd.min()), count=int(valid.size), expected_count=int(window.size),
                 base_date=str(previous.index[0]) if pd.notna(base) else None,
                 complete=bool(not window.empty and window.notna().all() and pd.notna(base)))
@@ -229,29 +244,106 @@ def _breadth(frame: pd.DataFrame, cutoff: str) -> dict:
 def _scan(mats: dict, dates: list[str], names: dict, breadth: dict, counts: pd.Series) -> tuple[list, list]:
     daily, transitions = [], []
     current, pending, streak = None, None, 0
+    last_confirmed, last_known_state = None, '等待'
+    revoked_state, revoked_reason, state_since = '未确认', None, None
     for date in dates:
         prior = counts.loc[counts.index < date].tail(10)
         floor = .8 * float(prior.median()) if not prior.empty else 0
         complete = counts.get(date, 0) > 0 and counts.get(date, 0) >= floor
-        top = mats['score'].loc[date].dropna().sort_values(ascending=False).head(6) if complete else pd.Series(dtype=float)
+        eligible = mats['score'].loc[date].dropna().sort_values(ascending=False, kind='stable') if complete else pd.Series(dtype=float)
+        top = eligible.head(6)
         codes = top.index.tolist()
         leader = codes[0] if codes else None
-        streak = streak + 1 if leader and leader == pending else (1 if leader else 0)
-        pending = leader
+        proxy_state, invalidation_reason = revoked_state, revoked_reason
+        revocation = None
+        if current and not complete:
+            proxy_state, revocation = '过期', '当日价格截面覆盖不足，暂停当前核心资格。'
+        elif current and current not in eligible:
+            missing = any(metrics_at(mats, current, date).get(key) is None for key in ('r1', 'r5', 'r20', 'dd20'))
+            proxy_state = '过期' if missing else '失效'
+            revocation = '核心连续价格窗口缺失。' if missing else '核心已不满足5/20日收益及持续性门槛。'
+        if revocation:
+            revoked_state, revoked_reason, state_since = proxy_state, revocation, date
+            invalidation_reason = revocation
+            transitions.append(dict(date=date, old_code=current, old_name=names.get(current, current),
+                                    new_code=None, new_name='无当前有效代理', kind=proxy_state + '：' + invalidation_reason))
+            current = None
+        advantage = bool(leader and (not current or leader == current or eligible[leader] - eligible[current] >= 2))
+        streak = streak + 1 if advantage and leader == pending else (1 if advantage else 0)
+        pending = leader if advantage else None
         if leader and streak >= 2 and current != leader:
             transitions.append(dict(date=date, old_code=current, old_name=names.get(current, current or '无已确认代理'),
-                                    new_code=leader, new_name=names.get(leader, leader), kind='连续2日排名代理换位（不是资金因果证明）'))
+                                    new_code=leader, new_name=names.get(leader, leader), kind='连续2日且满足优势门槛的排名代理确认（不是资金因果证明）'))
             current = leader
-        daily.append(dict(date=date, coverage=int(counts.get(date, 0)), coverage_ok=bool(complete),
+            last_confirmed = current
+            state_since = date
+        if current:
+            proxy_state = '有效'
+            invalidation_reason = None
+        stage = '数据不足' if not complete else ('候选竞争' if codes else '等待')
+        record = dict(date=date, coverage=int(counts.get(date, 0)), coverage_ok=bool(complete),
                           up_share=breadth.get(date), top=[dict(code=c, name=names.get(c, c), **metrics_at(mats, c, date)) for c in codes],
-                          confirmed_proxy=current, stage='数据不足' if not complete else ('候选竞争' if codes else '等待')))
+                          confirmed_proxy=current, historical_confirmed_proxy=last_confirmed,
+                          proxy_state=proxy_state, state_since=state_since, invalidation_reason=invalidation_reason,
+                          pending_proxy=pending if pending != current else None, confirmation_days=streak,
+                          candidate_codes=eligible.index.tolist(), candidate_count=len(eligible),
+                          candidate_scores=[dict(code=symbol, score=number(score, 4)) for symbol, score in eligible.items()],
+                          rule_version=RULE_VERSION, execution_status='not_qualified',
+                          knowledge_status='reconstructed_from_current_cache', last_known_state=last_known_state, stage=stage)
+        version = hashlib.sha256(json.dumps(record, sort_keys=True, allow_nan=False).encode('utf-8')).hexdigest()[:16]
+        record.update(candidate_set_id=f'{date}:{version}', candidate_version=version)
+        daily.append(record)
+        if complete:
+            last_known_state = stage
     return daily, transitions
+
+
+def select_member_series(symbol: str, quotes: dict, mats: dict | None, calendar: list[str],
+                         requested: str, start: str) -> tuple[pd.Series, dict]:
+    candidates = []
+    record = quotes.get('stocks', {}).get(symbol, {})
+    rows = {}
+    for row in record.get('rows', []):
+        try:
+            date, close = day(row.get('date')), number(row.get('close'), 8)
+        except (ValueError, TypeError):
+            continue
+        if date in calendar and date <= requested and close is not None and close > 0:
+            rows[date] = close
+    if rows and record.get('basis') == 'qfq':
+        candidates.append(('腾讯补充日线 / qfq', pd.Series(rows, dtype=float).sort_index()))
+    if mats and symbol in mats['price']:
+        candidates.append(('全市场本地前复权缓存', mats['price'][symbol]))
+    target_dates = [date for date in calendar if start <= date <= requested]
+    recent = [date for date in calendar if date <= requested][-21:]
+    ranked = []
+    for source, series in candidates:
+        series = series.reindex(calendar)
+        valid = series.dropna()
+        if valid.empty:
+            continue
+        last = str(valid.index[-1])
+        coverage = int(series.reindex(recent).notna().sum())
+        complete_recent = len(recent) == 21 and coverage == len(recent)
+        ranked.append((complete_recent, last, coverage, source.startswith('全市场'), source, series))
+    if not ranked:
+        return pd.Series(index=calendar, dtype=float), dict(source='缺少同口径行情', price_basis='qfq',
+                source_as_of=None, missing_trade_dates=target_dates, source_candidates=[],
+                selection_reason='仅有原始/未知口径或缺价；不拼接不同复权序列。')
+    selected = max(ranked, key=lambda item: item[:4])
+    _, last, coverage, _, source, series = selected
+    return series, dict(source=source, price_basis='qfq', source_as_of=last,
+                        missing_trade_dates=[date for date in target_dates if pd.isna(series.get(date))],
+                        source_candidates=[dict(source=item[4], as_of=item[1], valid_recent_count=item[2],
+                                                complete_recent_window=item[0]) for item in ranked],
+                        selection_reason='单窗口单源：优先完整覆盖应有近21交易日的序列，再比较截止日和覆盖；同等条件优先全市场前复权缓存。无完整源时降级，不拼接补洞。')
 
 
 def build_crowding_report(report_date: str, *, data_dir: str | Path | None = None,
                           prices: pd.DataFrame | None = None, limits: pd.DataFrame | None = None,
                           sentiment: pd.DataFrame | None = None, calendar: list[str] | None = None,
-                          names: dict | None = None, quotes: dict | None = None) -> dict:
+                          names: dict | None = None, quotes: dict | None = None,
+                          tracking_rules: dict | None = None, external_snapshot: dict | None = None) -> dict:
     requested = day(report_date)
     start = (pd.Timestamp(requested) - pd.DateOffset(months=2)).strftime('%Y-%m-%d')
     root = Path(data_dir or DATA_DIR)
@@ -259,7 +351,8 @@ def build_crowding_report(report_date: str, *, data_dir: str | Path | None = Non
     limits = read_csv(root / '涨停历史缓存.csv') if limits is None else limits
     sentiment = read_csv(root / 'sentiment_history_cache.csv') if sentiment is None else sentiment
     p, z = normalize_prices(prices, requested), normalize_limits(limits, requested)
-    p = p[p.date >= (pd.Timestamp(start) - pd.Timedelta(days=60)).strftime('%Y-%m-%d')]
+    replay_start = (pd.Timestamp(requested) - pd.DateOffset(months=6)).strftime('%Y-%m-%d')
+    p = p[p.date >= (pd.Timestamp(replay_start) - pd.Timedelta(days=60)).strftime('%Y-%m-%d')]
     warnings = []
     if calendar is None:
         cal = read_csv(root / 'trading_calendar_cache.csv')
@@ -290,11 +383,17 @@ def build_crowding_report(report_date: str, *, data_dir: str | Path | None = Non
         resolved.update(dict(zip(z.sort_values('date').code, z.sort_values('date')['name'])))
     resolved.update(NAMES if requested >= REFERENCE_DATE else {})
     first_price_date = p.date.min() if not p.empty else requested
-    dates = [d for d in calendar if not p.empty and d >= first_price_date and d <= (asof or '')]
+    dates = [d for d in calendar if not p.empty and d >= first_price_date and d <= requested]
     mats = price_matrices(p[p.date <= (asof or '')], dates) if dates else None
-    window_dates = [d for d in dates if d >= start]
     breadth = _breadth(sentiment, requested)
-    daily, succession = _scan(mats, window_dates, resolved, breadth, counts) if mats else ([], [])
+    daily, succession = _scan(mats, dates, resolved, breadth, counts) if mats else ([], [])
+    from crowding_replay import build_screening_replay
+    screening_replay = build_screening_replay(daily, mats, resolved, requested_date=requested, rules=tracking_rules)
+    daily = [item for item in daily if item['date'] >= start]
+    succession = [item for item in succession if item['date'] >= start]
+    from crowding_tracking import build_dynamic_tracking
+    tracking = build_dynamic_tracking(daily, mats, resolved, window_start=start,
+                                      requested_date=requested, rules=tracking_rules)
     if quotes is None:
         path = root / 'crowding_reference_quotes.json'
         quotes = json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
@@ -308,19 +407,11 @@ def build_crowding_report(report_date: str, *, data_dir: str | Path | None = Non
         for group in GROUPS:
             members = []
             for symbol in group['codes']:
-                q = quotes.get('stocks', {}).get(symbol, {})
-                rows = [r for r in q.get('rows', []) if start <= r['date'] <= requested]
-                warm = sorted([r for r in q.get('rows', []) if r['date'] <= requested], key=lambda x: x['date'])
-                if rows:
-                    series = pd.Series({r['date']: float(r['close']) for r in warm}).sort_index().reindex([d for d in calendar if warm[0]['date'] <= d <= expected])
-                    source = '腾讯补充日线 / ' + q.get('basis', '未知口径')
-                    quote_dates.append(rows[-1]['date'])
-                elif mats and symbol in mats['price']:
-                    series = mats['price'][symbol].reindex([d for d in calendar if d >= dates[0]])
-                    source = '全市场本地前复权缓存'
-                else:
-                    series = pd.Series(dtype=float)
-                    source = '缺少行情'
+                series, source_info = select_member_series(symbol, quotes, mats, calendar, requested, start)
+                source = source_info['source']
+                for candidate in source_info['source_candidates']:
+                    if candidate['source'].startswith('腾讯'):
+                        quote_dates.append(candidate['as_of'])
                 series_by_symbol[symbol] = series
                 if not series.empty:
                     # 缺失日保留null，走势图不得横跨空洞伪装连续价格。
@@ -333,9 +424,11 @@ def build_crowding_report(report_date: str, *, data_dir: str | Path | None = Non
                 metrics = metrics_at(qm, symbol, target_end) if qm else metrics_at({'price': pd.DataFrame()}, symbol, target_end)
                 from_reference = series.get(group['start'], np.nan)
                 end_value = series.get(target_end, np.nan)
-                since = number((end_value / from_reference - 1) * 100) if pd.notna(from_reference) else None
+                reference_window = series.loc[(series.index >= group['start']) & (series.index <= target_end)]
+                since = number((end_value / from_reference - 1) * 100) if pd.notna(from_reference) and reference_window.notna().all() else None
                 refs = z[(z.code == symbol) & (z.type == 'ZT') & (z.date >= group['start'])]
                 members.append(dict(code=symbol, name=resolved.get(symbol, symbol), source=source, as_of=last,
+                                    price_basis=source_info['price_basis'], source_selection=source_info,
                                     reference_date=group['start'], since_reference=since,
                                     two_month=stock_stats(series, start, target_end), metrics=metrics,
                                     zt_days=int(refs.date.nunique()), max_height=number(refs.height.max()),
@@ -344,7 +437,9 @@ def build_crowding_report(report_date: str, *, data_dir: str | Path | None = Non
                                           '次新独立观察，常规连板不适用' if symbol == 'sh601091' else '截图/复盘样本，非事前推荐')))
             old = group['id'] not in ('trial', 'parallel')
             stable = 0
+            recovery = 0
             was_broken = False
+            last_known_state = None
             history = []
             # 固定篮子逐日走状态，不允许通过剔除失败者制造“出清”。
             group_days = [d for d in calendar if max(group['start'], start) <= d <= requested]
@@ -357,22 +452,36 @@ def build_crowding_report(report_date: str, *, data_dir: str | Path | None = Non
                     if len(sample) >= 6:
                         r1 = number((sample.iloc[-1] / sample.iloc[-2] - 1) * 100)
                         r5 = number((sample.iloc[-1] / sample.iloc[-6] - 1) * 100) if sample.tail(6).notna().all() else None
-                        dd = number((sample.iloc[-1] / sample.tail(20).max() - 1) * 100)
+                        dd = number((sample.iloc[-1] / sample.tail(20).max() - 1) * 100) if len(sample) >= 20 and sample.tail(20).notna().all() else None
                         above = bool(sample.iloc[-1] >= sample.tail(5).mean()) if sample.tail(5).notna().all() else None
                         snapshots.append(dict(r1=r1, r5=r5, dd20=dd, above_ma5=above))
                         lows.append(bool(sample.iloc[-1] < sample.iloc[:-1].tail(3).min()) if sample.tail(4).notna().all() else None)
                     else:
                         snapshots.append({}); lows.append(None)
                 stable = stable + 1 if lows and all(x is not None for x in lows) and not any(lows) else 0
-                state = assess_cohort(snapshots, stable_days=stable, was_broken=was_broken)
+                complete = snapshots and all(all(item.get(key) is not None for key in ('r1', 'r5', 'dd20', 'above_ma5')) for item in snapshots)
+                recovering = complete and sum(item['above_ma5'] and item['r5'] > 0 for item in snapshots) / len(snapshots) >= .7
+                recovery = recovery + 1 if was_broken and recovering else 0
+                state = assess_cohort(snapshots, stable_days=stable, was_broken=was_broken, recovery_days=recovery)
                 was_broken = was_broken or state['stage'] == '瓦解'
-                history.append(dict(date=d, **state))
+                history.append(dict(date=d, last_known_state=last_known_state, was_broken=was_broken,
+                                    stable_days=stable, recovery_days=recovery, **state))
+                if state['stage'] != '数据不足':
+                    last_known_state = state['stage']
             latest = history[-1] if history else assess_cohort([])
             if group['id'] == 'trial':
-                latest = dict(stage='试错待确认', weak_share=None, reason='仅价格证据；全市场、成交与承接条件尚未全部验证。')
+                latest = dict(latest, stage='试错待确认', reason='仅价格证据；全市场、成交与承接条件尚未全部验证。')
             if group['id'] == 'parallel':
-                latest = dict(stage='并行观察', weak_share=None, reason='数字经济、电力、次新不应强行算作同一篮子。')
+                latest = dict(latest, stage='并行观察', weak_share=None, strong_share=None,
+                              reason='数字经济、电力、次新不应强行算作同一篮子。')
             groups.append(dict(**group, members=members, assessment=latest, history=history,
+                               basket_id=group['id'] + ':' + hashlib.sha256(json.dumps(group['codes']).encode('utf-8')).hexdigest()[:12],
+                               basket_version=1, member_codes=list(group['codes']), known_at=REFERENCE_DATE,
+                               rule_version=RULE_VERSION, was_broken=was_broken,
+                               dimensions=dict(price_strength_share=latest.get('strong_share'),
+                                               price_fragility_share=latest.get('weak_share'),
+                                               denominator=len(members), turnover_concentration=None,
+                                               interpretation='价格持续性×脆弱性代理；无成交/持仓集中证据，不认定真实资金抱团。'),
                                next_step='继续观察旧团失效和新候选承接，缺全市场证据不升级。' if not old else '停止把反抽自动视为新周期，逐股核对破位与修复。'))
         for a, b, title, thesis, ids in PERIODS:
             if b < start or a > requested:
@@ -390,7 +499,8 @@ def build_crowding_report(report_date: str, *, data_dir: str | Path | None = Non
                         s = series_by_symbol[member['code']]
                         members.append(dict(code=member['code'], name=member['name'], **stock_stats(s.sort_index(), a, b)))
             periods.append(dict(start=a, end=b, title=title, thesis=thesis, leaders=leaders, members=members,
-                                boundary_source='事后研究分段，不是实时自动分界', group_ids=ids))
+                                boundary_source='事后研究分段，不是实时自动分界', group_ids=ids,
+                                period_kind='retrospective'))
         for date, claim, symbols in EVENTS:
             evidence = []
             for symbol in symbols:
@@ -404,7 +514,7 @@ def build_crowding_report(report_date: str, *, data_dir: str | Path | None = Non
                                status='研究注释；价格/涨停记录只验证局部现象，不验证“资金出清”因果'))
     if reference_visible:
         old_baskets = [g for g in groups if g['id'] in ('farm', 'consumer')]
-        old_stable = bool(old_baskets) and all(g['assessment']['stage'] == '出清观察' for g in old_baskets)
+        old_stable = bool(old_baskets) and all(g['assessment']['stage'] in ('出清观察', '修复待验证', '旧团修复') for g in old_baskets)
         fresh_breadth = breadth.get(expected) if calendar_known and expected else None
         for member in next(g for g in groups if g['id'] == 'trial')['members']:
             mt = member['metrics']
@@ -417,8 +527,8 @@ def build_crowding_report(report_date: str, *, data_dir: str | Path | None = Non
                 label='价格持续性支持，仍待全证据' if price_support else '价格分歧 / 待观察',
                 since_reference=member['since_reference'], reference_date=member['reference_date'],
                 gates=[
-                    dict(name='旧篮子连续止跌', status='初步支持' if old_stable else '未满足',
-                         note='农业与消费固定篮子均至少2日不创新近3日低点；止跌不等于完成出清。'),
+                    dict(name='旧篮子连续止跌（情景参考，非必要前提）', status='初步支持' if old_stable else '未满足',
+                         required=False, note='新旧群体可以并行；旧篮子止跌不等于出清，也不作为新候选形成的必要条件。'),
                     dict(name='全市场转暖', status='数据缺失/过期' if fresh_breadth is None else
                          ('初步支持' if fresh_breadth >= .55 else '未满足'),
                          note=f'需要{expected}的涨跌家数；上涨占比≥55%仅是未经校准的研究阈值。'),
@@ -427,13 +537,20 @@ def build_crowding_report(report_date: str, *, data_dir: str | Path | None = Non
                     dict(name='量能、承接及可成交', status='待人工验证',
                          note='日K不足以证明分时承接和可成交性；涨停不等于有买入机会。')],
                 action='保留观察，不升级为已确认新周期', position=None))
-    # 非参考时段仍提供滚动周复盘，不让模块停留于硬编码9月。
-    if not periods and daily:
-        for offset in range(0, len(daily), 5):
-            block = daily[offset:offset + 5]
+    # 实时层独立覆盖所有观察日；不让历史分段遮住窗口开头、分段空隙或当前行情。
+    rolling_daily = daily
+    if rolling_daily:
+        for offset in range(0, len(rolling_daily), 5):
+            block = rolling_daily[offset:offset + 5]
             periods.append(dict(start=block[0]['date'], end=block[-1]['date'], title='滚动5交易日观察',
                                 thesis='按当日可见行情筛选价格强势代理，等待跨日验证。', leaders=block[-1]['top'],
-                                members=[], group_ids=[], boundary_source='固定观察窗口，不宣称真实市场周期'))
+                                members=[], group_ids=[], period_kind='rolling',
+                                boundary_source='固定观察窗口，不宣称真实市场周期'))
+    if mats:
+        for stock in tracking['stocks']:
+            symbol = stock['code']
+            # 动态追踪使用同一全市场序列，不用补充源把缺价图连起来。
+            paths[symbol] = [dict(date=d, close=number(v, 4)) for d, v in mats['price'][symbol].items() if d >= start]
     clocks = dict(prices=asof, limits=z.date.max() if not z.empty else None,
                   breadth=max((d for d, value in breadth.items() if value is not None), default=None),
                   reference_quotes=max(quote_dates) if quote_dates else None)
@@ -447,12 +564,16 @@ def build_crowding_report(report_date: str, *, data_dir: str | Path | None = Non
     core_lags = [lags[key] for key in ('prices', 'limits', 'breadth')]
     quality = 'stale' if any(x for x in core_lags if x is not None) else (
         'partial' if not calendar_known or any(clocks[key] is None for key in ('prices', 'limits', 'breadth')) else 'research_only')
-    return dict(schema='crowding-cycle/v1', requested_date=requested, window_start=start,
+    result = dict(schema='crowding-cycle/v1', rule_version=RULE_VERSION, requested_date=requested, window_start=start,
                 market_as_of=asof, expected_trade_date=expected, lag_trading_days=lag,
                 quality=quality, sources_as_of=clocks, sources_lag_trading_days=lags,
                 warnings=warnings, reference_visible=reference_visible, groups=groups, periods=periods,
                 events=events, paths=paths, daily=daily, succession=succession, trial_gates=trial_gates,
+                tracking=tracking, screening_replay=screening_replay,
                 tactics=[dict(t, example=t['example'] if reference_visible else '通用研究规则；本期不使用10月8日事后提供的具体股票名单。') for t in TACTICS],
                 sources=[s for s in SOURCES if s['date'] <= requested],
                 execution=dict(status='not_qualified', reason='研究观察，不生成自动交易信号；未有完整成交、量能和全市场时点证据。',
                                backtest='未做可成交回测；不提供胜率、收益承诺或固定买卖价。'))
+    from crowding_external import build_external_evidence
+    result["external_evidence"] = build_external_evidence(result, data_dir=root, snapshot=external_snapshot)
+    return result
