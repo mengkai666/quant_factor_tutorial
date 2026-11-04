@@ -206,10 +206,142 @@ CB_TRACKING_DATA = [
 ]
 
 
-def render_cb_teaser_card_html(report_date: str = "") -> str:
-    """Use the dated research payload instead of presenting old static quotes."""
-    from trading_playbook_links import render_cb_entry
-    return render_cb_entry(OUTPUT_DIR, report_date)
+def render_cb_teaser_card_html(report_date: str = "", is_site_mode: bool = False, prefix: str = "") -> str:
+    """渲染嵌入主报告的【可转债抱团演进与新周期追踪】数据分析高密度看板."""
+    r_date = str(report_date or '2026-10-23')
+    if len(r_date) == 8 and r_date.isdigit():
+        r_date = f"{r_date[:4]}-{r_date[4:6]}-{r_date[6:]}"
+
+    detail_url = f"{prefix}cb_baotuan/latest.html" if is_site_mode else "可转债抱团复盘与追踪.html"
+
+    # 生成核心标的紧凑数据行 (精选 5 只典型标的)
+    key_items = [
+        item for item in CB_TRACKING_DATA 
+        if item["bond_name"] in ("奥普转债", "豪美转债", "丰茂转债", "震裕转02", "澳弘转债")
+    ]
+    if not key_items:
+        key_items = CB_TRACKING_DATA[:5]
+
+    rows = []
+    for item in key_items:
+        p_day_color = "#3fb950" if item["pct_day"] > 0 else ("#f85149" if item["pct_day"] < 0 else "#8b949e")
+        s_pct_color = "#3fb950" if item["stock_pct"] > 0 else ("#f85149" if item["stock_pct"] < 0 else "#8b949e")
+        is_break = "出清" in item["role_badge"] or item["pct_day"] < 0
+        bg_style = "background: rgba(248,81,73,0.04);" if is_break else ""
+
+        row = f"""
+        <tr style="border-bottom: 1px solid #21262d; {bg_style}">
+            <td style="padding: 8px 10px; white-space: nowrap;">
+                <span style="font-size: 11px; font-weight: 700; color: {item['role_color']}; background: rgba(255,255,255,0.06); padding: 2px 7px; border-radius: 4px; border: 1px solid {item['role_color']}44;">
+                    {item['role_badge']}
+                </span>
+                <div style="font-size: 11px; color: #8b949e; margin-top: 3px;">{item['role']}</div>
+            </td>
+            <td style="padding: 8px 10px; white-space: nowrap;">
+                <div style="font-weight: 700; color: #f0f6fc; font-size: 13px;">{item['bond_name']}</div>
+                <div style="font-size: 11px; color: #8b949e;">{item['bond_code']}</div>
+            </td>
+            <td style="padding: 8px 10px; font-weight: 700; font-size: 13px; color: #f0f6fc;">
+                {item['price']:.2f}
+            </td>
+            <td style="padding: 8px 10px; font-weight: 700; font-size: 12.5px; color: {p_day_color};">
+                {item['pct_day']:+.2f}%
+            </td>
+            <td style="padding: 8px 10px; font-weight: 700; color: #e3b341; white-space: nowrap;">
+                {item['amount_yi']:.2f} 亿
+            </td>
+            <td style="padding: 8px 10px; white-space: nowrap;">
+                <div style="font-weight: 600; color: #f0f6fc; font-size: 12px;">{item['stock_name']}</div>
+                <div style="font-size: 11px; font-weight: 600; color: {s_pct_color};">{item['stock_pct']:+.2f}%</div>
+            </td>
+            <td style="padding: 8px 10px; font-size: 12px; color: #c9d1d9; line-height: 1.45;">
+                {item['qualitative']}
+            </td>
+        </tr>
+        """
+        rows.append(row)
+
+    table_body = "".join(rows)
+
+    return f"""<!-- cb-tracking-teaser:start -->
+<section id="sec-cb-tracking" style="margin:24px 0 28px;padding:22px;border:1px solid #30363d;border-top:3px solid #00cccc;border-radius:12px;background:#161b22;box-shadow:0 6px 18px rgba(0,0,0,0.25);">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;border-bottom:1px solid #21262d;padding-bottom:10px;">
+        <div>
+            <h2 id="sec-cb-title" style="margin:0;font-size:18px;font-weight:800;color:#f0f6fc;display:flex;align-items:center;gap:8px;">
+                <span>🎯 可转债抱团演进与新周期追踪</span>
+                <span style="font-size:11.5px;background:rgba(0,204,204,0.15);color:#00cccc;border:1px solid rgba(0,204,204,0.3);padding:2px 8px;border-radius:12px;font-weight:600;">
+                    老抱团瓦解出清 ➔ 机器人转债新周期共振
+                </span>
+            </h2>
+            <div style="font-size:12.5px;color:#8b949e;margin-top:4px;">
+                以澳弘转债天量放量破位为标志的老抱团彻底瓦解；机器人集群（奥普/豪美/丰茂/震裕02）全线承接资金，正股涨停与转债T+0日内高弹性共振。
+            </div>
+        </div>
+        <div style="font-size:12px;color:#8b949e;">
+            研判基准: <span style="color:#e3b341;font-weight:700;">{r_date}</span>
+        </div>
+    </div>
+
+    <!-- 顶部四联关键信号卡片 -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:12px;margin-bottom:16px;">
+        <div style="background:#0d1117;border:1px solid #21262d;border-radius:8px;padding:12px 14px;">
+            <div style="font-size:11.5px;color:#58a6ff;font-weight:700;margin-bottom:4px;">👑 空间容量总中枢</div>
+            <div style="font-size:17px;font-weight:800;color:#f0f6fc;">奥普转债 <span style="font-size:13px;color:#3fb950;">+14.80%</span></div>
+            <div style="font-size:11.5px;color:#8b949e;margin-top:2px;">单日35亿天量承接 · 正股封死20cm</div>
+        </div>
+        <div style="background:#0d1117;border:1px solid #21262d;border-radius:8px;padding:12px 14px;">
+            <div style="font-size:11.5px;color:#3fb950;font-weight:700;margin-bottom:4px;">🚀 日内首板进攻先锋</div>
+            <div style="font-size:17px;font-weight:800;color:#f0f6fc;">豪美转债 <span style="font-size:13px;color:#3fb950;">+19.65%</span></div>
+            <div style="font-size:11.5px;color:#8b949e;margin-top:2px;">正股10cm首板 · 日内弹性之王</div>
+        </div>
+        <div style="background:#0d1117;border:1px solid #21262d;border-radius:8px;padding:12px 14px;">
+            <div style="font-size:11.5px;color:#d29922;font-weight:700;margin-bottom:4px;">⚡ 次新独立逼空妖化</div>
+            <div style="font-size:17px;font-weight:800;color:#f0f6fc;">丰茂转债 <span style="font-size:13px;color:#3fb950;">+12.01%</span></div>
+            <div style="font-size:11.5px;color:#8b949e;margin-top:2px;">6亿袖珍流通盘 · 3日暴涨+24.6%</div>
+        </div>
+        <div style="background:#0d1117;border:1px solid rgba(248,81,73,0.3);border-radius:8px;padding:12px 14px;background:rgba(248,81,73,0.06);">
+            <div style="font-size:11.5px;color:#f85149;font-weight:700;margin-bottom:4px;">💀 老抱团双杀出清 (禁区)</div>
+            <div style="font-size:17px;font-weight:800;color:#f0f6fc;">澳弘转债 <span style="font-size:13px;color:#f85149;">-5.50%</span></div>
+            <div style="font-size:11.5px;color:#f85149;margin-top:2px;">正股-8.18% · 42亿放量雪崩绝不抄底</div>
+        </div>
+    </div>
+
+    <!-- 核心抱团梯队对比表 -->
+    <div style="overflow-x:auto;margin-bottom:14px;border:1px solid #21262d;border-radius:8px;">
+        <table style="width:100%;border-collapse:collapse;font-size:12.5px;text-align:left;">
+            <thead>
+                <tr style="background:#1c2128;color:#8b949e;border-bottom:1px solid #30363d;">
+                    <th style="padding:9px 10px;">梯队角色</th>
+                    <th style="padding:9px 10px;">转债标的</th>
+                    <th style="padding:9px 10px;">现价</th>
+                    <th style="padding:9px 10px;">日涨跌</th>
+                    <th style="padding:9px 10px;">成交额</th>
+                    <th style="padding:9px 10px;">正股表现</th>
+                    <th style="padding:9px 10px;">游资量化研判与核心定性</th>
+                </tr>
+            </thead>
+            <tbody>
+                {table_body}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- 游资实操心法与隔夜铁律 -->
+    <div style="background:#0d1117;border-left:3px solid #00cccc;border-radius:6px;padding:12px 15px;margin-bottom:14px;font-size:12.5px;line-height:1.6;color:#c9d1d9;">
+        <b style="color:#00cccc;">⚡ T+0 核心操盘铁律：</b> 正股涨停封单坚决时，转债享受无涨跌停溢价，以正股分时为撤退信号；正股开板或尾盘跳水必须在 14:55 前全额卖出平仓，绝不违规隔夜！
+    </div>
+
+    <!-- 底部直达按钮 -->
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding-top:10px;border-top:1px solid #21262d;">
+        <span style="font-size:12px;color:#8b949e;">
+            更多转债股债共振指标、筹码溢价率透视与量化打分池，详见专属深度作战研报。
+        </span>
+        <a href="{detail_url}" style="background:#008888;color:#ffffff;text-decoration:none;font-size:12.5px;font-weight:700;padding:7px 18px;border-radius:6px;box-shadow:0 2px 6px rgba(0,136,136,0.3);display:inline-flex;align-items:center;gap:6px;">
+            <span>🎯 进入《可转债抱团复盘与追踪》完整深度研报 →</span>
+        </a>
+    </div>
+</section>
+<!-- cb-tracking-teaser:end -->"""
 
 
 def generate_cb_standalone_html(report_date: str = "2026-10-23") -> str:
@@ -692,7 +824,25 @@ def export_cb_tracking_reports(report_date: str = "2026-10-23") -> Dict[str, str
     with open(p2, "w", encoding="utf-8") as f:
         f.write(html_content)
 
-    return {"output_path": p1, "site_path": p2}
+    # 3. 按日期导出 output/site/cb_baotuan/{report_date}.html
+    clean_date = report_date.replace("-", "") if report_date else "latest"
+    p3 = os.path.join(cb_dir, f"{report_date}.html")
+    with open(p3, "w", encoding="utf-8") as f:
+        f.write(html_content)
+
+    # 4. 拷贝到 output/site/reports/ 同级目录，避免相对链接 404
+    reports_dir = os.path.join(SITE_DIR, "reports")
+    os.makedirs(reports_dir, exist_ok=True)
+    p4 = os.path.join(reports_dir, "可转债抱团复盘与追踪.html")
+    with open(p4, "w", encoding="utf-8") as f:
+        f.write(html_content)
+
+    # 5. 拷贝到 output/site/ 根目录
+    p5 = os.path.join(SITE_DIR, "可转债抱团复盘与追踪.html")
+    with open(p5, "w", encoding="utf-8") as f:
+        f.write(html_content)
+
+    return {"output_path": p1, "site_path": p2, "date_path": p3, "reports_path": p4}
 
 
 if __name__ == "__main__":

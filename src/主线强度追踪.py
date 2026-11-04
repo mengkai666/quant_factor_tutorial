@@ -7059,6 +7059,14 @@ def _main_impl():
         except Exception as e:
             print(f"  [警告] 强势板块回调跟踪子页生成失败 (不影响主流程): {e}")
 
+        # === 可转债抱团与新周期追踪: 独立子页归档到 site/cb_baotuan/，同时在 output/ 生成本地专属报告 ===
+        try:
+            from cb_baotuan_report import export_cb_tracking_reports
+            _cb_res = export_cb_tracking_reports(latest_date)
+            print(f"  -> 本地专属可转债抱团研报: {_cb_res.get('output_path')}")
+        except Exception as e:
+            print(f"  [警告] 可转债抱团独立研报生成失败 (不影响主流程): {e}")
+
         # === 属于zhao的个股追踪: 独立子页归档到 site/zhao/，同时在 output/ 生成本地专属报告 ===
         _zhao_html = None
         _zhao_res = {}

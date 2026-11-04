@@ -102,18 +102,12 @@ def add_main_entry(document, output_dir, report_date, prefix=''):
     block = render_main_entry(output_dir, report_date, prefix)
     if not block:
         return document
-    # These owned previews used static old quotes as if they were current.
-    document = re.sub(r'<!-- cb-tracking-teaser:start -->.*?<!-- cb-tracking-teaser:end -->',
-                      lambda _: render_cb_entry(output_dir, report_date), document, flags=re.S)
-    hub = re.search(r'<!-- war-room-hub:start -->.*?<!-- war-room-hub:end -->', document, re.S)
-    if hub:
-        updated_hub = hub.group().replace('🤖 机器人转债集群主升', '每日转债条件预案')
-        updated_hub = updated_hub.replace('澳弘破位出清', '日期与条件核验')
-        updated_hub = updated_hub.replace('澳弘转债天量破位杀跌出清(-5.5%，正股-8.18%) ➔ 机器人转债集群(奥普/豪美/丰茂/震裕02)全线接力爆发。正股涨停板上溢出、T+0高频做T与量化个股筛选。',
-                                          '当前候选、候补、债股共振条件和未入选原因见下方每日三战法；逐只核对日期、强赎资料与退出条件。')
-        updated_hub = updated_hub.replace('href="可转债抱团复盘与追踪.html"', 'href="#sec-trading-playbooks"')
-        document = document[:hub.start()] + updated_hub + document[hub.end():]
-    hub_end = '<!-- war-room-hub:end -->'
+    # 仅在存在有效同日预案 bundle 时，将同日证据结合进转债板块，绝不擦除抱团数据
+    bundle = load_report_set(output_dir, report_date)
+    if bundle is not None:
+        document = re.sub(r'<!-- cb-tracking-teaser:start -->.*?<!-- cb-tracking-teaser:end -->',
+                          lambda _: render_cb_entry(output_dir, report_date), document, flags=re.S)
+    hub_end = '<!-- war-room-hub:end -->' 
     if hub_end in document:
         document = document.replace(hub_end, hub_end + block, 1)
     else:
@@ -129,16 +123,24 @@ def add_main_entry(document, output_dir, report_date, prefix=''):
 
 def render_cb_entry(output_dir, report_date):
     bundle = load_report_set(output_dir, report_date)
+    from cb_baotuan_report import render_cb_teaser_card_html
+    base_teaser = render_cb_teaser_card_html(report_date=str(report_date))
+
     if bundle is None:
         text = '本交易日的完整转债预案尚未生成；先等待同日数据与筛选结果。'
+        evidence_html = f'<div style="margin-top:14px;padding:10px 14px;background:#101a27;border:1px solid #34465a;border-radius:6px;font-size:12.5px;color:#8b949e;"><b style="color:#e3b341;">⚡ 条件预案：</b>{escape(text)}</div>'
     else:
         report = bundle[1][-1]
         text = f"收盘数据 {report['as_of']} · 预案 {report['plan_date']}。" + report['decision_summary']
-    return ('<!-- cb-tracking-teaser:start --><section id="sec-cb-tracking" style="margin:22px 0;padding:20px;border:1px solid #30363d;border-radius:12px">'
-            + '<h2>可转债：同日数据与条件预案</h2><p>' + escape(text) + '</p>'
-            + ('<a href="#sec-trading-playbooks" style="color:#58a6ff">查看当前转债预案与候补 →</a>' if bundle else '')
-            + '</section><!-- cb-tracking-teaser:end -->')
+        evidence_html = f'<div style="margin-top:14px;padding:10px 14px;background:#101a27;border:1px solid #00cccc;border-radius:6px;font-size:12.5px;color:#f0f6fc;"><b style="color:#00cccc;">⚡ 同日转债预案：</b>{escape(text)} <a href="#sec-trading-playbooks" style="color:#58a6ff;margin-left:8px;">查看当前转债预案与候补 →</a></div>'
 
+    end_tag = "<!-- cb-tracking-teaser:end -->"
+    if end_tag in base_teaser:
+        pos = base_teaser.rfind("</section>")
+        if pos != -1:
+            return base_teaser[:pos] + evidence_html + "\n" + base_teaser[pos:]
+        return base_teaser.replace(end_tag, evidence_html + "\n" + end_tag)
+    return "<!-- cb-tracking-teaser:start -->\n" + base_teaser + evidence_html + "\n<!-- cb-tracking-teaser:end -->"
 
 def add_review_entry(document, output_dir, report_date, prefix=''):
     """An after-session review is linked by its own date, never as a new plan."""

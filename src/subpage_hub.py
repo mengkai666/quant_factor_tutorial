@@ -157,19 +157,19 @@ def render_war_room_hub_html(
             <div>
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
                     <span style="font-size:11px;font-weight:700;color:#00cccc;background:rgba(0,204,204,0.12);padding:2px 8px;border-radius:10px;border:1px solid rgba(0,204,204,0.25);">
-                        每日转债条件预案
+                        🤖 机器人转债集群主升
                     </span>
-                    <span style="font-size:11px;color:#8b949e;">日期与条件核验</span>
+                    <span style="font-size:11px;color:#8b949e;">澳弘破位出清</span>
                 </div>
                 <div style="font-size:15px;font-weight:700;color:#f0f6fc;margin-bottom:6px;">
                     🎯 可转债抱团与新周期追踪
                 </div>
                 <div style="font-size:12px;color:#8b949e;line-height:1.55;margin-bottom:12px;">
-                    当前候选、候补、债股共振条件和未入选原因见每日三战法；逐只核对日期、强赎资料与退出条件。
+                    澳弘转债天量破位杀跌出清(-5.5%，正股-8.18%) ➔ 机器人转债集群(奥普/豪美/丰茂/震裕02)全线接力爆发。正股涨停板上溢出、T+0高频做T与量化个股筛选。
                 </div>
             </div>
             <div style="padding-top:10px;border-top:1px solid #21262d;">
-                <a href="{'#sec-trading-playbooks' if playbook_entry else '可转债抱团复盘与追踪.html'}" style="display:block;text-align:center;background:#008888;color:#ffffff;text-decoration:none;font-size:12.5px;font-weight:700;padding:7px 0;border-radius:6px;box-shadow:0 2px 6px rgba(0,136,136,0.3);">
+                <a href="site/cb_baotuan/latest.html" style="display:block;text-align:center;background:#008888;color:#ffffff;text-decoration:none;font-size:12.5px;font-weight:700;padding:7px 0;border-radius:6px;box-shadow:0 2px 6px rgba(0,136,136,0.3);">
                     🎯 进入可转债抱团研报 →
                 </a>
             </div>
