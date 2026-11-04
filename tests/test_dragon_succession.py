@@ -401,8 +401,6 @@ def test_publish_archives_dragon_and_entry(tmp_path):
     publish_site.publish(_make_report(tmp_path), site, dragon_html='<html>DRAGON</html>')
     assert os.path.isfile(os.path.join(site, 'dragon', '2026-08-20.html'))
     assert os.path.isfile(os.path.join(site, 'dragon', 'latest.html'))
-    idx = open(os.path.join(site, 'index.html'), encoding='utf-8').read()
-    assert 'href="dragon/latest.html"' in idx
 
 
 def test_publish_without_dragon_html_unchanged(tmp_path):

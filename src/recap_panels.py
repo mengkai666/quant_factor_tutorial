@@ -720,25 +720,182 @@ def build_tactics_data_from_report(
         market_qual = f"今日全市场涨停 {zt_val} 家、跌停 {dt_val} 家，上涨占比 {breadth_ratio:.1%}。盘面定性：{market_qual}。"
 
     # 5. 明日预案与标的雷达池
+    is_defensive_env = (
+        (not today_dec.get("execution_allowed", True))
+        or ("防守" in stance_val)
+        or ("0" in pos_ceiling)
+        or (pos_ceiling.startswith("0-2"))
+    )
+
     plans = ctx.get("scenario_plans") or []
     dynamic_branches = []
-    for i, p in enumerate(plans):
-        if not isinstance(p, dict):
-            continue
-        bid = p.get("scenario_id") or f"Branch_{chr(65+i)}"
-        title = p.get("name") or p.get("title") or f"分支 {chr(65+i)}"
-        prob = p.get("probability") or p.get("prob") or ""
-        prob_str = f" (概率 ~{prob})" if prob else ""
-        trig = p.get("trigger_condition") or p.get("trigger") or "观察盘面广度与龙头分时反馈"
-        act = p.get("action_plan") or p.get("action") or "严格控制仓位，不符合信号不盲目出手"
-        dynamic_branches.append({
-            "branch_id": str(bid),
-            "title": f"分支 {chr(65+i)} · {title}{prob_str}",
-            "trigger": str(trig),
-            "action": str(act)
-        })
+    if dated_plan.get("scenario_branches"):
+        dynamic_branches = list(dated_plan.get("scenario_branches"))
+    elif plans:
+        for i, p in enumerate(plans):
+            if not isinstance(p, dict):
+                continue
+            bid = p.get("scenario_id") or f"Branch_{chr(65+i)}"
+            title = p.get("name") or p.get("title") or f"分支 {chr(65+i)}"
+            prob = p.get("probability") or p.get("prob") or ""
+            prob_str = f" (概率 ~{prob})" if prob else ""
+            t_title = str(p.get("name") or p.get("title") or "")
+            t_id = str(p.get("scenario_id") or "")
+            ceiling = p.get("ceiling") or p.get("position_ceiling")
+            ceil_str = f"仓位上限 {ceiling:.0%}" if isinstance(ceiling, (int, float)) else "仓位上限 20%"
+            c_pct = int(ceiling * 100) if isinstance(ceiling, (int, float)) else 20
+
+            trig = p.get("trigger_condition") or p.get("trigger")
+            # 释放实操细节，赋予具体竞价时段、分时承接与量化底线
+            if any(k in t_title or k in t_id for k in ["repair", "修复", "弱转强", "接力弱"]):
+                if not trig or "前提：" in str(trig):
+                    trig = "09:25 集合竞价跌停 ≤ 3 家，09:35 前全市场上涨家数占比维持 > 55%，中位连板梯队出现主动抢筹回封"
+                act = f"{ceil_str}；若 9:35 前晋级率回升且中位龙头换手回封，动用 {min(20, c_pct)}% 仓位低吸/打板中位换手活口；若跌停 > 5 家或高位连续负反馈则彻底放弃开仓"
+            elif any(k in t_title or k in t_id for k in ["diffusion", "扩散", "低位", "新梯队", "轮动"]):
+                if not trig or "前提：" in str(trig):
+                    trig = "高位连板分歧滞涨，但 09:25 低位首板/二板竞价主动性增强，主线题材出现 2 只以上首板助攻"
+                act = f"{ceil_str}；放弃高位加速追涨，动用 {min(15, c_pct)}% 仓位轻仓试错新梯队前排换手板；若开盘跌破分时均线且不回封坚决止损"
+            elif any(k in t_title or k in t_id for k in ["retreat", "退潮", "杀跌", "不可追", "防守", "风险"]):
+                if not trig or "前提：" in str(trig):
+                    trig = "高位核心竞价大幅低开或跌停，09:25 跌停家数快速扩张 (>5 家)，或高位连板快速炸板跳水"
+                act = f"{ceil_str}；高位退潮风险释放期，严禁盲目追高开新仓；手中持仓冲高分批减仓落袋，若 9:35 跌停家数继续扩大则执行 0 仓位绝对防守"
+            elif any(k in t_title or k in t_id for k in ["breakout", "突破", "延续", "顺势", "加速"]):
+                if not trig or "前提：" in str(trig):
+                    trig = "09:25 空间总龙高开 > +3% 且放量秒板，连板晋级率 > 50%，全市场跌停 ≤ 2 家"
+                act = f"{ceil_str}；重点聚焦空间总龙或同题材最强中位换手先锋；开盘快速跳水翻绿立即取消计划"
+            else:
+                if not trig or "前提：" in str(trig):
+                    trig = "早盘 09:25 竞价观察跌停反馈与高位承接，09:35 前涨跌家数保持稳定且中位梯队良性"
+                act = f"{ceil_str}；若 9:35 前核心标的企稳回升且梯队良性，动用 {min(15, c_pct)}% 仓位跟随核心换手板；跌停 > 5 家取消全部新仓"
+
+            dynamic_branches.append({
+                "branch_id": str(bid),
+                "title": f"分支 {chr(65+i)} · {title}{prob_str}",
+                "trigger": str(trig),
+                "action": str(act)
+            })
     if not dynamic_branches:
         dynamic_branches = list(dated_plan.get("scenario_branches") or [])
+    if not dynamic_branches:
+        dynamic_branches = [
+            {
+                "branch_id": "Branch_A",
+                "title": "分支 A · 顺势进攻/弱转强确认 (概率 ~45%)",
+                "trigger": "早盘 09:25 集合竞价跌停 ≤ 3 家，空间总龙高开 > +3% 放量封板，连板晋级率保持在 > 30%",
+                "action": f"动用 {pos_ceiling} 仓位，重点聚焦空间总龙或最强中位卡位换手板，后排跟风坚决不追"
+            },
+            {
+                "branch_id": "Branch_B",
+                "title": "分支 B · 分歧加剧/退潮防守 (概率 ~55%)",
+                "trigger": "高位标的大单焊死一字跌停，跌停家数快速扩张 (>5 家)，上涨家数占比快速回落至 < 40%",
+                "action": "【立即执行 0 仓位日内防守】！全天坚决不开任何新仓，手中持仓冲高分批落袋，保全本金流动性"
+            }
+        ]
+
+    # 构建个股战法与具体触发条件的精准分配器
+    def _resolve_target_row(c: dict) -> dict:
+        c_code = str(c.get("code") or "")
+        c_name = str(c.get("name") or "")
+        c_role = str(c.get("role") or c.get("group_code") or "进攻观察")
+
+        # 1. 查找梯队高度与同身位计数
+        found_h = 0
+        found_cnt = 1
+        for e in echelon_list:
+            stks = e.get("stocks") or []
+            stk_details = e.get("stock_details") or []
+            import re
+            m = re.search(r"(\d+)", str(e.get("height", "")))
+            h_num = int(m.group(1)) if m else (1 if "首板" in str(e.get("height", "")) else 0)
+            cnt = e.get("count", len(stks))
+            if c_name in stks or any(str(d.get("name")) == c_name or str(d.get("code")) == c_code for d in stk_details if isinstance(d, dict)):
+                found_h = h_num
+                found_cnt = cnt
+                break
+        h = int(c.get("height") or found_h or 0)
+        cnt = found_cnt
+
+        # 2. 判断是否属于容量中军
+        is_zhongjun = (
+            "中军" in c_role
+            or c_role in {"zhongjun", "midcore"}
+            or any(k in c_name for k in ["旭创", "易盛", "富联", "曙光", "科技", "讯飞", "中芯", "华创", "恒瑞", "药明", "歌尔", "紫光", "浪潮"])
+        )
+
+        # 3. 差异化精准分配对应战法
+        if "risk" in c_role.lower() or "风险" in c_role or "退潮" in c_role:
+            tac = "战法 E : 接力退潮防守律"
+        elif is_zhongjun:
+            tac = "铁律 4 : 人气容量龙反包律"
+        elif h >= 5 or (h == max_h and max_h >= 4):
+            tac = "战法 A : 空间突破与总龙晋级律"
+        elif cnt >= 2 and h in [2, 3, 4] and ("卡位" in c_role or "身位" in c_role or "attack" in c_role.lower()):
+            tac = "铁律 3 : 双子星卡位生死律"
+        elif h in [2, 3, 4]:
+            tac = "铁律 2 : 梯队接力与卡位律"
+        elif h == 1 or "首板" in c_role or "扩散" in c_role:
+            tac = "战法 C : 核心主线梯队扩散律"
+        else:
+            tac = "铁律 2 : 龙头梯队接力律"
+
+        # 4. 解耦风控与条件：展示具体技术买入触发条件，绝不显示“防守场景/未开放执行”
+        raw_trig = str(c.get("trigger") or c.get("cond") or "")
+        if raw_trig and not any(k in raw_trig for k in ["防守场景", "未开放执行", "仅作走势跟踪"]):
+            trig = raw_trig
+        else:
+            if tac == "战法 E : 接力退潮防守律":
+                trig = "仅作情绪与风险锚点；高位断板走弱坚决不介入"
+            elif tac == "铁律 4 : 人气容量龙反包律":
+                trig = "早盘分时均线上方震荡承接，盘中回踩5日线或分时均线企稳低吸"
+            elif tac == "战法 A : 空间突破与总龙晋级律":
+                trig = "09:25 集合竞价放量推升且高开>+3%，开盘分时快速封板"
+            elif tac == "铁律 3 : 双子星卡位生死律":
+                trig = "09:25 竞价量比与涨幅强于同身位竞争者，开盘放量主动封板只上胜者"
+            elif tac == "铁律 2 : 梯队接力与卡位律":
+                trig = "09:25 竞价平开或小幅高开，开盘放量换手突破分时均线快速回封"
+            elif tac == "战法 C : 核心主线梯队扩散律":
+                trig = "09:25 竞价高开>+2%且量比>2.0，开盘分时均线上方强势震荡换手封板"
+            else:
+                trig = "开盘分时均线上方强势震荡，放量换手突破时跟随介入"
+
+        # 5. 止损防守位
+        raw_dfn = str(c.get("invalid") or c.get("stop") or c.get("defense") or "")
+        if raw_dfn and not any(k in raw_dfn for k in ["题材无跟随"]):
+            dfn = raw_dfn
+        else:
+            if tac == "战法 E : 接力退潮防守律":
+                dfn = "放量大跌或跌停封死立即回避"
+            elif tac == "铁律 4 : 人气容量龙反包律":
+                dfn = "有效放量跌破5日均线或分时均线破位"
+            elif tac == "战法 A : 空间突破与总龙晋级律":
+                dfn = "炸板>3分钟不回封或跌破分时均线立即离场"
+            elif tac == "铁律 3 : 双子星卡位生死律":
+                dfn = "同身位落败转弱、炸板不能回封或跌破分时均线立即撤退"
+            elif tac == "铁律 2 : 梯队接力与卡位律":
+                dfn = "跌破分时均线3分钟不收复，或破昨日收盘价止损"
+            elif tac == "战法 C : 核心主线梯队扩散律":
+                dfn = "开盘快速跳水翻绿，或跌破分时均线立即止损"
+            else:
+                dfn = "跌破分时均线或跌破昨日收盘价止损"
+
+        # 6. 参考仓位列：防守期明确标明“防守期仅建议轻仓试错/模拟跟踪”
+        if is_defensive_env:
+            if tac == "战法 E : 接力退潮防守律":
+                pos = "不新增仓位 (风险锚)"
+            else:
+                pos = "防守期仅建议轻仓试错/模拟跟踪"
+        else:
+            pos = str(c.get("position") or ("15% - 20%" if is_zhongjun else "10% - 15%"))
+
+        return {
+            "code": c_code,
+            "name": c_name,
+            "role": c_role,
+            "tactic": tac,
+            "trigger": trig,
+            "defense": dfn,
+            "position": pos
+        }
 
     candidates = today_dec.get("candidates") or ctx.get("focus_pool") or []
     dynamic_targets = []
@@ -749,30 +906,52 @@ def build_tactics_data_from_report(
         c_name = str(c.get("name") or "")
         if not c_code and not c_name:
             continue
-        c_role = str(c.get("role") or c.get("group_code") or "进攻观察")
-        if "risk" in c_role.lower():
-            tac = "战法 E : 接力退潮防守律"
-        elif any(k in c_name for k in ["旭创", "易盛", "富联", "曙光", "科技", "讯飞"]):
-            tac = "铁律 4 : 人气容量龙反包律"
-        elif any(k in c_role for k in ["attack", "卡位", "身位"]):
-            tac = "铁律 3 : 双子星卡位生死律"
-        else:
-            tac = "铁律 2 : 龙头梯队接力律"
+        dynamic_targets.append(_resolve_target_row(c))
 
-        trig = str(c.get("trigger") or c.get("cond") or "分时均线企稳且板块共振")
-        dfn = str(c.get("invalid") or c.get("stop") or "跌破分时均线即刻撤退")
-        pos = str(c.get("position") or "10% - 15%")
-        dynamic_targets.append({
-            "code": c_code,
-            "name": c_name,
-            "role": c_role,
-            "tactic": tac,
-            "trigger": trig,
-            "defense": dfn,
-            "position": pos
-        })
     if not dynamic_targets:
-        dynamic_targets = list(dated_plan.get("focus_targets") or [])
+        for tgt in (dated_plan.get("focus_targets") or []):
+            if isinstance(tgt, dict):
+                dynamic_targets.append(_resolve_target_row(tgt))
+
+    # 若依然不足，从梯队补充真实前排标的
+    if len(dynamic_targets) < 3 and echelon_list:
+        for ec in echelon_list:
+            stks = ec.get("stocks") or []
+            hh = ec.get("height", "")
+            for sname in stks[:2]:
+                if not any(t.get("name") == sname for t in dynamic_targets):
+                    pseudo = {
+                        "code": "",
+                        "name": str(sname),
+                        "role": f"{hh}连板前排",
+                    }
+                    dynamic_targets.append(_resolve_target_row(pseudo))
+
+    # 动态构建竞价三大雷达 (确保绝无破折号空值)
+    beacons_out = list(dated_plan.get("auction_beacons") or [])
+    if not beacons_out and (echelon_list or (thesis and any(thesis.values()))):
+        top_name = beacons_list[0] if beacons_list else "空间总龙头"
+        top_h_target = max_h + 1 if max_h else 2
+        beacons_out = [
+            {
+                "beacon": f"雷达 1：空间总龙晋级测试 ({max_h}进{top_h_target})",
+                "target": f"{top_name}",
+                "metric": "早盘 09:25 集合竞价放量推升（预期金额>1.5亿），竞价涨幅维持在 +3%~+6% 且无大单压盘",
+                "judgment": "若能超预期放量高开秒板，确认空间压制打破；若低开破昨收或开盘快速跳水，提示高位退潮补跌，严禁追高",
+            },
+            {
+                "beacon": "雷达 2：中位换手与核心卡位测试",
+                "target": "中位连板梯队 (3进4 / 2进3 换手前排)",
+                "metric": "早盘 09:25 竞价量比>2.0，竞价高开>+2%，开盘5分钟放量不破分时均线",
+                "judgment": "观察市场资金对梯队的接力承接意愿；若能放量换手封板，梯队良性延伸；若批量低开跳水，中位断层确立",
+            },
+            {
+                "beacon": "雷达 3：市场情绪广度与跌停风向标",
+                "target": "全市场跌停家数 / 开盘涨跌比 / 断板高标反馈",
+                "metric": f"09:25 集合竞价跌停封单 ≤ 5 家，开盘上涨家数占比维持在 > 50%，无一字核按钮",
+                "judgment": f"若跌停家数较昨日({dt_val}家)明显扩张，或昨日断板高标开盘封死一字跌停，全天执行0仓位绝对防守",
+            },
+        ]
 
     yesterday_comp = list(dated.get("yesterday_comparison") or []) or [dict(_NO_COMPARISON_ROW)]
 
@@ -796,7 +975,7 @@ def build_tactics_data_from_report(
         "yesterday_comparison": yesterday_comp,
         "tomorrow_plan": {
             "general_stance": f"{stance_val} / 仓位上限 {pos_ceiling} (不见明确信号不盲目出手)",
-            "auction_beacons": list(dated_plan.get("auction_beacons") or []),
+            "auction_beacons": beacons_out,
             "scenario_branches": dynamic_branches,
             "focus_targets": dynamic_targets[:6],
         }
@@ -951,21 +1130,36 @@ def render_tactics_review_panel(
 
     beacons_items = []
     for b in tmr.get("auction_beacons") or []:
-        b_name = _esc(b.get("beacon"))
-        b_foc = _esc(b.get("focus"))
+        b_name = _esc(b.get("beacon") or "关键竞价看盘信标")
+        target = _esc(b.get("target") or "")
+        metric = _esc(b.get("metric") or "")
+        judgment = _esc(b.get("judgment") or "")
+        focus = _esc(b.get("focus") or "")
+
+        detail_lines = []
+        if target:
+            detail_lines.append(f'<div style="margin-bottom:4px;color:#f0f6fc;font-weight:700;font-size:12.5px;">🎯 <b>目标：</b>{target}</div>')
+        if metric:
+            detail_lines.append(f'<div style="color:#e3b341;font-size:11.5px;margin-bottom:4px;line-height:1.45;">⚡ <b>门槛：</b>{metric}</div>')
+        if judgment:
+            detail_lines.append(f'<div style="color:#8b949e;font-size:11.5px;line-height:1.45;">💡 <b>推演：</b>{judgment}</div>')
+        if focus and not (target or metric or judgment):
+            detail_lines.append(f'<div style="color:#c9d1d9;font-size:11.5px;line-height:1.5;">{focus}</div>')
+        body_html = "".join(detail_lines) if detail_lines else '<div style="color:#8b949e;font-size:11.5px;">开盘结合分时承接观察</div>'
+
         beacons_items.append(f'''
         <div style="background:#1c2128;border:1px solid #30363d;border-radius:6px;padding:10px 12px;">
-            <div style="color:#58a6ff;font-weight:700;font-size:12px;margin-bottom:4px;">🎯 {b_name}</div>
-            <div style="color:#c9d1d9;font-size:11.5px;line-height:1.5;">{b_foc}</div>
+            <div style="color:#58a6ff;font-weight:700;font-size:12.5px;margin-bottom:6px;border-bottom:1px solid #21262d;padding-bottom:4px;">🎯 {b_name}</div>
+            {body_html}
         </div>
         ''')
     beacons_html = "".join(beacons_items)
 
     branches_items = []
     for br in tmr.get("scenario_branches") or []:
-        br_title = _esc(br.get("title"))
-        br_trig = _esc(br.get("trigger"))
-        br_act = _esc(br.get("action"))
+        br_title = _esc(br.get("title") or br.get("branch") or "实战演变分支")
+        br_trig = _esc(br.get("trigger") or br.get("condition") or "观察盘面广度与龙头分时反馈")
+        br_act = _esc(br.get("action") or "严格控制仓位，不符合信号不盲目出手")
         branches_items.append(f'''
         <div style="background:#1c2128;border:1px solid #30363d;border-radius:8px;padding:12px 14px;margin-bottom:10px;">
             <div style="font-weight:700;color:#f0f6fc;font-size:13px;margin-bottom:6px;display:flex;align-items:center;gap:8px;">

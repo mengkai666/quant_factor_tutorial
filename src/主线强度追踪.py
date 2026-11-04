@@ -4907,6 +4907,17 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     except Exception as e:
         print(f"  [警告] 抱团周期与新周期试错 teaser 生成失败 (不影响主流程): {e}")
 
+    # 可转债抱团复盘与新周期追踪 teaser: 澳弘转债瓦解出清 vs 机器人转债集群新抱团
+    cb_tracking_teaser_html = ''
+    try:
+        from cb_baotuan_report import render_cb_teaser_card_html
+        _cb_dt = dates[-1] if dates else '2026-10-23'
+        if len(str(_cb_dt)) == 8 and str(_cb_dt).isdigit():
+            _cb_dt = f"{str(_cb_dt)[:4]}-{str(_cb_dt)[4:6]}-{str(_cb_dt)[6:]}"
+        cb_tracking_teaser_html = render_cb_teaser_card_html(report_date=str(_cb_dt))
+    except Exception as e:
+        print(f"  [警告] 可转债抱团与新周期追踪 teaser 生成失败 (不影响主流程): {e}")
+
     # 动态生成量化择时模块：必须服从统一三态发布策略。
     timing_res = dict(timing_result or generate_timing_signal(sentiment_df, advance_decline, echelon))
     timing_res = _publication_timing(timing_res, market_state)
@@ -5369,6 +5380,8 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     {dragon_teaser_html}
 
     {baotuan_teaser_html}
+
+    {cb_tracking_teaser_html}
 
     {ladder_html}
 

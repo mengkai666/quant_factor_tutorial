@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import html
+from pathlib import Path
 from typing import Any
 
 
@@ -34,6 +35,8 @@ def render_war_room_hub_html(
     is_heavy_retreat = isinstance(dt, int) and dt >= 20
     pos_cap = "0 仓位" if is_heavy_retreat else "≤ 1.5 成"
     stance_tag = "🚨 极端退潮防守" if is_heavy_retreat else "⚖️ 中性控仓防守"
+    from trading_playbook_links import render_main_entry
+    playbook_entry = render_main_entry(Path(__file__).resolve().parents[1] / 'output', report_date)
 
     return f"""
 <!-- war-room-hub:start -->
@@ -43,11 +46,11 @@ def render_war_room_hub_html(
             <h2 class="section-title" id="sec-hub-title" style="margin:0;font-size:18px;font-weight:800;color:#f0f6fc;display:flex;align-items:center;gap:8px;">
                 <span>⚡ 核心实战子研报作战室快捷矩阵</span>
                 <span style="font-size:11.5px;background:rgba(88,166,255,0.15);color:#58a6ff;border:1px solid rgba(88,166,255,0.3);padding:2px 8px;border-radius:12px;font-weight:600;">
-                    4大专属深度研报 · 一键直达作战室
+                    5大专属深度研报 · 一键直达作战室
                 </span>
             </h2>
             <div style="font-size:12.5px;color:#8b949e;margin-top:4px;">
-                针对复盘预案、放量主升回调、专属持仓及龙头抱团周期已分别生成独立深度研报，主报告保留精炼结论与实时数据看板。
+                针对复盘预案、放量主升回调、专属持仓、龙头抱团及可转债共振已分别生成独立深度研报，主报告保留精炼结论与实时数据看板。
             </div>
         </div>
         <div style="font-size:12px;color:#8b949e;">
@@ -149,8 +152,31 @@ def render_war_room_hub_html(
                 </a>
             </div>
         </div>
+        <!-- 卡片 5: 可转债抱团与新周期追踪作战室 -->
+        <div style="background:#161b22;border:1px solid #30363d;border-top:3px solid #00cccc;border-radius:10px;padding:16px 16px 14px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 4px 12px rgba(0,0,0,0.25);transition:transform 0.2s ease;">
+            <div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                    <span style="font-size:11px;font-weight:700;color:#00cccc;background:rgba(0,204,204,0.12);padding:2px 8px;border-radius:10px;border:1px solid rgba(0,204,204,0.25);">
+                        每日转债条件预案
+                    </span>
+                    <span style="font-size:11px;color:#8b949e;">日期与条件核验</span>
+                </div>
+                <div style="font-size:15px;font-weight:700;color:#f0f6fc;margin-bottom:6px;">
+                    🎯 可转债抱团与新周期追踪
+                </div>
+                <div style="font-size:12px;color:#8b949e;line-height:1.55;margin-bottom:12px;">
+                    当前候选、候补、债股共振条件和未入选原因见每日三战法；逐只核对日期、强赎资料与退出条件。
+                </div>
+            </div>
+            <div style="padding-top:10px;border-top:1px solid #21262d;">
+                <a href="{'#sec-trading-playbooks' if playbook_entry else '可转债抱团复盘与追踪.html'}" style="display:block;text-align:center;background:#008888;color:#ffffff;text-decoration:none;font-size:12.5px;font-weight:700;padding:7px 0;border-radius:6px;box-shadow:0 2px 6px rgba(0,136,136,0.3);">
+                    🎯 进入可转债抱团研报 →
+                </a>
+            </div>
+        </div>
+
 
     </div>
 </section>
 <!-- war-room-hub:end -->
-"""
+""" + playbook_entry

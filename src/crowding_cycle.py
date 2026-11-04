@@ -389,6 +389,9 @@ def build_crowding_report(report_date: str, *, data_dir: str | Path | None = Non
     daily, succession = _scan(mats, dates, resolved, breadth, counts) if mats else ([], [])
     from crowding_replay import build_screening_replay
     screening_replay = build_screening_replay(daily, mats, resolved, requested_date=requested, rules=tracking_rules)
+    from crowding_phases import build_automatic_phases
+    automatic_phases = build_automatic_phases(daily, mats, resolved, window_start=start,
+                                               requested_date=requested, calendar_known=calendar_known)
     daily = [item for item in daily if item['date'] >= start]
     succession = [item for item in succession if item['date'] >= start]
     from crowding_tracking import build_dynamic_tracking
@@ -569,7 +572,7 @@ def build_crowding_report(report_date: str, *, data_dir: str | Path | None = Non
                 quality=quality, sources_as_of=clocks, sources_lag_trading_days=lags,
                 warnings=warnings, reference_visible=reference_visible, groups=groups, periods=periods,
                 events=events, paths=paths, daily=daily, succession=succession, trial_gates=trial_gates,
-                tracking=tracking, screening_replay=screening_replay,
+                tracking=tracking, screening_replay=screening_replay, automatic_phases=automatic_phases,
                 tactics=[dict(t, example=t['example'] if reference_visible else '通用研究规则；本期不使用10月8日事后提供的具体股票名单。') for t in TACTICS],
                 sources=[s for s in SOURCES if s['date'] <= requested],
                 execution=dict(status='not_qualified', reason='研究观察，不生成自动交易信号；未有完整成交、量能和全市场时点证据。',

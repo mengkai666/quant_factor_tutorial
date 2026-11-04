@@ -43,6 +43,13 @@ def generate_crowding_html(result: dict, *, is_site_mode: bool = False) -> str:
     replay_section = render_replay_section(r.get('screening_replay'))
     from crowding_external_view import EXTERNAL_CSS, EXTERNAL_SCRIPT, render_external_section
     external_section = render_external_section(r.get('external_evidence'))
+    from crowding_phases_view import PHASE_CSS, PHASE_SCRIPT, render_automatic_phases
+    automatic_section = render_automatic_phases(r.get('automatic_phases'))
+    from crowding_conclusions_view import CONCLUSIONS_CSS, render_conclusions
+    conclusions_section = render_conclusions(r)
+    from crowding_stock_research import RESEARCH_CSS, RESEARCH_SCRIPT, render_stock_research
+    stock_research_section = render_stock_research(r.get('stock_research'))
+    stock_research_script = f'<script>{RESEARCH_SCRIPT}</script>' if stock_research_section else ''
     home = '../index.html' if is_site_mode else '本地导航入口.html'
     main = '../latest.html' if is_site_mode else '主线强度追踪.html'
     groups = r['groups']
@@ -132,13 +139,17 @@ def generate_crowding_html(result: dict, *, is_site_mode: bool = False) -> str:
     payload = json.dumps(dict(paths=r['paths'], names=names, tracking=r.get('tracking'), screening_replay=r.get('screening_replay')), ensure_ascii=False, allow_nan=False).replace('<','\\u003c').replace('>','\\u003e').replace('&','\\u0026')
     options = ''.join(f'<option value="{e(k)}">{e(v)} · {e(k)}</option>' for k,v in names.items())
     warnings = ''.join(f'<li>{e(w)}</li>' for w in r['warnings'])
-    return f'''<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="report-date" content="{e(r['requested_date'])}"><title>抱团周期分析 · {e(r['requested_date'])}</title><style>{CSS}{TRACKING_CSS}{REPLAY_CSS}{EXTERNAL_CSS}</style></head>
-<body><nav class="top-nav" aria-label="主导航"><a href="{home}">导航首页</a><a href="{main}">主线追踪</a><a class="active" href="#">抱团周期</a><a href="#dynamic-tracking">动态新老追踪</a><a href="#screening-replay">分类每日推演</a><a href="#external-evidence">外部证据</a><a href="#cycles">分周期复盘</a><a href="#cohorts">抱团个股</a><a href="#tactics">条件战法</a><a href="#evidence">证据边界</a></nav>
-<main><header class="hero"><div><div class="eyebrow">CROWDING CYCLES / RESEARCH DESK</div><h1>价格强度 × 脆弱性，<span>新旧群体可以并行。</span></h1><p class="intro">把“谁涨得多”与“谁在接替”分开。识别旧核心的修复与失效，记录新候选的竞争；新团不必等待旧团出清，不把一根阳线写成新周期。</p><span class="badge">两个月复盘</span> <span class="badge old">多周期并行</span> <span class="badge risk">非交易信号</span></div><div class="clock">{clock}</div></header>
+    return f'''<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="report-date" content="{e(r['requested_date'])}"><title>抱团周期分析 · {e(r['requested_date'])}</title><style>{CSS}{TRACKING_CSS}{REPLAY_CSS}{EXTERNAL_CSS}{PHASE_CSS}{CONCLUSIONS_CSS}{RESEARCH_CSS if stock_research_section else ""}</style></head>
+<body><nav class="top-nav" aria-label="主导航"><a href="{home}">导航首页</a><a href="{main}">主线追踪</a><a class="active" href="#">抱团周期</a><a href="#conclusions">结论</a><a href="#previous-tracking">此前抱团</a><a href="#recent-observations">最近观察</a><a href="#analysis-details">分析依据</a><a href="#dynamic-tracking">逐日追踪</a><a href="#automatic-phases">自动分段</a><a href="#external-evidence">外部证据</a><a href="#cycles">分周期复盘</a><a href="#cohorts">抱团个股</a><a href="#tactics">条件战法</a><a href="#evidence">证据边界</a></nav>
+<main><header class="hero"><div><div class="eyebrow">CROWDING CYCLES / RESEARCH DESK</div><h1>抱团跟踪，<span>先看结论与最近观察。</span></h1><p class="intro">先看此前抱团有没有延续、修复或退出，再看最近出现的候选。自动阶段划分、逐日回放与判定证据放在后方，供进一步核对。</p><span class="badge">两个月复盘</span> <span class="badge old">多周期并行</span> <span class="badge risk">非交易信号</span></div><div class="clock">{clock}</div></header>
 <div class="alert" role="status">{e(alert)}</div>
+{conclusions_section}
+<section id="analysis-details" class="analysis-divider"><h2>详细分析与验证依据</h2><p class="muted">下面再展开阶段划分、逐日跟踪、分类条件和历史案例。回放控件仅改变各自分析区；前方结论固定标注最近证据日。</p></section>
+{stock_research_section}
 <section id="logic"><h2>六个状态，不是一条必然上涨的路径</h2><p class="muted">抱团股：在分歧中仍反复获得相对强势与承接的辨识度标的。仅凭涨幅、连板数或同一题材，不能证明资金真的集中。</p>
 <div class="steps">{''.join(f'<div class="step"><b>{e(a)}</b><p>{e(b)}</p></div>' for a,b in [('形成','从分散到聚焦，持续性初现'),('强化','核心与跟随获得多日验证'),('分歧','有人修复，有人掉队'),('瓦解','多核心破位，亏钱效应扩散'),('出清观察','连续止跌仍不是出清完成'),('试错 / 再确认','竞争可失败，也可回到等待')])}</div>
 <div class="branch">断板是个股事件；瓦解是固定核心篮子的共振失效；出清是抛压释放的过程。试错可以失败，旧团也会反抽，多个方向可以同时处于不同状态。</div></section>
+{automatic_section}
 {tracking_section}
 {replay_section}
 {external_section}
@@ -178,15 +189,18 @@ function draw(maxDate){{
  node('text',{{x:72,y:20,fill:'#e4ebf6','font-size':13}},'归一化收盘路径 / 首个可见日=100');
 }}
 document.getElementById('stock-select').addEventListener('change',draw);draw();
+{PHASE_SCRIPT}
 {TRACKING_SCRIPT}
 {REPLAY_SCRIPT}
 {EXTERNAL_SCRIPT}
-</script></body></html>'''
+</script>{stock_research_script}</body></html>'''
 
 
 def generate_crowding_markdown(r: dict) -> str:
+    from crowding_conclusions_view import conclusions_markdown
     lines = ['# 抱团周期与新周期试错', '', f'研究截止：{r["requested_date"]}；回顾起点：{r["window_start"]}。',
              f'全市场行情：{r["market_as_of"]}；补充个股：{r["sources_as_of"]["reference_quotes"]}。', '',
+             *conclusions_markdown(r), '', '## 详细分析与验证依据', '',
              '## 核心理解', '断板是个股事件，瓦解是核心群体失效，出清是抛压释放过程，试错不是新周期确认。',
              '旧团修复、新团试错与趋势延续可以并存。截图2与3仅算一份证据；红叉科技分支不算已确认主线。', '', '## 数据边界']
     lines += [f'- {w}' for w in r['warnings']]
@@ -204,6 +218,8 @@ def generate_crowding_markdown(r: dict) -> str:
         lines += ['', f'## {p["start"]}—{p["end"]}：{p["title"]}', p['thesis'],
                   '| 个股 | 本段涨跌 | 最大收盘回撤 | 覆盖 |', '|---|---:|---:|---|']
         lines += [f'| {m["name"]} | {pct(m["return_pct"])} | {pct(m["max_drawdown_pct"])} | {m["count"]}/{m["expected_count"]} |' for m in p['members']]
+    from crowding_phases_view import automatic_phases_markdown
+    lines += automatic_phases_markdown(r.get('automatic_phases'))
     replay = r.get('screening_replay') or {}
     if replay.get('windows'):
         lines += ['', '## 分类筛选与每日推演（研究条件，不替换正式追踪）', '', replay['limitation']]

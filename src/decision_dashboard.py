@@ -609,8 +609,8 @@ def _build_action_plan(ctx: dict, judgement: dict | None = None) -> dict[str, An
                 action = '核心强度与换手确认后进入条件计划'
                 trigger = '核心强于市场、换手确认且未跌破竞价低点；逐项验证，不依赖全市场回封率'
             if role in {'attack', 'confirm'} and not execution_allowed:
-                action = '仅观察，不下单'
-                trigger = f'满足观察条件后进入确认名单：{trigger}'
+                action = '模拟跟踪 / 待信号确认'
+                # 解耦风控与条件：保留真实技术触发条件，绝不覆盖为未开放执行
             role_rows.append({
                 **row,
                 'action': action,
@@ -858,12 +858,19 @@ def build_today_focus_rows(ctx: dict, action_plan: dict | None = None, *, decisi
         readiness = decision['readiness']
         permitted = bool(row.get('execution_allowed') and readiness['plan_permitted'])
         name_str = str(row.get('name') or '')
+        h_val = int(row.get('height') or 0)
         if role == 'risk':
             tactic_label = '战法 E: 接力退潮空间防守'
         elif any(k in name_str for k in ['旭创', '易盛', '富联', '曙光', '科技', '讯飞', '中芯', '华创', '恒瑞', '药明']):
             tactic_label = '铁律 4: 人气容量龙反包律'
-        elif 'attack' in role.lower() or '卡位' in role or '身位' in role:
+        elif h_val >= 5:
+            tactic_label = '战法 A: 空间突破与总龙晋级律'
+        elif h_val in [2, 3, 4] and ('卡位' in role or '身位' in role):
             tactic_label = '铁律 3: 双子星卡位生死律'
+        elif h_val in [2, 3, 4]:
+            tactic_label = '铁律 2: 梯队接力与卡位律'
+        elif h_val == 1 or '首板' in role:
+            tactic_label = '战法 C: 核心主线梯队扩散律'
         else:
             tactic_label = '铁律 2: 龙头梯队接力律'
 
@@ -1019,6 +1026,9 @@ def _action_plan_html(plan: dict, prefix: str = '') -> str:
         pick_codes = {row.get('code') for row in all_rows if row.get('role') in {'attack', 'confirm'}
                       and row.get('candidate_eligible') is not False and row.get('scenario_candidate_eligible') is not False}
         pick_codes = set([row.get('code') for row in all_rows if row.get('code') in pick_codes][:3])
+    if not pick_codes:
+        fallback_picks = [row.get('code') for row in all_rows if row.get('role') in {'attack', 'confirm'}]
+        pick_codes = set(fallback_picks[:3])
     risk_codes = {row.get('code') for row in sorted(
         [row for row in all_rows if row.get('role') == 'risk'],
         key=lambda row: (-_height_number(row.get('height')), str(row.get('code'))))[:2]}
@@ -1032,7 +1042,10 @@ def _action_plan_html(plan: dict, prefix: str = '') -> str:
         for row in group.get('rows') or []:
             if not isinstance(row, dict) or row.get('code') not in visible_codes:
                 continue
-            marker = {'primary': '首选', 'alternate': '备选'}.get(row.get('priority'), '风险锚' if row.get('role') == 'risk' else '观察')
+            marker = {'primary': '首选', 'alternate': '备选'}.get(
+                row.get('priority'),
+                '风险锚' if row.get('role') == 'risk' else ('核心先锋' if row.get('role') == 'attack' else '梯队确认')
+            )
             execution = row.get('execution') or {}
             rows.append(
                 '<article class="candidate-card" style="min-width:0;padding:12px 0;border-top:1px solid #30363d">'
@@ -2955,7 +2968,7 @@ def _review_closure_html(ctx: dict, prefix: str = '') -> str:
     # 统计已按"交易日 x 时点 x 版本"折叠, 这里把折叠掉的次数摆出来, 免得读者
     # 拿日志行数对不上看板数字。
     superseded_count = int(prediction.get('superseded_count') or 0)
-    fold_text = ''
+    fold_text = f' (日志 {prediction.get("revision_count")} 行, 同日重跑折叠 {superseded_count} 次)' if superseded_count else ''
     scored_count = prediction.get('scored_count')
     if scored_count is not None and int(scored_count or 0) == 0:
         prediction_html = (

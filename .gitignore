@@ -138,3 +138,7 @@ data/crowding_external_snapshots/
 data/crowding_external_evidence.json
 *.bak
 
+
+# Antigravity & Gemini local state
+.agent/
+.gemini/

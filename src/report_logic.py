@@ -1802,7 +1802,7 @@ def build_mainline_review(
         "hhi": metrics.get("hhi"),
         "limit_up_count": authoritative_count,
         "authoritative_count": authoritative_count,
-        "lianban_count": _int(metrics.get("sample_size")),
+        "lianban_count": _int(metrics["lianban_count"]) if metrics.get("lianban_count") is not None else None,
         "attributed_count": attributed_count,
         "unattributed_count": unattributed_count,
         "attribution_coverage_pct": coverage_value,
@@ -1823,13 +1823,22 @@ def compute_mainline_concentration(
     """按连板高度权重计算主线集中度，并显式反映归因覆盖率。"""
     weights: dict[str, float] = {}
     valid = 0
+    # 连板数量来自高度事实；归因样本还包含首板，且会排除无主线标注者。
+    streak_codes: set[str] = set()
+    unnamed_streaks = 0
     for item in rows or ():
         if not isinstance(item, dict):
             continue
+        height = _height(item)
+        if height >= 2:
+            code = _row_code(item)
+            if code:
+                streak_codes.add(code)
+            else:
+                unnamed_streaks += 1
         mainline = str(
             item.get("mainline", item.get("大主线", item.get("主线", item.get("sector", "")))) or ""
         ).strip()
-        height = _height(item)
         if not mainline or height <= 0:
             continue
         weights[mainline] = weights.get(mainline, 0.0) + max(1.0, float(height))
@@ -1837,7 +1846,8 @@ def compute_mainline_concentration(
     total_weight = sum(weights.values())
     if valid <= 0 or total_weight <= 0:
         return {
-            "sample_size": 0, "top_mainline": "", "top_share": None,
+            "sample_size": 0, "lianban_count": len(streak_codes) + unnamed_streaks,
+            "top_mainline": "", "top_share": None,
             "hhi": None, "text": "数据未就位", "conclusion_level": "insufficient",
             "authoritative_count": max(0, _int(authoritative_count)) if authoritative_count is not None else None,
             "attributed_count": max(0, _int(attributed_count)) if attributed_count is not None else 0,
@@ -1866,6 +1876,7 @@ def compute_mainline_concentration(
     prefix = "" if conclusion_level == "strong" else "已归因样本中的领先方向："
     return {
         "sample_size": valid,
+        "lianban_count": len(streak_codes) + unnamed_streaks,
         "mainline_count": len(ordered),
         "top_mainline": top_name,
         "top_share": round(top_weight / total_weight, 4),

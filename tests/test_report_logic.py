@@ -1295,6 +1295,40 @@ def test_mainline_review_limits_conclusion_when_attribution_coverage_is_low():
     assert "已归因样本" in got["conclusion"]
 
 
+def test_mainline_review_counts_streaks_separately_from_first_board_attribution():
+    from report_logic import build_mainline_review, compute_mainline_concentration
+
+    rows = [
+        {"code": "sh600001", "mainline": "AI应用", "height": "首板"},
+        {"code": "sh600002", "mainline": "AI应用", "height": 1},
+        {"code": "sh600003", "mainline": "机器人", "height": "2连板"},
+        {"code": "sh600004", "mainline": "", "height": "6连板"},
+    ]
+    metrics = compute_mainline_concentration(rows, authoritative_count=4, attributed_count=3)
+    review = build_mainline_review(metrics)
+
+    assert metrics["sample_size"] == 3
+    assert review["lianban_count"] == 2
+    assert review["limit_up_count"] == 4
+    assert metrics["distribution"] == [
+        {"name": "AI应用", "weight": 2.0, "share": 0.5},
+        {"name": "机器人", "weight": 2.0, "share": 0.5},
+    ]
+
+
+def test_mainline_review_retains_unattributed_streaks_and_deduplicates_codes():
+    from report_logic import build_mainline_review, compute_mainline_concentration
+
+    metrics = compute_mainline_concentration([
+        {"code": "sh600001", "height": 2},
+        {"code": "600001", "height": 2},
+        {"code": "sh600002", "height": 1},
+    ])
+    assert metrics["sample_size"] == 0
+    assert build_mainline_review(metrics)["lianban_count"] == 1
+    assert build_mainline_review({"sample_size": 85})["lianban_count"] is None
+
+
 def test_assess_data_quality_exposes_overflow_without_publishing_invalid_coverage():
     from report_logic import assess_data_quality
 

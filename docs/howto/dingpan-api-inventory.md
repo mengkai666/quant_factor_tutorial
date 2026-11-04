@@ -17,7 +17,7 @@
 | 优先级 | 数据源 | 定位 | 覆盖的盯盘数据块 |
 |:---:|:---|:---|:---|
 | 1 | **财联社 CLS 8.5.4** | 盯盘页原生口径，字段最全 | 市场概况、市场热度、涨停表现、连板梯队、资金热力图、风口、主线、直播 |
-| 2 | **开盘啦 KaiPanLa 6.1.6** | 独立交叉校验源 | 涨跌停家数、炸板率、昨涨停表现、涨停天梯、盘面异动 |
+| 2 | **开盘啦 KaiPanLa 6.1.6 / w44** | 独立交叉校验源 | 涨跌停家数、炸板率、昨涨停表现、涨停天梯、盘面异动、严重异动提醒 |
 | 3 | **东方财富 + 同花顺** | 备用源（两源同时失效时接管） | 涨跌停家数、封板率、连板梯队、涨停池明细 |
 
 降级规则：**逐块独立降级**。每个数据块单独走 1→2→3 链，
@@ -258,6 +258,38 @@ distribution,market_summary,overview,list,big_rise,dazhanggu,ztbao,bse,hot}`、
 #### ④ `c=FuPanLa & a=GetPMSL_PMLD` — 盘面梳理异动时间线
 返回 `List[]`：`{TimeMin, TagID, TagName, TagShuXing(2=涨停类/0=跌停类/1=其他),
 ZSName, Detail, StockList[][]}`
+
+#### ⑤ `c=StockBidYiDong & a=GetPianLiZhi_Index` — 严重异动提醒（涨幅偏离值预警）
+这是开盘啦首页截图中「严重异动提醒」使用的接口，不是普通的盘面异动时间线。
+
+```text
+POST https://apphwshhq.longhuvip.com/w1/api/index.php
+c=StockBidYiDong
+a=GetPianLiZhi_Index
+ZDJK_Type=1
+apiv=w44
+VerSion=5.23.0.4
+```
+
+返回顶层字段：`Day`、`Many_Num`、`Time`、`List`，以及在 `ZDJK_Type=1` 下的
+`ZDJKList`（重点监控）和 `WXHJList`（问询/函件）。`List` 每行位置字段为：
+
+```text
+[0]代码 [1]名称 [2]状态标记 [3]规则描述 [4]当日涨跌幅
+[5]窗口交易日数 [6]涨幅偏离值 [7]触发提示文本
+[8]当日/次日累计触发涨幅 [9]未解码标记 [10]日期原值（待核） [11]触发参考价 [12]状态文本
+```
+
+项目封装：`KaiPanLaClient.get_abnormal_alerts()`。例如图中九阳股份会返回
+`window_days=30`、`deviation_pct=177.24`、`required_change_pct=8.67`；
+大业股份会返回 `window_days=10`、`deviation_pct=99.58`、
+`required_change_pct=0.22`。这是开盘啦服务端的偏离值口径，不能用简单个股
+收盘价涨幅替代。
+
+2026-10-29补充校正：该路由已验证匿名参数可用，不需要他人 UserID/Token。
+`Many_Num` 是“多次异动个股”数量，不是 `List` 提醒行数；封装分别返回
+`many_abnormal_count` 与 `count=len(alerts)`。数组[11]为触发参考价（例如
+17.92元×1.0022≈17.96元），不能当作现价；[8]也不是“从当前价还需上涨”。
 
 ---
 

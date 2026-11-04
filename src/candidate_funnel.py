@@ -17,11 +17,23 @@ def _height(value: Any) -> int:
 
 
 def matches_mainline(sector: Any, mainline: Any) -> bool:
-    mainline = str(mainline or "").strip()
-    if not mainline or mainline in {"未知", "方向待确认", "题材待确认", "/"}:
+    mainline_str = str(mainline or "").strip()
+    if not mainline_str or mainline_str in {"未知", "方向待确认", "题材待确认", "/"}:
         return False
-    tokens = re.split(r"[,，、;；|/]+", str(sector or ""))
-    return mainline in {re.sub(r"\d+(?:\.\d+)?%$", "", token).strip() for token in tokens}
+    # 去除类似于 " · 47%"、" 47%" 或 "(47%)" 的后缀
+    clean_mainline = re.sub(r"[\s·•\-]+\d+(?:\.\d+)?%$", "", mainline_str).strip()
+    clean_mainline = re.sub(r"\(\d+(?:\.\d+)?%\)$", "", clean_mainline).strip()
+    clean_mainline = re.sub(r"\d+(?:\.\d+)?%$", "", clean_mainline).strip()
+    if not clean_mainline:
+        return False
+    tokens = [t.strip() for t in re.split(r"[,，、;；|/]+", str(sector or "")) if t.strip()]
+    tokens_clean = {re.sub(r"\d+(?:\.\d+)?%$", "", token).strip() for token in tokens}
+    if clean_mainline in tokens_clean:
+        return True
+    for t in tokens_clean:
+        if t and (t in clean_mainline or clean_mainline in t):
+            return True
+    return False
 
 
 def _extract_candidates(ctx: dict) -> list[dict[str, Any]]:

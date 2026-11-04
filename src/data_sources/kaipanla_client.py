@@ -11,6 +11,7 @@
   2. c=FuPanLa               a=GetZhangTingTianTi    涨停连板天梯
   3. c=DailyLimitResumption  a=GetPlateInfo_w38      板块涨停原因 + 市场统计(炸板率/昨涨停表现)
   4. c=FuPanLa               a=GetPMSL_PMLD          盘面梳理异动时间线
+ 5. c=StockBidYiDong         a=GetPianLiZhi_Index    严重异动提醒/涨幅偏离值预警
 """
 
 import uuid
@@ -206,3 +207,81 @@ class KaiPanLaClient:
                 "stocks": item.get("StockList", [])
             })
         return events
+
+    def get_abnormal_alerts(self, zdjk_type: int = 1) -> Dict[str, Any]:
+        """获取开盘啦「严重异动提醒」实时列表。
+
+        真实路由为 ``StockBidYiDong.GetPianLiZhi_Index``（接口版本
+        ``w44/5.23.0.4``）。它对应开盘啦首页的「严重异动提醒」卡片，
+        不是普通的盘面异动时间线。
+
+        每条 ``List`` 记录的已确认位置字段：
+          [0]代码 [1]名称 [2]状态标记 [3]触发规则描述
+          [4]当日涨跌幅 [5]窗口交易日数 [6]涨幅偏离值
+          [7]触发提示文本 [8]当日/次日累计触发涨幅 [9]未解码标记
+          [10]日期原值（语义待核） [11]触发参考价 [12]状态文本
+
+        ``ZDJKList``（重点监控）和 ``WXHJList``（问询/函件）由接口
+        在 ``ZDJK_Type=1`` 时一并返回；即使为空也保留为空列表，方便
+        上层区分「接口返回空」和「没有该字段」。
+        """
+        raw = self._call(
+            "StockBidYiDong",
+            "GetPianLiZhi_Index",
+            apiv="w44",
+            ZDJK_Type=zdjk_type,
+            PhoneOSNew="1",
+            VerSion="5.23.0.4",
+        )
+
+        if not isinstance(raw, dict) or str(raw.get("errcode")) != "0" or not isinstance(raw.get("List"), list):
+            return {"available": False, "date": "", "count": 0, "alerts": [], "raw": raw,
+                    "error": "严重异动接口失败或返回结构不匹配"}
+
+        def _float(value):
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return None
+
+        def _int(value):
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return None
+
+        alerts: List[Dict[str, Any]] = []
+        for row in raw.get("List", []) or []:
+            if not isinstance(row, list) or len(row) < 13:
+                continue
+            alerts.append({
+                "code": str(row[0]).zfill(6),
+                "name": row[1],
+                "state_mark": _int(row[2]),
+                "rule": row[3],
+                "change_pct": _float(row[4]),
+                "window_days": _int(row[5]),
+                "deviation_pct": _float(row[6]),
+                "trigger_text": row[7],
+                "required_change_pct": _float(row[8]),
+                "reference_marker_raw": row[9],
+                "abnormal_start_date": row[10],
+                "trigger_price": _float(row[11]),
+                "status_text": row[12],
+                "raw": row,
+            })
+
+        return {
+            "available": True,
+            "date": raw.get("Day", ""),
+            "time": raw.get("Time"),
+            "count": len(alerts),
+            "many_abnormal_count": _int(raw.get("Many_Num")),
+            "alerts": alerts,
+            "重点监控": raw.get("ZDJKList") or [],
+            "问询函件": raw.get("WXHJList") or [],
+            "zdjk_list": raw.get("ZDJKList") or [],
+            "wxhj_list": raw.get("WXHJList") or [],
+            "source": "kaipanla:StockBidYiDong.GetPianLiZhi_Index",
+            "raw": raw,
+        }

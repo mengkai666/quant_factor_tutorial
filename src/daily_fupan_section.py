@@ -5,11 +5,14 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 from typing import Any
 import pandas as pd
 
-from paths import PRICE_CACHE, ZT_CACHE_FILE, SENTIMENT_CACHE, SECURITY_MASTER_CACHE
+from paths import (PRICE_CACHE, PRICE_SLICE_DIR, CALENDAR_CACHE, ZT_CACHE_FILE,
+                   SENTIMENT_CACHE, SECURITY_MASTER_CACHE, DAILY_SNAPSHOT_DIR)
+from data_sources.models import normalize_code
 from html import escape as _e
 
 
@@ -42,59 +45,31 @@ def _load_market_overview(
     """提取指数真实量价、涨跌家数与全市场体检指标."""
     day_iso, day_digits = _normalize_date(report_date, context)
 
-    # 1. 真实指数行情拉取
-    sh_data = {
-        'open': 3718.44, 'close': 3735.37, 'high': 3740.07, 'low': 3702.44,
-        'prev_close': 3730.92, 'chg': 0.12, 'open_chg': -0.33,
-    }
-    cyb_data = {
-        'open': 2732.68, 'close': 2739.20, 'high': 2790.12, 'low': 2706.41,
-        'prev_close': 2746.29, 'chg': -0.26, 'open_chg': -0.49,
-    }
+    # 1. 缺少同日行情时保留空值，不用示例行情代替。
+    def load_index(symbol):
+        try:
+            from phase_resonance import fetch_index
+            records = {r['date']: r for r in fetch_index(symbol)}
+            dates = sorted(records)
+            if day_iso not in records or dates.index(day_iso) == 0:
+                return None
+            cur = records[day_iso]
+            prev = records[dates[dates.index(day_iso) - 1]]
+            values = {key: float(cur[key]) for key in ('open', 'close', 'high', 'low')}
+            previous = float(prev['close'])
+            if not math.isfinite(previous) or previous <= 0 or not all(math.isfinite(value) and value > 0 for value in values.values()):
+                return None
+            if values['low'] > min(values['open'], values['close']) or values['high'] < max(values['open'], values['close']):
+                return None
+            return {**values, 'prev_close': previous,
+                    'chg': (values['close'] / previous - 1) * 100,
+                    'open_chg': (values['open'] / previous - 1) * 100}
+        except Exception as exc:
+            print(f"  [复盘报告] {symbol}同日指数行情待核验: {exc}")
+            return None
 
-    try:
-        from phase_resonance import fetch_index
-        sh = fetch_index('sh000001')
-        sh_recs = {r['date']: r for r in sh}
-        dates = sorted(sh_recs.keys())
-        if day_iso in dates:
-            idx = dates.index(day_iso)
-            cur = sh_recs[dates[idx]]
-            prev = sh_recs[dates[idx - 1]] if idx > 0 else cur
-            p_close = float(prev['close']) if prev.get('close') else float(cur['close'])
-            c_open = float(cur.get('open', cur['close']))
-            c_close = float(cur['close'])
-            sh_data = {
-                'open': c_open,
-                'close': c_close,
-                'high': float(cur['high']),
-                'low': float(cur['low']),
-                'prev_close': p_close,
-                'chg': (c_close / p_close - 1) * 100 if p_close else 0.0,
-                'open_chg': (c_open / p_close - 1) * 100 if p_close else 0.0,
-            }
-
-        cyb = fetch_index('sz399006')
-        cyb_recs = {r['date']: r for r in cyb}
-        dates_c = sorted(cyb_recs.keys())
-        if day_iso in cyb_recs:
-            idx_c = dates_c.index(day_iso)
-            cur_c = cyb_recs[dates_c[idx_c]]
-            prev_c = cyb_recs[dates_c[idx_c - 1]] if idx_c > 0 else cur_c
-            p_close_c = float(prev_c['close']) if prev_c.get('close') else float(cur_c['close'])
-            c_open_c = float(cur_c.get('open', cur_c['close']))
-            c_close_c = float(cur_c['close'])
-            cyb_data = {
-                'open': c_open_c,
-                'close': c_close_c,
-                'high': float(cur_c['high']),
-                'low': float(cur_c['low']),
-                'prev_close': p_close_c,
-                'chg': (c_close_c / p_close_c - 1) * 100 if p_close_c else 0.0,
-                'open_chg': (c_open_c / p_close_c - 1) * 100 if p_close_c else 0.0,
-            }
-    except Exception as e:
-        print(f"  [复盘报告] 指数行情拉取回退: {e}")
+    sh_data = load_index('sh000001')
+    cyb_data = load_index('sz399006')
 
     # 2. 涨跌停与全市场广度
     ad = dict(advance_decline or (context or {}).get('advance_decline') or {})
@@ -102,34 +77,31 @@ def _load_market_overview(
     dt_count = ad.get('dt')
     up_count = ad.get('up')
     down_count = ad.get('down')
+    breadth_ratio = ad.get('breadth_ratio')
 
     # 回退查询日度快照
-    snap_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'report_daily_snapshots', f'{day_iso}.json')
-    if (zt_count is None or up_count is None) and os.path.exists(snap_path):
+    snap_path = os.path.join(DAILY_SNAPSHOT_DIR, f'{day_iso}.json')
+    if any(value is None for value in (zt_count, dt_count, up_count, down_count)) and os.path.exists(snap_path):
         try:
             with open(snap_path, encoding='utf-8') as f:
                 snap = json.load(f)
-            zt_count = zt_count or snap.get('limit_up')
-            dt_count = dt_count or snap.get('limit_down')
-            br = snap.get('breadth_ratio')
-            if br is not None and up_count is None:
-                approx_total = 5333
-                up_count = int(round(approx_total * float(br)))
-                down_count = approx_total - up_count
+            zt_count = zt_count if zt_count is not None else snap.get('limit_up')
+            dt_count = dt_count if dt_count is not None else snap.get('limit_down')
+            breadth_ratio = breadth_ratio if breadth_ratio is not None else snap.get('breadth_ratio')
         except Exception:
             pass
 
     # 回退查询情绪历史缓存
-    if (up_count is None or dt_count is None) and os.path.exists(SENTIMENT_CACHE):
+    if any(value is None for value in (zt_count, dt_count, up_count, down_count)) and os.path.exists(SENTIMENT_CACHE):
         try:
             sdf = pd.read_csv(SENTIMENT_CACHE)
             sdf['day_str'] = sdf['日期'].astype(str).str.replace(r'\.0$', '', regex=True)
             sub = sdf[sdf['day_str'] == day_digits]
             if not sub.empty:
                 row = sub.iloc[0]
-                up_count = up_count or (int(row['up']) if pd.notna(row.get('up')) else None)
-                down_count = down_count or (int(row['down']) if pd.notna(row.get('down')) else None)
-                zt_count = zt_count or (int(row['zt']) if pd.notna(row.get('zt')) else None)
+                up_count = up_count if up_count is not None else (int(row['up']) if pd.notna(row.get('up')) else None)
+                down_count = down_count if down_count is not None else (int(row['down']) if pd.notna(row.get('down')) else None)
+                zt_count = zt_count if zt_count is not None else (int(row['zt']) if pd.notna(row.get('zt')) else None)
                 dt_count = dt_count if dt_count is not None else (int(row['dt']) if pd.notna(row.get('dt')) else None)
         except Exception:
             pass
@@ -138,7 +110,9 @@ def _load_market_overview(
     if zt_count is None and os.path.exists(ZT_CACHE_FILE):
         try:
             zt_df = pd.read_csv(ZT_CACHE_FILE, dtype=str, encoding='utf-8-sig')
-            zt_count = len(zt_df[zt_df['日期'] == day_digits])
+            same_day = zt_df[zt_df['日期'] == day_digits]
+            if not same_day.empty:
+                zt_count = len(same_day)
         except Exception:
             pass
 
@@ -147,11 +121,65 @@ def _load_market_overview(
         'day_digits': day_digits,
         'sh': sh_data,
         'cyb': cyb_data,
-        'zt': int(zt_count or 54),
-        'dt': int(dt_count if dt_count is not None else 6),
-        'up': int(up_count or 3696),
-        'down': int(down_count or 1637),
+        'zt': _market_count(zt_count),
+        'dt': _market_count(dt_count),
+        'up': _market_count(up_count),
+        'down': _market_count(down_count),
+        'breadth_ratio': breadth_ratio,
     }
+
+
+def _market_count(value):
+    try:
+        number = float(value)
+        return int(number) if pd.notna(number) and number >= 0 and number.is_integer() else None
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def _market_commentary(market):
+    """Describe the supplied session; a single snapshot cannot prove improvement."""
+    counts = {key: _market_count(market.get(key)) for key in ('up', 'down', 'zt', 'dt')}
+    shown = {key: str(value) if value is not None else '待核验' for key, value in counts.items()}
+    up, down, zt, dt = (counts[key] for key in ('up', 'down', 'zt', 'dt'))
+    ratio = up / (up + down) if up is not None and down is not None and up + down else None
+    if ratio is None:
+        try:
+            supplied = float(market.get('breadth_ratio'))
+            ratio = supplied if 0 <= supplied <= 1 else None
+        except (TypeError, ValueError):
+            pass
+    if ratio is None:
+        breadth = '上涨占比待核验'
+        regime = '市场广度待核验'
+    else:
+        regime = '涨多跌少' if ratio >= .60 else ('涨跌分化' if ratio >= .45 else '跌多涨少')
+        breadth = f'上涨占比 {ratio:.1%} · {regime}'
+    if zt is None or dt is None:
+        limits = '涨跌停家数待核验，暂不判断强弱'
+    else:
+        gap = zt - dt
+        limits = f'涨停比跌停多 {gap} 家' if gap > 0 else (f'跌停比涨停多 {-gap} 家' if gap < 0 else '涨停与跌停家数相同')
+    weak = ratio is not None and ratio < .45 or zt is not None and dt is not None and dt > zt
+    if ratio is None or zt is None or dt is None:
+        plan = '市场数据尚未齐备，先补齐同日事实；条件核验前不新增仓位。'
+    elif weak:
+        plan = '先观察市场广度与跌停反馈是否改善；未确认修复前不新增仓位，个股仅作条件跟踪。'
+    else:
+        plan = '继续核验市场广度、主线联动与个股承接；单日上涨不代表修复已持续，条件未确认不新增仓位。'
+    return {'counts': shown, 'breadth': breadth, 'limits': limits,
+            'regime': regime, 'ratio': ratio, 'plan': plan}
+
+
+def _index_commentary(name, quote):
+    if not quote:
+        return {'color': 'f-muted', 'value': '待核验', 'range': '缺少同日完整行情',
+                'description': f'{name}同日行情待核验'}
+    close, change = quote['close'], quote['chg']
+    return {'color': 'f-up' if change >= 0 else 'f-down',
+            'value': f'{close:.2f} <small>{change:+.2f}%</small>',
+            'range': f"最低 {quote['low']:.2f} · 最高 {quote['high']:.2f}",
+            'description': f"{name}开盘 {quote['open']:.2f} 点，日内区间 {quote['low']:.2f}—{quote['high']:.2f} 点，收报 {close:.2f} 点（{change:+.2f}%）"}
 
 
 def _load_ladder_and_progression(
@@ -285,6 +313,51 @@ def _load_ladder_and_progression(
     return tiers, promotions, broken_high, max_h, prev_max_h, sector_summary
 
 
+def _positive_price(value) -> float | None:
+    try:
+        price = float(value)
+        return price if math.isfinite(price) and price > 0 else None
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def _quote_code(value) -> str | None:
+    try:
+        return normalize_code(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _previous_quote_day(day_iso: str) -> str | None:
+    """A missing slice cannot silently turn a multi-day return into a day move."""
+    try:
+        calendar = pd.read_csv(CALENDAR_CACHE, dtype=str)
+        days = sorted(set(pd.to_datetime(calendar['trade_date'], errors='coerce').dropna().dt.strftime('%Y-%m-%d')))
+        position = days.index(day_iso)
+        return days[position - 1] if position else None
+    except (OSError, ValueError, KeyError):
+        return None
+
+
+def _core_price_rows(frame: pd.DataFrame | None, codes: set[str], days: set[str]) -> dict[tuple[str, str], float]:
+    if frame is None or frame.empty or not {'code', 'date', 'close_raw'}.issubset(frame.columns):
+        return {}
+    # Normalize only the two requested dates, not the entire history cache.
+    dates = pd.to_datetime(frame['date'].astype(str), errors='coerce').dt.strftime('%Y-%m-%d')
+    selected = frame.loc[dates.isin(days), ['code', 'close_raw']].copy()
+    selected['date'] = dates.loc[selected.index]
+    selected['code'] = selected['code'].map(_quote_code)
+    selected = selected[selected['code'].isin(codes)]
+    selected['close_raw'] = selected['close_raw'].map(_positive_price)
+    result = {}
+    for (code, date), group in selected.groupby(['code', 'date']):
+        values = group['close_raw'].dropna().unique()
+        # Conflicting quotes for the same date are not a verified closing price.
+        if len(values) == 1:
+            result[(code, date)] = float(values[0])
+    return result
+
+
 def _load_core_stock_quotes(
     day_iso: str,
     tiers: dict[int, list[dict]],
@@ -383,58 +456,47 @@ def _load_core_stock_quotes(
                 'is_zt': True,
             })
 
-    # 5. 读取真实收盘价与涨跌幅 (双交易日切片极速比对)
-    price_map: dict[str, tuple[float, float]] = {}
-    snap_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'price_slices')
-    cur_slice = os.path.join(snap_dir, f"{day_iso}.csv.gz")
-
-    if os.path.exists(cur_slice):
-        all_slices = sorted([f[:-7] for f in os.listdir(snap_dir) if f.endswith('.csv.gz') and f[:-7] <= day_iso])
-        if len(all_slices) >= 2:
-            p_slice = os.path.join(snap_dir, f"{all_slices[-2]}.csv.gz")
+    # 5. 当日原始收盘价与前一交易日原始收盘价均有效才计算涨跌。
+    # 先用主流程传入的数据；缺项才补同日切片/缓存，不用涨停标签造价。
+    previous_day = _previous_quote_day(day_iso)
+    days = {day_iso} | ({previous_day} if previous_day else set())
+    codes = {_quote_code(it['code']) for it in selected_items} - {None}
+    price_rows = _core_price_rows(price_df, codes, days)
+    required = {(code, day) for code in codes for day in days}
+    if codes:
+        for day in sorted(days):
+            if all((code, day) in price_rows for code in codes):
+                continue
             try:
-                c_df = pd.read_csv(cur_slice)
-                p_df = pd.read_csv(p_slice)
-                c_map = dict(zip(c_df['code'], c_df['close_raw']))
-                p_map = dict(zip(p_df['code'], p_df['close_raw']))
-                for it in selected_items:
-                    cd = it['code']
-                    c1, c0 = c_map.get(cd), p_map.get(cd)
-                    if c1 is not None and c0 is not None and float(c0) > 0:
-                        price_map[cd] = (float(c1), (float(c1) / float(c0) - 1) * 100)
-                    elif c1 is not None:
-                        price_map[cd] = (float(c1), 10.0 if it['is_zt'] else 0.0)
-            except Exception:
+                frame = pd.read_csv(os.path.join(PRICE_SLICE_DIR, f'{day}.csv.gz'), dtype={'code': str, 'date': str})
+                for key, value in _core_price_rows(frame, codes, {day}).items():
+                    price_rows.setdefault(key, value)
+            except (OSError, ValueError, KeyError):
                 pass
-
-    # 回退 PRICE_CACHE
-    missing = [it['code'] for it in selected_items if it['code'] not in price_map]
-    if missing and os.path.exists(PRICE_CACHE):
-        try:
-            df = pd.read_csv(PRICE_CACHE)
-            df['date'] = df['date'].astype(str)
-            sub = df[df['date'] <= day_iso]
-            for cd in missing:
-                c_rows = sub[sub['code'] == cd].sort_values('date')
-                if len(c_rows) >= 2:
-                    c1 = float(c_rows.iloc[-1]['close_raw'])
-                    c0 = float(c_rows.iloc[-2]['close_raw'])
-                    price_map[cd] = (c1, (c1 / c0 - 1) * 100 if c0 else 0.0)
-                elif len(c_rows) == 1:
-                    c1 = float(c_rows.iloc[-1]['close_raw'])
-                    price_map[cd] = (c1, 0.0)
-        except Exception:
-            pass
+        if not required.issubset(price_rows):
+            try:
+                frame = pd.read_csv(PRICE_CACHE, dtype={'code': str, 'date': str})
+                for key, value in _core_price_rows(frame, codes, days).items():
+                    price_rows.setdefault(key, value)
+            except (OSError, ValueError, KeyError):
+                pass
 
     quotes = []
     for it in selected_items:
-        p, chg = price_map.get(it['code'], (15.0, 10.0 if it['is_zt'] else 0.0))
+        code = _quote_code(it['code'])
+        p = price_rows.get((code, day_iso))
+        previous = price_rows.get((code, previous_day)) if previous_day else None
+        chg = (p / previous - 1) * 100 if p is not None and previous is not None else None
+        status = '同日收盘价待核验' if p is None else '前一交易日收盘价待核验' if previous is None else '同日及前一交易日原始收盘价已核验'
         quotes.append({
             'code': it['code'],
             'name': it['name'],
             'role': it['role'],
             'price': p,
             'chg': chg,
+            'price_date': day_iso if p is not None else None,
+            'previous_close_date': previous_day if previous is not None else None,
+            'quote_status': status,
             'desc': it['desc'],
         })
     return quotes
@@ -448,57 +510,35 @@ def generate_daily_fupan_html(
     previous_echelon: Any = None,
     price_df: pd.DataFrame | None = None,
 ) -> str:
-    """生成具备 100% 数据真实性、动态生成的今日盘面深度复盘板块."""
+    """根据同日已知行情生成复盘；缺失字段显示待核验。"""
     day_iso, _ = _normalize_date(report_date, context)
     m = _load_market_overview(day_iso, context, advance_decline)
-    sh = m['sh']
-    cyb = m['cyb']
+    sh = _index_commentary('上证指数', m['sh'])
+    cyb = _index_commentary('创业板指', m['cyb'])
+    market = _market_commentary(m)
+    counts = market['counts']
 
     tiers, promotions, broken_high, max_h, prev_max_h, sector_summary = _load_ladder_and_progression(
         day_iso, echelon, previous_echelon
     )
     stocks = _load_core_stock_quotes(day_iso, tiers, broken_high, max_h, price_df)
 
-    sh_color = 'f-up' if sh['chg'] >= 0 else 'f-down'
-    cyb_color = 'f-up' if cyb['chg'] >= 0 else 'f-down'
-
     # 1. 梯队与高度描述
     top_stocks = '、'.join([s['name'] for s in tiers.get(max_h, [])[:5]]) or '暂无'
     mid_h = max_h - 1 if max_h > 2 else 2
     mid_stocks = '、'.join([s['name'] for s in tiers.get(mid_h, [])[:5]])
 
-    # 2. 动态指数盘面走势核心梳理 (拒绝写死模板)
-    # 上证走势定性
-    sh_range = max(sh['high'] - sh['low'], 0.01)
-    sh_lower_shadow = min(sh['open'], sh['close']) - sh['low']
-    sh_open_desc = "小幅高开" if sh.get('open_chg', 0) > 0.1 else ("小幅低开" if sh.get('open_chg', 0) < -0.1 else "平开")
-    if sh_lower_shadow >= 0.3 * sh_range and sh['close'] > sh['low']:
-        sh_shape = f"上证探底 <b>{sh['low']:.2f} 点</b>企稳回升收出长下影线"
-    else:
-        sh_shape = f"上证在 <b>{sh['low']:.2f} - {sh['high']:.2f} 点</b>区间震荡运行"
-
-    # 创业板走势定性
-    cyb_range = max(cyb['high'] - cyb['low'], 0.01)
-    cyb_upper_shadow = cyb['high'] - max(cyb['open'], cyb['close'])
-    cyb_lower_shadow = min(cyb['open'], cyb['close']) - cyb['low']
-    if cyb_upper_shadow >= 0.35 * cyb_range and cyb['close'] < cyb['high']:
-        cyb_shape = f"创业板指下探 <b>{cyb['low']:.2f} 点</b>后盘中一度冲高至 <b>{cyb['high']:.2f} 点</b>，午后受阻收于 <b>{cyb['close']:.2f} 点 ({cyb['chg']:+.2f}%)</b>，呈现长上影冲高回落震荡形态"
-    elif cyb_lower_shadow >= 0.35 * cyb_range and cyb['close'] > cyb['low']:
-        cyb_shape = f"创业板下探 <b>{cyb['low']:.2f} 点</b>后在权重承接下企稳回升收窄跌幅，收报 <b>{cyb['close']:.2f} 点 ({cyb['chg']:+.2f}%)</b>"
-    else:
-        cyb_shape = f"创业板指探底 <b>{cyb['low']:.2f} 点</b>、最高触及 <b>{cyb['high']:.2f} 点</b>，收报 <b>{cyb['close']:.2f} 点 ({cyb['chg']:+.2f}%)</b>"
-
     # 3. 高位连板与断板出清定性
     if broken_high:
         broken_str = '、'.join([f"{name} {h}板" for name, h in broken_high[:4]])
-        broken_desc = f"前期高位连板核心（{broken_str}）集体断板出清分歧，短线亏钱效应集中释放；"
+        broken_desc = f"前期高位连板股（{broken_str}）本日未继续连板；"
     else:
-        broken_desc = "高位连板核心标的维持较好晋级韧性，未见极端核按钮恶性出清；"
+        broken_desc = "本次梯队记录未列出高位断板个股；"
 
     if max_h > 2 and mid_stocks:
-        mid_desc = f"中位梯队方面，{mid_h - 1} 进 {mid_h} 板由（{mid_stocks}）等成功晋级卡位，资金转向低位换手接力。"
+        mid_desc = f"当前 {mid_h} 板梯队包括（{mid_stocks}），后续观察能否继续晋级。"
     else:
-        mid_desc = "资金转向低位首二板换手接力，空间梯队有序重构。"
+        mid_desc = "中位梯队记录有限，后续观察首二板及梯队延续。"
 
     # 4. 热点轮动总结
     sec_descs = []
@@ -507,23 +547,12 @@ def generate_daily_fupan_html(
     if len(sector_summary) > 3:
         sec4_name = sector_summary[3][0]
         sec_descs.append(f"<b>{sec4_name}</b>")
-    sectors_line = '、'.join(sec_descs) + "呈现结构性轮动活跃"
+    sectors_line = '、'.join(sec_descs) + '位于本日涨停数量前列' if sec_descs else '板块归属数据待补齐'
 
     # 5. 形态定性与市场情绪
-    total_breadth = m['up'] + m['down']
-    up_ratio = m['up'] / total_breadth if total_breadth > 0 else 0.5
-    if up_ratio >= 0.60:
-        regime_desc = f"全市场呈现普涨温和修复格局（<b>{m['up']} 家上涨</b> vs <b>{m['down']} 家下跌</b>，上涨占比 <b>{up_ratio * 100:.1f}%</b>）；跌停收敛至 <b>{m['dt']} 家</b>极低位，恐慌抛压收敛；但连板空间高度受压在 <b>{max_h} 板</b>，表明短线资金偏好仍处于退潮后期的结构重构阶段，操作上切忌盲目追高，宜以低位分歧低吸与换手确认为主。"
-        regime_tag = "探底企稳 · 普涨修复"
-        suggested_pos = "2-3 成"
-    elif up_ratio >= 0.45:
-        regime_desc = f"全市场多空博弈势均力敌（<b>{m['up']} 涨 / {m['down']} 跌</b>，上涨占比 <b>{up_ratio * 100:.1f}%</b>），跌停 <b>{m['dt']} 家</b>；指数依托箱体中枢企稳，精选具备独立逻辑的主线换手龙低吸。"
-        regime_tag = "箱体震荡 · 结构分化"
-        suggested_pos = "1.5-2 成"
-    else:
-        regime_desc = f"全市场呈现跌多涨少偏弱格局（<b>{m['up']} 涨 / {m['down']} 跌</b>，下跌占比 <b>{(1 - up_ratio) * 100:.1f}%</b>），跌停 <b>{m['dt']} 家</b>；高标分歧出清阶段仍需严控仓位、谨防中位补跌。"
-        regime_tag = "缩量分化 · 防守中继"
-        suggested_pos = "1-1.5 成"
+    regime_tag = market['regime']
+    regime_desc = (f"{market['breadth']}（{counts['up']} 涨 / {counts['down']} 跌）；"
+                   f"涨停 {counts['zt']} 家，跌停 {counts['dt']} 家。{market['plan']}")
 
     max_h_tag = f"空间板 {max_h}板 ({top_stocks.split('、')[0]})"
 
@@ -544,24 +573,29 @@ def generate_daily_fupan_html(
     # 核心个股表格
     stock_rows = []
     for s in stocks:
-        c_cls = 'f-up' if s['chg'] > 0 else ('f-down' if s['chg'] < 0 else 'f-muted')
+        chg = s.get('chg')
+        c_cls = 'f-up' if chg is not None and chg > 0 else ('f-down' if chg is not None and chg < 0 else 'f-muted')
+        price_text = f"{s['price']:.2f} 元" if s.get('price') is not None else '待核验'
+        change_text = f'{chg:+.2f}%' if chg is not None else '待核验'
         tag_color = 'red' if '龙' in s['role'] or '先锋' in s['role'] else ('blue' if '中军' in s['role'] else 'amber')
         stock_rows.append(f"""
             <tr>
                 <td><b>{_e(s['name'])}</b> <small style="color:#6b7280">({_e(s['code'])})</small></td>
                 <td><span class="f-tag {tag_color}">{_e(s['role'])}</span></td>
-                <td class="f-num">{s['price']:.2f} 元</td>
-                <td class="f-num {c_cls}">{s['chg']:+.2f}%</td>
-                <td>{_e(s['desc'])}</td>
+                <td class="f-num">{price_text}</td>
+                <td class="f-num {c_cls}">{change_text}</td>
+                <td>{_e(s['desc'])}<small class="f-muted" style="display:block">{_e(s.get('quote_status', ''))}</small></td>
             </tr>
         """)
 
     # 动态板块轮动要点
-    sec1 = sector_summary[0] if sector_summary else ('主线题材', 0, [])
-    sec2 = sector_summary[1] if len(sector_summary) > 1 else ('协同题材', 0, [])
-    sec1_text = f"<b>主线进攻与梯队扩散 ({sec1[0]})：</b> {sec1[0]} 板块掀起涨停热潮（{sec1[1]} 只涨停），{'、'.join(sec1[2][:3])} 等形成高低接力，叠加容量中军放量涨停，成为全天短线资金最集中的进攻方向。"
-    sec2_text = f"<b>赛道共振与容量大中军 ({sec2[0]})：</b> {sec2[0]} 呈现高低协同与趋势共振（{sec2[1]} 只涨停），百亿级容量中军强势封板，为盘面活跃度提供流动性中枢。"
-    sec3_text = f"<b>高低切与结构换手博弈：</b> 前期高标出清后，短线增量资金坚决向低位首二板新题材以及具备产业催化的确定性方向进行高低切换手承接，全天跌停仅 {m['dt']} 家，短线生态处于退潮后期的结构性重塑期。"
+    def sector_fact(index):
+        if len(sector_summary) <= index:
+            return '对应板块明细待补齐。'
+        name, count, names = sector_summary[index]
+        return f"<b>{_e(name)}：</b> 本日记录 {count} 只涨停，代表包括 {_e('、'.join(names[:3]))}；后续核验联动与梯队延续。"
+    sec1_text, sec2_text = sector_fact(0), sector_fact(1)
+    sec3_text = f"<b>市场风险：</b> {market['limits']}。板块涨停分布不能单独证明资金流入、放量或新周期确认。"
 
     return f'''
 <!-- daily-fupan-continuous:start -->
@@ -719,7 +753,7 @@ def generate_daily_fupan_html(
             <div class="f-tag-row">
                 <span class="f-tag red">{regime_tag}</span>
                 <span class="f-tag amber">{max_h_tag}</span>
-                <span class="f-tag blue">涨跌比 {m['up']}:{m['down']}</span>
+                <span class="f-tag blue">涨跌比 {counts['up']}:{counts['down']}</span>
                 <span class="f-tag gray">{day_iso}</span>
             </div>
         </div>
@@ -728,23 +762,23 @@ def generate_daily_fupan_html(
         <div class="f-metrics-strip">
             <div class="f-m-item">
                 <div class="label">上证指数</div>
-                <div class="val {sh_color}">{sh['close']:.2f} <small>{sh['chg']:+.2f}%</small></div>
-                <div class="sub">探底 {sh['low']:.2f} · 最高 {sh['high']:.2f}</div>
+                <div class="val {sh['color']}">{sh['value']}</div>
+                <div class="sub">{sh['range']}</div>
             </div>
             <div class="f-m-item">
                 <div class="label">创业板指</div>
-                <div class="val {cyb_color}">{cyb['close']:.2f} <small>{cyb['chg']:+.2f}%</small></div>
-                <div class="sub">探底 {cyb['low']:.2f} · 最高 {cyb['high']:.2f}</div>
+                <div class="val {cyb['color']}">{cyb['value']}</div>
+                <div class="sub">{cyb['range']}</div>
             </div>
             <div class="f-m-item">
                 <div class="label">市场涨跌家数</div>
-                <div class="val" style="color:#f3f4f6"><span class="f-up">{m['up']} 涨</span> <span style="color:#6b7280">/</span> <span class="f-down">{m['down']} 跌</span></div>
-                <div class="sub">上涨占比 {(m['up'] / total_breadth * 100):.1f}% · 结构温和修复</div>
+                <div class="val" style="color:#f3f4f6"><span class="f-up">{counts['up']} 涨</span> <span style="color:#6b7280">/</span> <span class="f-down">{counts['down']} 跌</span></div>
+                <div class="sub">{market['breadth']}</div>
             </div>
             <div class="f-m-item">
                 <div class="label">涨跌停梯队</div>
-                <div class="val"><span class="f-up">涨停 {m['zt']}</span> <span style="color:#6b7280">/</span> <span class="f-down">跌停 {m['dt']}</span></div>
-                <div class="sub">跌停回落至低位，恐慌抛压收敛</div>
+                <div class="val"><span class="f-up">涨停 {counts['zt']}</span> <span style="color:#6b7280">/</span> <span class="f-down">跌停 {counts['dt']}</span></div>
+                <div class="sub">{market['limits']}</div>
             </div>
         </div>
 
@@ -752,7 +786,7 @@ def generate_daily_fupan_html(
         <div class="f-block">
             <div class="f-block-title">📌 一、全天走势核心梳理</div>
             <ul class="f-list">
-                <li><b>指数走势与日内博弈：</b> 指数早盘{sh_open_desc}，{sh_shape}，全天收报 <b>{sh['close']:.2f} 点 ({sh['chg']:+.2f}%)</b>；{cyb_shape}。</li>
+                <li><b>指数行情：</b> {sh['description']}；{cyb['description']}。</li>
                 <li><b>高位连板与梯队重构：</b> 市场最高空间板达到 <b>{max_h} 板</b>（{top_stocks}）；{broken_desc}{mid_desc}</li>
                 <li><b>结构性热点轮动：</b> {sectors_line}。</li>
                 <li><b>形态定性与市场情绪：</b> {regime_desc}</li>
@@ -777,7 +811,7 @@ def generate_daily_fupan_html(
                         <th>主属性 / 角色</th>
                         <th class="f-num">收盘价</th>
                         <th class="f-num">涨跌幅</th>
-                        <th>盘面表现与主力意图</th>
+                        <th>盘面表现与观察</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -800,8 +834,8 @@ def generate_daily_fupan_html(
         <div class="f-block" style="margin-bottom:0">
             <div class="f-block-title">⚔️ 五、尾盘关注重点与明日预案</div>
             <div class="f-note">
-                <b>1. 尾盘盯盘：</b> 观察 <b>{top_stocks}</b> 等 {max_h} 板空间先锋封单是否扎实；观察跌停封单（当前 {m['dt']} 家）是否扩散，防范次日高位分歧杀跌风险。<br>
-                <b>2. 明日策略：</b> 市场处于温和修复周期，<b>建议总仓位控制在 {suggested_pos} 左右，重点关注 {max_h} 进 {max_h + 1} 空间龙（{top_stocks}）的竞价爆量确认，以及 3 进 4 换手龙的卡位机会；断板弱标严禁盲目接飞刀！</b>
+                <b>1. 后续核验：</b> 观察 <b>{top_stocks}</b> 所在 {max_h} 板梯队能否延续；本日跌停 {counts['dt']} 家，后续对比跌停数量与高位股反馈，日线数据不能核实实时封单。<br>
+                <b>2. 下一交易日条件：</b> <b>{market['plan']}</b> 具体入场、失效与退出条件见对应逐只预案。
             </div>
         </div>
 

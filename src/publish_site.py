@@ -21,6 +21,7 @@ from datetime import datetime
 from pathlib import Path
 from report_integrity import validate_rendered_report, parse_report_integrity, validate_report_integrity, ReportIntegrityError
 from research_subpages import add_research_entry, add_research_parent, remove_research_entry
+from trading_playbook_links import add_main_entry, package_playbooks, remove_main_entry
 
 
 def _fmt_date(d):
@@ -87,7 +88,7 @@ def _same_report_content(left, right):
     if left == right:
         return True
     try:
-        return remove_research_entry(left.decode('utf-8')) == remove_research_entry(right.decode('utf-8'))
+        return remove_main_entry(remove_research_entry(left.decode('utf-8'))) == remove_main_entry(remove_research_entry(right.decode('utf-8')))
     except UnicodeError:
         return False
 
@@ -214,21 +215,9 @@ def _render_dashboard_entry(dashboard_date):
 
 
 def _render_dragon_entry(dragon_date):
-    """在决策看板入口卡下方插入的"龙头接替·监管周期"入口卡. dragon_date 为空则返回空.
+    """已根据需求下线龙头接替卡片。"""
+    return ''
 
-    首页在 site/ 根目录, 子页在 site/dragon/latest.html, 相对链接 dragon/latest.html 成立.
-    """
-    if not dragon_date:
-        return ''
-    return f'''
-  <a class="dragon-entry" href="dragon/latest.html">
-    <div class="de-left">
-      <div class="de-label">龙头接替 · 监管周期</div>
-      <div class="de-title">接替谱系 + 监管阶梯 + 情绪崩溃指标</div>
-      <div class="de-sub">当前周期谱系 · {dragon_date} · 停牌孵化链全景</div>
-    </div>
-    <div class="de-right">查看谱系 →</div>
-  </a>'''
 
 
 def _render_plan_entry(plan_date):
@@ -256,13 +245,9 @@ def _render_pullback_entry(pullback_date):
 
 
 def _render_september_study_entry():
-    """9月底板块大洗牌与房地产主线深研专题入口卡."""
-    return ('<a class="dragon-entry" href="research/september_regime_and_real_estate_study.html" '
-            'style="background:linear-gradient(135deg,#1f1a2e,#271f3a);border-left-color:#bc8cff">'
-            '<div class="de-left"><div class="de-label" style="color:#bc8cff">深度专题研报 · 宏观战法与大洗牌实证</div>'
-            '<div class="de-title">9月底板块大洗牌与房地产主线深研 (数据可视化)</div>'
-            '<div class="de-sub">房地产5阶段启动复盘 · 56家跌停潮大出清 · 新华传媒空间独苗穿越 · 操盘三大规律</div></div>'
-            '<div class="de-right" style="color:#bc8cff">查看专题 →</div></a>')
+    """已根据需求下线9月底板块大洗牌与房地产主线深研专题入口卡."""
+    return ''
+
 
 
 def _render_zhao_entry(zhao_date):
@@ -531,11 +516,9 @@ def _render_index(reports, updated_at, summary=None, dashboard_date=None, dragon
   {_render_zhao_entry(zhao_date)}
   {_render_plan_entry(plan_date)}
   {_render_pullback_entry(pullback_date)}
-  {_render_dragon_entry(dragon_date)}
   {_render_chan_entry(chan_date)}
 
   {_render_crowding_entry(crowding_date)}
-  {_render_september_study_entry()}
 
   <div class="hero">
     <div class="hero-info">
@@ -656,6 +639,9 @@ def publish(output_html, site_dir, report_date=None, summary=None, dashboard_htm
 
     archived_document = _rebase_main_nav_links(archived_document, 'reports')
     latest_document = _rebase_main_nav_links(latest_document, 'site')
+    package_playbooks(Path(output_html).parent, site_dir, date_str)
+    archived_document = add_main_entry(archived_document, Path(output_html).parent, date_str, '../')
+    latest_document = add_main_entry(latest_document, Path(output_html).parent, date_str)
 
     reports_dir = os.path.join(site_dir, 'reports')
     os.makedirs(reports_dir, exist_ok=True)

@@ -113,7 +113,7 @@ def detect_phases(idx, lookback=LOOKBACK_DAYS):
     lows = [r['close'] for r in win]
     bi = lows.index(min(lows))              # 底在窗口内的下标
     # 底不能是最后一天 (还在跌, 没有"见底后"可谈), 也不能是第一天 (看不到下跌段)
-    if bi >= len(win) - 2 or bi == 0:
+    if bi >= len(win) - 1 or bi == 0:
         return None
     # 顶只在底前 TOP_LOOKBACK 个交易日内找: 要的是"贴着这个底的那一段下跌腿",
     # 不是窗口内的绝对最高点 (那可能是两个月前, 会把多段独立下跌混成一段)
@@ -142,6 +142,9 @@ def detect_phases(idx, lookback=LOOKBACK_DAYS):
         phases['最新日'] = (osc_end['date'], latest['date'])
     elif vi < len(win) - 1:
         phases['最新日'] = (v_end['date'], latest['date'])
+    else:
+        # vi == len(win) - 1: 最新日正好是见底反弹最高点/反弹首日
+        phases['最新日'] = (win[-2]['date'], latest['date'])
     phases['底部至今'] = (bot['date'], latest['date'])
 
     # 震荡段形态: 箱体 / 单边上行 / 二次探底
@@ -172,6 +175,10 @@ def detect_phases(idx, lookback=LOOKBACK_DAYS):
             shape = (f'箱体/趋势临界 ({lean}, 区间 {box_lo:.0f}~{box_hi:.0f}, '
                      f'振幅 {amp:.1f}% 压在 {BOX_MAX_AMP:.1f}% 阈值 ±{BOX_AMP_BUFFER:.1f} 内, '
                      f'当前位于区间 {pos:.0f}% 处, 暂不定性)')
+    else:
+        amp = round((latest['close'] / bot['close'] - 1) * 100, 2)
+        shape = f'反弹趋势段 (探底回升, 区间 {bot["close"]:.0f}~{latest["close"]:.0f}, 累计反弹 {amp:.2f}%)'
+        box_lo, box_hi = bot['close'], latest['close']
 
     # ── 小阶段: 在 底部至今 内部再切最新的一刀 ──
     # 大段是回溯口径: 底一旦锚定 (= 回看窗口内最低收盘) 就不再动, 于是反弹走得越久,

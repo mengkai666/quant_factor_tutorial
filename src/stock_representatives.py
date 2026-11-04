@@ -374,11 +374,11 @@ def render_representatives_html(reps):
         rows = ''
         for r in rows_data:
             cap = r.get('市值')
-            cap_s = (f'{cap:.0f}亿' if cap is not None and pd.notna(cap) else '—')
+            cap_s = (f'{cap:.0f}亿' if cap is not None and pd.notna(cap) else '中小盘')
             zt = r.get('涨停次数') or 0
             lb = r.get('最高连板')
             zt_s = (f'{zt}次' + (f'/{int(lb)}板' if lb and pd.notna(lb) and lb > 1 else '')
-                    if zt else '—')
+                    if zt else '0次')
             rl = r.get('角色', '')
             st_badge = (
                 '<span style="color:#d29922;font-size:10px;font-weight:bold;">ST炒作</span>'

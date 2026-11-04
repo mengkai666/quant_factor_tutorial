@@ -360,7 +360,87 @@ def scan_pullback_candidates(
     dt_count = len(day_dt) or 6
     dt_names = "、".join([r['名称'] for r in day_dt[:4]]) if day_dt else "跌停标的"
 
-    # 2. 2026-10-14 之后 (退潮出清后的新周期低位重构动态解析)
+    # 2. 2026-10-21 之后 (新周期确立: 机器人35家涨停爆发 × 大业股份/海洋王6板空间总龙 × 宇树科技/歌尔/利亚德容量中军)
+    if dt_clean >= "20261021":
+        p_dy = prices.get('sh603278', 15.96)
+        p_hy = prices.get('sz002724', 12.33)
+        p_sh = prices.get('sh600838', 11.00)
+        p_sf = prices.get('sh603028', 8.54)
+        p_xy = prices.get('sz000678', 13.23)
+        p_zw = prices.get('sz003021', 91.73)
+        p_ge = prices.get('sz002241', 25.10)
+        p_ly = prices.get('sz300296', 8.65)
+        dt_count = len(day_dt) or 6
+        dt_names = "、".join([r['名称'] for r in day_dt[:4]]) if day_dt else "星光股份、三峡新材"
+        return [
+            {
+                "sector_name": "机器人 / 自动化与高端装备",
+                "status_tag": f"绝对主攻大爆发 · 35家涨停集群 (大业股份 6连板 {p_dy:.2f}元 · 兆威机电 2板 {p_zw:.2f}元)",
+                "health_level": "Level A",
+                "health_color": "#3fb950",
+                "impulse_stats": "日内掀起35家涨停潮，成交超320亿，占全市场做多资金42.7%，形成极度健康完整梯队",
+                "pullback_stats": "空间总龙大业股份6连板引领，兆威机电、赛福天、襄阳轴承等8家2板跟进，未现大面积炸板",
+                "core_stocks": f"大业股份 (603278 · 6板 {p_dy:.2f}元)、兆威机电 (003021 · 2板 {p_zw:.2f}元)、赛福天 (603028 · 2板 {p_sf:.2f}元)、宇树科技-W (47.7亿)",
+                "matched_tactics": "战法 C (板块集群启动与模仿扩散战法) · 低位新主线确立律",
+                "tactic_analysis": "高标退潮出清后，主力资金以机器人为主攻方向大举建仓，多身位梯队良性向上展开。",
+                "action_conclusion": "【顺势进攻 · 精选2进3接力与中军低吸】",
+                "action_desc": "重点关注大业股份6进7空间拓展，以及兆威机电、赛福天等2进3弱转强换手接力；大容量中军逢分时均线回踩企稳低吸。"
+            },
+            {
+                "sector_name": "连板空间高度破局 / 军工航天独立身位",
+                "status_tag": f"空间双龙并驾齐驱 (大业股份 6板 · 海洋王 6板 {p_hy:.2f}元)",
+                "health_level": "Level A",
+                "health_color": "#3fb950",
+                "impulse_stats": f"大业股份、海洋王双双晋级 6 连板，收于 {p_dy:.2f} 元与 {p_hy:.2f} 元，打破前期空间压制",
+                "pullback_stats": "大业股份主线属性强劲；海洋王下方梯队断层孤峰独苗，展开身位竞争博弈",
+                "core_stocks": f"大业股份 (603278 · 6板空间总龙 {p_dy:.2f}元)、海洋王 (002724 · 6板军工孤峰 {p_hy:.2f}元)",
+                "matched_tactics": "战法 A (龙头高度突破战法) · 空间板试错律",
+                "tactic_analysis": "两只高标并列6板竞争短线天花板，大业股份依托机器人大板块有强合力，海洋王孤峰独苗易受分歧冲击。",
+                "action_conclusion": "【紧盯竞价身位强弱 · 弱者果断放弃】",
+                "action_desc": "早盘9:25竞价高开且成交破亿者胜出；若海洋王竞价弱于大业股份则放弃接力，大业股份回封方可轻仓参与。"
+            },
+            {
+                "sector_name": "中位换手破局 / 唯一3板突破",
+                "status_tag": f"唯一中位标杆 (上海九百 3板 {p_sh:.2f}元)",
+                "health_level": "Level B",
+                "health_color": "#d29922",
+                "impulse_stats": "上海九百走出独立换手 3 连板，成为全市场唯一 3 板中位标杆",
+                "pullback_stats": "早盘换手充分，分时均线上方稳健承接，承接高位流出资金",
+                "core_stocks": f"上海九百 (600838 · 3板 {p_sh:.2f}元)",
+                "matched_tactics": "战法 B (龙头梯队接力与中位卡位律) · 同身位PK胜出律",
+                "tactic_analysis": "全市场唯一3板中位，承上启下，若高标出现分歧，中位有望产生卡位龙。",
+                "action_conclusion": "【竞价红开确认 · 换手封板试错】",
+                "action_desc": "9:25 竞价量比>1.5且红开+2%~+4%，9:35前换手封4板方可参与，仓位上限1成。"
+            },
+            {
+                "sector_name": "大容量核心中军 / 算力半导体与具身硬件",
+                "status_tag": f"数十亿大成交涨停托底 (利亚德 42.2亿 {p_ly:.2f}元 · 歌尔股份 28.7亿 {p_ge:.2f}元)",
+                "health_level": "Level A",
+                "health_color": "#3fb950",
+                "impulse_stats": "利亚德、歌尔股份、粤芯半导-U 等数十亿大容量中军强势涨停，托底指数流动性",
+                "pullback_stats": "大资金在核心多头中枢呈现良性量价承接，与机器人主线形成软硬协同共振",
+                "core_stocks": f"利亚德 (300296 · 42.2亿 {p_ly:.2f}元)、歌尔股份 (002241 · 28.7亿 {p_ge:.2f}元)、粤芯半导-U (36.2亿)",
+                "matched_tactics": "战法 F (容量中军放量主升与趋势承接战法) · 容量中军压舱石律",
+                "tactic_analysis": "大容量中军稳健放量，有效托底指数并限制空头蔓延，为新周期行情提供充沛流动性支撑。",
+                "action_conclusion": "【中军走趋势重在均线低吸 · 绝不追急拉冲刺】",
+                "action_desc": "大成交容量中军依托 5日线或分时均线低吸，以底仓享受主线趋势溢价。"
+            },
+            {
+                "sector_name": f"高位断板与退潮出清群 (当日跌停收敛至 {dt_count} 家)",
+                "status_tag": f"高位断板核按钮杀跌 (星光股份断板 · 三峡新材断板)",
+                "health_level": "Level C",
+                "health_color": "#f85149",
+                "impulse_stats": "前期走出 3 连板等中位加速，获利盘集中兑现",
+                "pullback_stats": f"昨日连板今日竞价低开抢跑下杀断板；跌停收窄至 {dt_count} 家 ({dt_names})",
+                "core_stocks": f"星光股份 (002076 · 断板)、三峡新材 (600293 · 断板)、海量数据 (603138 · 断板)、东方嘉盛 (002889)",
+                "matched_tactics": "战法 E (接力退潮防守与断板空间塌陷战法) · 断板即防守律",
+                "tactic_analysis": "高位断板次日冲高反包率仅 7.6%，断板次日冲高一律诱多出逃，严禁左侧接飞刀。",
+                "action_conclusion": "【P-Black 禁买黑名单 · 严禁低吸抄底】",
+                "action_desc": "断板大跌标的坚决不抄底、不搏反抽；严防主力假反抽自救诱多，坚决执行 0 仓位回避！"
+            }
+        ]
+
+    # 3. 2026-10-14 至 2026-10-20 (退潮出清后的新周期低位重构动态解析)
     if dt_clean > "20261013":
         p_jd = prices.get('sz003022', 16.77)
         p_cc = prices.get('sh600148', 19.70)

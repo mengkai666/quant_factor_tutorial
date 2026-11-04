@@ -98,19 +98,27 @@ def main(argv=None):
     as_of=day(args.as_of)
     if args.refresh_reference_quotes:
         refresh_reference_quotes(as_of,args.data_dir)
+    external_refresh_status = 'not_requested'
     if args.refresh_external_evidence:
         from crowding_external import refresh_external_evidence
         try:
             refresh_external_evidence(as_of,args.data_dir)
+            external_refresh_status = 'succeeded'
         except RuntimeError as exc:
+            external_refresh_status = 'failed'
             print(str(exc),file=sys.stderr)
     rules=json.loads(Path(args.tracking_rules).read_text(encoding='utf-8')) if args.tracking_rules else None
     result=build_crowding_report(as_of,data_dir=args.data_dir,tracking_rules=rules)
     files=export_crowding_reports(result,args.output_dir,site_dir=Path(args.output_dir)/'site')
     if args.link_local:
         files['linked_local_entries']=link_local_outputs(args.output_dir,as_of)
-    print(json.dumps(dict(files=files,clocks=result['sources_as_of'],quality=result['quality'],external_evidence=result['external_evidence'].get('summary',{}),external_mode=result['external_evidence']['mode']),ensure_ascii=False,indent=2))
-    return 0
+    summary = dict(files=files, clocks=result['sources_as_of'], quality=result['quality'],
+                   external_evidence=result['external_evidence'].get('summary', {}),
+                   external_mode=result['external_evidence']['mode'],
+                   external_refresh_status=external_refresh_status)
+    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    # Keep the degraded report usable, but never report a failed explicit refresh as success.
+    return 1 if external_refresh_status == 'failed' else 0
 
 
 if __name__=='__main__':
