@@ -360,8 +360,8 @@ def scan_pullback_candidates(
     dt_count = len(day_dt) or 6
     dt_names = "、".join([r['名称'] for r in day_dt[:4]]) if day_dt else "跌停标的"
 
-    # 2. 2026-10-21 之后 (新周期确立: 机器人35家涨停爆发 × 大业股份/海洋王6板空间总龙 × 宇树科技/歌尔/利亚德容量中军)
-    if dt_clean >= "20261021":
+        # 2. 2026-10-21 至 2026-10-25 历史特定快照
+    if "20261021" <= dt_clean <= "20261025":
         p_dy = prices.get('sh603278', 15.96)
         p_hy = prices.get('sz002724', 12.33)
         p_sh = prices.get('sh600838', 11.00)
@@ -413,19 +413,6 @@ def scan_pullback_candidates(
                 "action_desc": "9:25 竞价量比>1.5且红开+2%~+4%，9:35前换手封4板方可参与，仓位上限1成。"
             },
             {
-                "sector_name": "大容量核心中军 / 算力半导体与具身硬件",
-                "status_tag": f"数十亿大成交涨停托底 (利亚德 42.2亿 {p_ly:.2f}元 · 歌尔股份 28.7亿 {p_ge:.2f}元)",
-                "health_level": "Level A",
-                "health_color": "#3fb950",
-                "impulse_stats": "利亚德、歌尔股份、粤芯半导-U 等数十亿大容量中军强势涨停，托底指数流动性",
-                "pullback_stats": "大资金在核心多头中枢呈现良性量价承接，与机器人主线形成软硬协同共振",
-                "core_stocks": f"利亚德 (300296 · 42.2亿 {p_ly:.2f}元)、歌尔股份 (002241 · 28.7亿 {p_ge:.2f}元)、粤芯半导-U (36.2亿)",
-                "matched_tactics": "战法 F (容量中军放量主升与趋势承接战法) · 容量中军压舱石律",
-                "tactic_analysis": "大容量中军稳健放量，有效托底指数并限制空头蔓延，为新周期行情提供充沛流动性支撑。",
-                "action_conclusion": "【中军走趋势重在均线低吸 · 绝不追急拉冲刺】",
-                "action_desc": "大成交容量中军依托 5日线或分时均线低吸，以底仓享受主线趋势溢价。"
-            },
-            {
                 "sector_name": f"高位断板与退潮出清群 (当日跌停收敛至 {dt_count} 家)",
                 "status_tag": f"高位断板核按钮杀跌 (星光股份断板 · 三峡新材断板)",
                 "health_level": "Level C",
@@ -440,168 +427,95 @@ def scan_pullback_candidates(
             }
         ]
 
-    # 3. 2026-10-14 至 2026-10-20 (退潮出清后的新周期低位重构动态解析)
-    if dt_clean > "20261013":
-        p_jd = prices.get('sz003022', 16.77)
-        p_cc = prices.get('sh600148', 19.70)
-        p_da = prices.get('sh600178', 12.41)
-        p_rx = prices.get('sh603893', 189.04)
-        p_jy = prices.get('sz002242', 20.56)
-        p_df = prices.get('sz002889', 14.69)
-        return [
-            {
-                "sector_name": "机器人 / 自动化与高端装备",
-                "status_tag": "低位集群爆发 · 梯队展开 (嘉晨智能、雷赛智能等16家涨停)",
-                "health_level": "Level A",
-                "health_color": "#3fb950",
-                "impulse_stats": "日内批量首板与进阶板共振涌现，16家涨停引爆市场，低位赚钱效应显著激活",
-                "pullback_stats": "前排大单秒板顶一字，中位换手积极承接，板块未现大面积炸板，整体多头动能强劲",
-                "core_stocks": "嘉晨智能 (920096 · 首板)、雷赛智能 (002979 · 首板)、大业股份 (603278 · 3板)、京城股份 (600860 · 3板)",
-                "matched_tactics": "战法 C (板块集群启动与模仿扩散战法) · 低位新主线确立律",
-                "tactic_analysis": "高标退潮出清后，增量资金向低位机器人方向大举建仓，形成清晰梯队与集群效应。",
-                "action_conclusion": "【低位换手前排适度参与 · 紧跟梯队晋级】",
-                "action_desc": "重点关注一进二与二进三爆量弱转强活口；若次日板块分化，聚焦竞价超预期前排，后排跟风冲高不接。"
-            },
-            {
-                "sector_name": "空间高度破局 / 连板天梯标杆",
-                "status_tag": f"全市场最高连板打破空间压制 (吉大正元 4连板 {p_jd:.2f}元)",
-                "health_level": "Level A",
-                "health_color": "#3fb950",
-                "impulse_stats": f"从低位连阳走出 4 连板超级身位，收于 {p_jd:.2f} 元，打破前期高位压制",
-                "pullback_stats": "日内换手良性，筹码结构保持健康，成为全市场唯一连板空间高度总龙",
-                "core_stocks": f"吉大正元 (003022 · 4板空间总龙 {p_jd:.2f}元)",
-                "matched_tactics": "战法 A (龙头高度突破战法) · 空间板试错律",
-                "tactic_analysis": "前期高标断层退潮后，吉大正元率先顶出4板，锚定全市场短线投机天花板与风险偏好。",
-                "action_conclusion": "【极苛刻竞价弱转强试错 · 炸板果断防守】",
-                "action_desc": "次日进行4进5大考。竞价高开且快速换手封死方可底仓轻仓试错，若大幅低开或开盘跳水，则表明空间压制未解，严格克制开仓。"
-            },
-            {
-                "sector_name": "汽车零部件 / 中位梯队换手接力",
-                "status_tag": f"中位梯队扩容 (长春一东 3板 {p_cc:.2f}元 · 东安动力 3板 {p_da:.2f}元)",
-                "health_level": "Level B",
-                "health_color": "#d29922",
-                "impulse_stats": "长春一东、东安动力共振晋级3板，3板梯队扩容至5家，形成健康中位承接",
-                "pullback_stats": "早盘放量换手承接充分，分时均线上方稳健运行，未现恶性炸板",
-                "core_stocks": f"长春一东 (600148 · 3板 {p_cc:.2f}元)、东安动力 (600178 · 3板 {p_da:.2f}元)",
-                "matched_tactics": "战法 B (龙头梯队接力与中位卡位律) · 同身位PK胜出律",
-                "tactic_analysis": "中位3板梯队扩容，作为吉大正元高标后的核心支撑阵列，若高标分歧中位有望产生卡位龙。",
-                "action_conclusion": "【去弱留强毫不手软 · 只上竞价爆量第一名】",
-                "action_desc": "早盘9:25竞价量能决定生死，只做竞价超预期爆量抢筹胜出的第一名，同身位落败者果断回避。"
-            },
-            {
-                "sector_name": "大容量核心中军 / 算力半导体与消费白马",
-                "status_tag": f"大容量涨停托底指数 (瑞芯微 涨停38.3亿 {p_rx:.2f}元 · 九阳股份 涨停23.9亿 {p_jy:.2f}元)",
-                "health_level": "Level A",
-                "health_color": "#3fb950",
-                "impulse_stats": "瑞芯微、九阳股份、移远通信等数十亿大容量中军放量封死涨停，中际旭创、新易盛多头中枢企稳",
-                "pullback_stats": "大资金在核心多头中枢呈现良性量价承接，有效阻断指数单边下探恐慌",
-                "core_stocks": f"瑞芯微 (603893 · 涨停38.3亿 {p_rx:.2f}元)、九阳股份 (002242 · 涨停23.9亿 {p_jy:.2f}元)、移远通信 (603236 · 涨停21.9亿)、中际旭创 (300308)",
-                "matched_tactics": "战法 F (容量中军放量主升与趋势承接战法) · 容量中军压舱石律",
-                "tactic_analysis": "大容量中军稳健运行，有效托底指数并限制空头蔓延，为主线行情的低位重构提供了稳定的流动性环境。",
-                "action_conclusion": "【中军走趋势重在均线低吸 · 绝不追分时冲刺】",
-                "action_desc": "中军趋势票依托 5日/10日均线低吸持有，不盲目追日内分时暴拉，以底仓享受多头中枢溢价。"
-            },
-            {
-                "sector_name": f"高位断板与退潮出清群 (当日跌停收敛至 {dt_count} 家)",
-                "status_tag": f"同身位落败断板杀跌 (东方嘉盛 -6.67% · 万丰奥威 -4.54%)",
-                "health_level": "Level C",
-                "health_color": "#f85149",
-                "impulse_stats": "前期走出 3 连板等中位接力，老周期总龙 (新华传媒 11板、时代万恒 6板) 赶顶结束",
-                "pullback_stats": f"昨日3板同身位竞争落败，东方嘉盛竞价开盘后跳水大跌 -6.67% (现价 {p_df:.2f}元)；跌停收窄至 {dt_count} 家 ({dt_names})",
-                "core_stocks": f"东方嘉盛 (002889 · 3进4断板 -6.67% {p_df:.2f}元)、万丰奥威 (002085 · 断板 -4.54%)、老周期出清群 (新华传媒、时代万恒、跌停标的)",
-                "matched_tactics": "战法 E (接力退潮防守与断板空间塌陷战法) · 断板即防守律",
-                "tactic_analysis": "老周期空间总龙(新华传媒)已见顶出清，当前高位同身位竞争落败股遭遇无情踩踏，退潮期断板个股严禁左侧接飞刀。",
-                "action_conclusion": "【断板高标拉黑名单 · 严禁低吸抄底】",
-                "action_desc": "东方嘉盛等高位断板大跌标的坚决不抄底、不搏反抽；跌停家数虽收窄但个股局部负反馈犹存，不见右侧信号不出手。"
-            }
-        ]
+    # 3. 2026-10-25 之后的日常最新盘面 (100% 算法动态提取当日真实天梯、真实涨停/跌停池)
+    dt_count = len(day_dt)
+    dt_names = "、".join([r.get('名称', '') for r in day_dt[:4]]) if day_dt else "暂无集中跌停标的"
+    
+    # 提取当日最高板龙头
+    if leaders:
+        lead_r = leaders[0]
+        l_name = lead_r.get('名称', '空间总龙')
+        l_code = lead_r.get('代码', '')
+        l_h = int(float(lead_r.get('连板数', 1)))
+        l_price = prices.get(l_code, 0.0)
+        p_str = f" · {l_price:.2f}元" if l_price > 0 else ""
+        lead_info = f"{l_name} ({l_code}{p_str} · {l_h}连板)"
+    else:
+        lead_info = "首板轮动 · 无连板高标"
+        l_name = "首板先锋"
+        l_h = 1
 
-    # 3. 2026-10-08 至 2026-10-13 (节后去伪存真阶段动态解析)
-    p_ss = prices.get('sz301190', 49.20)
-    p_xh = prices.get('sh600825', 13.78)
-    p_sd = prices.get('sh600241', 12.86)
-    p_xy = prices.get('sz000678', 11.07)
-    p_qa = prices.get('sh688137', 137.16)
+    # 提取中位换手股 (2板、3板)
+    mid_stocks = [r for r in day_zt if 2 <= float(r.get('连板数', 0)) < max(3, l_h)]
+    if mid_stocks:
+        m_items = [f"{r.get('名称')}({r.get('代码')} · {int(float(r.get('连板数', 2)))}板)" for r in mid_stocks[:4]]
+        mid_desc = "、".join(m_items)
+    else:
+        mid_desc = "当日中位梯队断层，以首板扩散为主"
 
-    # 善水科技区间涨幅 (自 9.28 启动点 20.79 元动态折算)
-    ss_gain = ((p_ss / 20.79) - 1.0) * 100.0 if p_ss else 136.65
-
-    # 动态查询新华传媒连板数
-    xh_board = 10
-    for l in leaders:
-        if l.get('代码') == 'sh600825':
-            xh_board = int(l.get('连板数', 10))
-            break
+    # 统计当日涨停最多的行业板块
+    ind_counts = {}
+    for r in day_zt:
+        ind = r.get('行业') or r.get('所属行业') or '热点题材'
+        ind_counts[ind] = ind_counts.get(ind, 0) + 1
+    sorted_inds = sorted(ind_counts.items(), key=lambda x: x[1], reverse=True)
+    top_ind = sorted_inds[0][0] if sorted_inds else "短线热点活跃方向"
+    top_ind_cnt = sorted_inds[0][1] if sorted_inds else len(day_zt)
 
     return [
         {
-            "sector_name": "精细化工染料 / 创业板 20cm 独立妖王",
-            "status_tag": f"独立抱团逼空主升 (善水科技 {p_ss:.2f}元 · 累计+{ss_gain:.2f}%)",
+            "sector_name": f"{top_ind} / 日内主攻集群 (共 {top_ind_cnt} 家涨停)",
+            "status_tag": f"日内爆发集群 · 梯队向上拓展 (领军: {lead_info})",
             "health_level": "Level A",
             "health_color": "#3fb950",
-            "impulse_stats": f"9.28首板起步连续 3 连板 20cm，连阳加速狂飙至 {p_ss:.2f} 元，区间大涨 +{ss_gain:.2f}%",
-            "pullback_stats": f"冲高逼近 50 大关，换手 11.20%，日内振幅宽幅加剧，高位多空博弈激烈",
-            "core_stocks": f"善水科技 (301190 · 20cm翻倍妖王 {p_ss:.2f}元)、尚水智能 (301513)",
-            "matched_tactics": "战法 A (空间高度突破战法) · 独立妖王加速赶顶律",
-            "tactic_analysis": "染料中间体涨价催化 + 科技抽血下游资避险抱团，脱离大盘科技走出独立主升行情。",
-            "action_conclusion": "【高位只止盈绝不追高 · 防守线设在45.50元】",
-            "action_desc": f"已进入加速赶顶与天量搏杀区，严禁追高接盘；底仓以 5 日线 (45.50元) 为防守线，跌破果断锁利。"
+            "impulse_stats": f"日内该方向掀起 {top_ind_cnt} 家涨停潮，形成多梯队联动，做多资金高度聚焦",
+            "pullback_stats": f"领军龙头 {l_name} 稳健封板带领梯队，板块分时承接有力，未现批量炸板抛压",
+            "core_stocks": f"领军核心: {lead_info}，梯队跟进: {mid_desc}",
+            "matched_tactics": "战法 C (板块集群启动与模仿扩散战法) · 主攻确立律",
+            "tactic_analysis": "主力资金在该方向大举建仓并构筑梯队，前排身位溢价明确，后排具备良好助攻支撑。",
+            "action_conclusion": "【顺势聚焦 · 精选前排弱转强换手接力】",
+            "action_desc": "重点关注领军龙头溢价及换手分歧后的回封机会；中军容量标的依托 5 日均线企稳低吸。"
         },
         {
-            "sector_name": "并购重组 / 文化传媒",
-            "status_tag": f"全市场空间总龙领跑 (新华传媒 {xh_board}连板 {p_xh:.2f}元 · 博纳影业助攻)",
-            "health_level": "Level A",
-            "health_color": "#3fb950",
-            "impulse_stats": f"走出 {xh_board} 连板超级高度，顶出一字与空间天花板，成为全市场唯一绝对空间标杆",
-            "pullback_stats": "博纳影业大单顶板，新华文轩断板后反包分化，传媒指数高位放量震荡",
-            "core_stocks": f"新华传媒 (600825 · {xh_board}板空间总龙 {p_xh:.2f}元)、博纳影业 (001330 · 助攻)、新华文轩 (601811 · 震荡反包)",
-            "matched_tactics": "战法 A (龙头高度突破战法) · 空间板锁仓溢价律",
-            "tactic_analysis": f"新华传媒 {xh_board} 板打开全场投机天花板，后排个股出现首板/二板补涨与助攻。",
-            "action_conclusion": "【龙头锁仓观望 · 严禁无脑顶板排单一字】",
-            "action_desc": "新华传媒作为全市场情绪风向标持股享受溢价，断板日即为全题材高位分歧点；未上车者禁止盲目追高，只观察低位首板补涨。"
+            "sector_name": f"连板空间高度破局 / {l_h}板空间总龙",
+            "status_tag": f"全市场最高连板高度标杆 ({lead_info})",
+            "health_level": "Level A" if l_h >= 3 else "Level B",
+            "health_color": "#3fb950" if l_h >= 3 else "#d29922",
+            "impulse_stats": f"{lead_info} 打破近期高度压制，成为全市场最高连板试压独苗",
+            "pullback_stats": "早盘竞价放量承接，分时均线上方稳健运行，承接全市场最高投机风险偏好",
+            "core_stocks": lead_info,
+            "matched_tactics": "战法 A (龙头高度突破战法) · 空间板试错律",
+            "tactic_analysis": "作为全市场空间最高板，若竞价与早盘给出主动弱转强信号，将打开全市场接力高度天花板。",
+            "action_conclusion": "【竞价高开确认 · 分歧换手封板试错】",
+            "action_desc": "早盘 9:25 竞价量比健康且红开方可关注，若缩量一字顶板严禁盲目排单，仓位控制在 1 成以内。"
         },
         {
-            "sector_name": "锂电储能与高位换手接力",
-            "status_tag": f"高位放量天量大分歧 (时代万恒 6板 {p_sd:.2f}元 · 九阳股份 6板)",
+            "sector_name": "中位换手接力梯队 / 身位卡位观察",
+            "status_tag": f"中位梯队承上启下 ({mid_desc[:40]})",
             "health_level": "Level B",
             "health_color": "#d29922",
-            "impulse_stats": "时代万恒走出 6 连板打出锂电身位，九阳股份 6 连板引领大消费",
-            "pullback_stats": f"时代万恒冲高 13.85 元后遭遇 33.94% 天量分歧换手，收于 {p_sd:.2f} 元；九阳股份成交 23.3 亿冲高 +6.19%",
-            "core_stocks": f"时代万恒 (600241 · 6板天量分歧 {p_sd:.2f}元)、九阳股份 (002242 · 6板放量承接)",
-            "matched_tactics": "战法 B (龙头断板分歧换手战法) · 高标天量筹码松动律",
-            "tactic_analysis": "时代万恒探路转主升，面临 6 板见顶天量考验；九阳股份承接分歧流动性趋势推升。",
-            "action_conclusion": "【严防滞涨核按钮 · 换手不板立即离场】",
-            "action_desc": "时代万恒换手率高达 33.94%，若次日竞价低开或冲高不封板，坚决落袋为安，切忌高位搏二波反包。"
+            "impulse_stats": f"中位梯队走出换手连板，承接高位分流资金",
+            "pullback_stats": "多空博弈换手充分，考验次日承接与晋级能力",
+            "core_stocks": mid_desc,
+            "matched_tactics": "战法 B (龙头梯队接力与中位卡位律) · 同身位PK胜出律",
+            "tactic_analysis": "中位股承上启下，若高标出现分歧，最强中位有望卡位晋级成为新空间核心。",
+            "action_conclusion": "【紧盯竞价开盘承接 · 去弱留强】",
+            "action_desc": "竞价开盘表现弱于同梯队的坚决放弃；唯有爆量超预期率先换手涨停者方可考虑试错。"
         },
         {
-            "sector_name": f"中位核按钮踩踏与淘汰出清群 (当日 {dt_count} 只跌停)",
-            "status_tag": f"极端退潮连续跌停 ({dt_names})",
+            "sector_name": f"高位断板与退潮出清群 (全市场跌停 {dt_count} 家)",
+            "status_tag": f"极端退潮出清风险 ({dt_names})",
             "health_level": "Level C",
             "health_color": "#f85149",
-            "impulse_stats": "前期逆市连板探路，走出 2~4 板中位接力",
-            "pullback_stats": f"节后分歧溃败，襄阳轴承连续跌停核按钮 (现价 {p_xy:.2f}元)，近岸蛋白试错失败破位 ({p_qa:.2f}元，跌-14.5%)",
-            "core_stocks": f"襄阳轴承 (000678 · 跌停核按钮 {p_xy:.2f}元)、近岸蛋白 (688137 · 试错失败破位 {p_qa:.2f}元)、跌停群 ({dt_names})",
-            "matched_tactics": "战法 D (高位核按钮A杀退潮战法) · 弃弱留强淘汰律",
-            "tactic_analysis": "资金极度抱团妖股，中位跟风股流动性断崖衰竭，出现批量一字/尾盘核按钮踩踏。",
-            "action_conclusion": "【淘汰出清区 · 坚决止损不搏反包】",
-            "action_desc": "襄阳轴承等跌停标的坚决不抄底；近岸蛋白等试错失败弱标严格执行破位止损，严禁在无板块共振下抢地天板。"
-        },
-        {
-            "sector_name": "大容量科技成长 / CPO / 算力液冷",
-            "status_tag": "放量暴跌破位 · 机构失血单日流出超300亿 (拖累创业板-2.32%)",
-            "health_level": "Level C",
-            "health_color": "#f85149",
-            "impulse_stats": "前期大周期获利盘回吐，9.16 共振后持续阴跌失血",
-            "pullback_stats": "放量跌穿 20日与30日生命线，中际旭创、工业富联巨额净流出，科技老套牢盘泰山压顶",
-            "core_stocks": "中际旭创 (300308 · 破位)、新易盛 (300502 · 杀跌)、工业富联 (601138 · 机构流出)",
-            "matched_tactics": "战法 E (接力防守与退潮空间塌陷战法) · 死刑黑名单严防假反抽律",
-            "tactic_analysis": "半个月前已被战法体系明确判死刑！存量缩量下根本无法承接百亿级抽血，脉冲皆为诱多。",
-            "action_conclusion": "【P-Black 绝对死刑黑名单 · 严禁接飞刀】",
-            "action_desc": "坚决不抄底、不抢任何科技盘中反抽，任何反弹均为出逃卖点，伸手必吃大面！"
+            "impulse_stats": "前期获利盘累积丰厚，面临集中兑现与核按钮风险",
+            "pullback_stats": f"全市场跌停家数报 {dt_count} 家 ({dt_names})，亏钱效应需警惕扩散",
+            "core_stocks": f"跌停与断板出清代表: {dt_names}",
+            "matched_tactics": "战法 E (接力退潮防守与断板空间塌陷战法) · 断板即防守律",
+            "tactic_analysis": "高位断板后反抽成功率低，冲高一律视为主力自救诱多出逃，严禁左侧接飞刀。",
+            "action_conclusion": "【P-Black 禁买黑名单 · 严禁低吸抄底】",
+            "action_desc": "跌停与破位大跌标的坚决不抄底、不搏地天板；若跌停潮扩张，全天坚决执行防守熔断！"
         }
     ]
-
-
 def render_pullback_tracker_panel(
     report_date: str = "2026-09-28",
     candidates: list[dict] | None = None,

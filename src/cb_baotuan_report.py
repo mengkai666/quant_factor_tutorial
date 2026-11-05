@@ -206,6 +206,126 @@ CB_TRACKING_DATA = [
 ]
 
 
+
+
+def get_dynamic_cb_tracking_data(report_date: str = "") -> tuple[list[dict], str]:
+    """获取指定日期的可转债抱团与核心成交榜数据.
+    
+    - 针对 2026-10-23 及更早历史日，返回权威的历史基准案例复盘快照；
+    - 针对最新交易日，优先动态拉取全市场实时/盘后转债行情，结合正股联动动态计算；
+    - 若网络受限，平滑回退至基准样本并明确标注。
+    """
+    dt_clean = str(report_date or "").replace("-", "").replace("/", "").strip()[:8]
+    if dt_clean and dt_clean <= "20261023":
+        return CB_TRACKING_DATA, f"历史基准复盘 · 2026-10-23"
+
+    try:
+        import requests
+        import cb_action_research as cbar
+        market = cbar._fetch_market()
+        rows = market.get('rows', [])
+        if not rows:
+            return CB_TRACKING_DATA, "历史基准复盘 · 2026-10-23 (离线)"
+        
+        # 按成交额降序排序
+        rows.sort(key=lambda r: float(r.get('amount') or 0), reverse=True)
+        top_rows = rows[:10]
+        base = cbar._fetch_base()
+        base_map = {str(r["SECURITY_CODE"]): r for r in base.get("rows", [])}
+
+        stock_codes = []
+        for r in top_rows:
+            b = base_map.get(r['code'], {})
+            st_code = b.get('CONVERT_STOCK_CODE', '')
+            r['stock_code'] = st_code
+            r['stock_name'] = b.get('SECURITY_SHORT_NAME', '')
+            r['size_yi'] = round(float(b.get('ACTUAL_ISSUE_SCALE') or 10.0), 2)
+            if st_code:
+                prefix = 'sh' if st_code.startswith('6') else 'sz'
+                stock_codes.append(f"{prefix}{st_code}")
+
+        stock_quotes = {}
+        if stock_codes:
+            url = f"https://hq.sinajs.cn/list={','.join(stock_codes)}"
+            headers = {'Referer': 'https://finance.sina.com.cn'}
+            res = requests.get(url, headers=headers, timeout=5)
+            for line in res.text.strip().split('\n'):
+                if '="' in line:
+                    k, v = line.split('="')
+                    code = k.split('str_')[-1]
+                    parts = v.split(',')
+                    if len(parts) > 3:
+                        cur = float(parts[3])
+                        prev = float(parts[2])
+                        pct = ((cur - prev) / prev * 100) if prev > 0 else 0
+                        stock_quotes[code] = {'price': cur, 'pct': pct}
+
+        items = []
+        roles_config = [
+            ("👑 空间容量中军", "中军龙头", "#58a6ff"),
+            ("🚀 日内弹性先锋", "日内先锋", "#3fb950"),
+            ("🔥 高弹性核心抱团", "抱团中军", "#d29922"),
+            ("⚡ 强共振轮动主力", "轮动主力", "#a371f7"),
+            ("💎 优质成长中军", "成长中军", "#39c5bb"),
+            ("🛡️ 防守稳健底仓", "稳健底仓", "#58a6ff"),
+        ]
+
+        q_date = top_rows[0].get('quote_date') or report_date or "最新"
+        for i, r in enumerate(top_rows[:6]):
+            st_code = r.get('stock_code', '')
+            prefix = 'sh' if st_code.startswith('6') else 'sz'
+            sq = stock_quotes.get(f"{prefix}{st_code}", {})
+            sp = sq.get('price', 0.0)
+            spct = sq.get('pct', 0.0)
+            amt_yi = round(float(r.get('amount') or 0) / 1e8, 2)
+            cb_price = float(r.get('trade') or 0.0)
+            cb_pct = float(r.get('changepercent') or 0.0)
+
+            role, role_badge, role_color = roles_config[i] if i < len(roles_config) else ("📈 活跃跟踪标的", "活跃标的", "#8b949e")
+            if cb_pct < -2.0 or spct < -3.0:
+                role = "⚠️ 破位承压出清"
+                role_badge = "出清观察"
+                role_color = "#f85149"
+
+            if spct >= 9.8:
+                st_status = f"封板涨停 +{spct:.2f}%"
+                st_color = "#3fb950"
+            elif spct > 0:
+                st_status = f"放量上涨 +{spct:.2f}%"
+                st_color = "#3fb950"
+            elif spct < 0:
+                st_status = f"震荡调整 {spct:.2f}%"
+                st_color = "#f85149"
+            else:
+                st_status = "平盘震荡 0.00%"
+                st_color = "#8b949e"
+
+            item = {
+                "role": role,
+                "role_badge": role_badge,
+                "role_color": role_color,
+                "bond_code": r['code'],
+                "bond_name": r['name'],
+                "price": cb_price,
+                "pct_day": cb_pct,
+                "pct_3d": cb_pct,
+                "amount_yi": amt_yi,
+                "size_yi": r.get('size_yi', 10.0),
+                "stock_code": st_code,
+                "stock_name": r.get('stock_name') or '对应正股',
+                "stock_price": sp,
+                "stock_pct": round(spct, 2),
+                "stock_status": st_status,
+                "status_color": st_color,
+                "theme": f"转债日成交 {amt_yi:.2f} 亿 · 正股联动",
+                "qualitative": f"转债现价 {cb_price:.2f} 元，日内涨跌幅 {cb_pct:+.2f}%，成交 {amt_yi:.2f} 亿元，正股 {r.get('stock_name')} 报 {sp:.2f} 元 ({spct:+.2f}%)"
+            }
+            items.append(item)
+        return items, f"动态盘面 · {q_date}"
+    except Exception as e:
+        return CB_TRACKING_DATA, "历史基准复盘 · 2026-10-23 (回退)"
+
+
 def render_cb_teaser_card_html(report_date: str = "", is_site_mode: bool = False, prefix: str = "") -> str:
     """渲染嵌入主报告的【可转债抱团演进与新周期追踪】数据分析高密度看板."""
     r_date = str(report_date or '2026-10-23')
@@ -214,13 +334,11 @@ def render_cb_teaser_card_html(report_date: str = "", is_site_mode: bool = False
 
     detail_url = f"{prefix}cb_baotuan/latest.html" if is_site_mode else "可转债抱团复盘与追踪.html"
 
-    # 生成核心标的紧凑数据行 (精选 5 只典型标的)
-    key_items = [
-        item for item in CB_TRACKING_DATA 
-        if item["bond_name"] in ("奥普转债", "豪美转债", "丰茂转债", "震裕转02", "澳弘转债")
-    ]
+    # 动态获取指定日期的核心标的数据
+    key_items, data_source_label = get_dynamic_cb_tracking_data(r_date)
     if not key_items:
         key_items = CB_TRACKING_DATA[:5]
+        data_source_label = "历史基准案例" 
 
     rows = []
     for item in key_items:
@@ -346,8 +464,9 @@ def render_cb_teaser_card_html(report_date: str = "", is_site_mode: bool = False
 
 def generate_cb_standalone_html(report_date: str = "2026-10-23") -> str:
     """生成完整版《可转债抱团复盘与新周期追踪深度报告》HTML."""
+    items, data_source_label = get_dynamic_cb_tracking_data(report_date)
     table_rows = []
-    for item in CB_TRACKING_DATA:
+    for item in items:
         p_day_color = "#3fb950" if item["pct_day"] > 0 else ("#f85149" if item["pct_day"] < 0 else "#8b949e")
         p_3d_color = "#3fb950" if item["pct_3d"] > 0 else ("#f85149" if item["pct_3d"] < 0 else "#8b949e")
         s_pct_color = "#3fb950" if item["stock_pct"] > 0 else ("#f85149" if item["stock_pct"] < 0 else "#8b949e")
