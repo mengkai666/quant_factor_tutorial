@@ -382,6 +382,8 @@ BAOTUAN_HISTORICAL_CYCLES: List[Dict[str, Any]] = [
     }
 ]
 
+_BAOTUAN_CYCLE_MEMO: Dict[str, Any] = {}
+
 def build_baotuan_cycle(report_date: Optional[str] = None, *, research_report: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     from copy import deepcopy
     from zoneinfo import ZoneInfo
@@ -390,6 +392,9 @@ def build_baotuan_cycle(report_date: Optional[str] = None, *, research_report: O
     requested = day(report_date) if report_date else (
         research_report['requested_date'] if research_report is not None else
         datetime.now(ZoneInfo('Asia/Shanghai')).strftime('%Y-%m-%d'))
+    
+    if research_report is None and requested in _BAOTUAN_CYCLE_MEMO:
+        return _BAOTUAN_CYCLE_MEMO[requested]
     research = research_report if research_report is not None else build_crowding_report(requested)
     if research['requested_date'] != requested:
         raise ValueError('研究报告截止日与请求日不一致。')
@@ -412,7 +417,7 @@ def build_baotuan_cycle(report_date: Optional[str] = None, *, research_report: O
                    status='价格研究候选，非新周期确认', type='待验证',
                    as_of=latest.get('date'), execution_status='not_qualified')
               for item in latest.get('top', []) if available]
-    return dict(status='ok', report_date=requested.replace('-', ''), report_date_fmt=requested,
+    res_val = dict(status='ok', report_date=requested.replace('-', ''), report_date_fmt=requested,
                 data_as_of=research['sources_as_of'], claim_as_of=latest.get('date'), known_at=None,
                 knowledge_status='reconstructed_from_current_cache',
                 authority='价格证据研究，非交易信号', current_stage=stage,
@@ -421,6 +426,9 @@ def build_baotuan_cycle(report_date: Optional[str] = None, *, research_report: O
                 cleansing_desc='价格止跌不等于资金出清完成', tactical_guidance='检查数据时钟、固定篮子与核心失效；量能和可成交性未验证，不升级交易判断。',
                 cycles=cases, current_cycle={}, today_trials=trials, today_discarded=[], today_succession=[],
                 stats=stats, research_report=research)
+    if research_report is None:
+        _BAOTUAN_CYCLE_MEMO[requested] = res_val
+    return res_val
 
 
 def render_baotuan_teaser_html(result: Optional[Dict[str, Any]] = None) -> str:

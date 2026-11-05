@@ -200,7 +200,10 @@ class MarketSentimentFactor:
             # 价格缓存可能同时存在 raw/qfq/legacy 三种历史口径；这里先按
             # code/date 折叠成一条“可计算价格”，并明确记录实际口径，避免
             # legacy_mixed 被误报成 raw/qfq 权威数据。
-            df = pd.read_csv(PRICE_CACHE_FILE, dtype={'code': str, 'date': str})
+            from paths import get_shared_price_df
+            df = get_shared_price_df(dtype={'code': str, 'date': str})
+            if df is None:
+                df = pd.read_csv(PRICE_CACHE_FILE, dtype={'code': str, 'date': str})
             df = filter_completed_rows(df, 'date')
             if df.empty or 'code' not in df.columns or 'date' not in df.columns:
                 self._ad_cache = {}

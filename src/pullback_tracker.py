@@ -238,21 +238,20 @@ def _norm_pullback_date(dt: Any) -> tuple[str, str]:
 
 
 def _load_market_prices(date_dash: str) -> dict[str, float]:
-    """读取指定日期的真实收盘价映射 (单一真源来自 PRICE_CACHE)."""
+    """读取指定日期的真实收盘价映射 (单一真源来自 PRICE_CACHE 单例内存共享)."""
     prices: dict[str, float] = {}
-    from paths import PRICE_CACHE
-    if os.path.exists(PRICE_CACHE):
-        try:
-            import pandas as pd
-            df_p = pd.read_csv(PRICE_CACHE, dtype=str)
+    from paths import get_shared_price_df
+    try:
+        df_p = get_shared_price_df()
+        if df_p is not None and not df_p.empty:
             sub = df_p[df_p['date'] == date_dash]
             for _, row in sub.iterrows():
                 try:
                     prices[row['code']] = float(row['close_raw'])
                 except Exception:
                     pass
-        except Exception:
-            pass
+    except Exception:
+        pass
     return prices
 
 

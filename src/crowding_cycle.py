@@ -129,6 +129,11 @@ def number(value: Any, digits: int = 2) -> float | None:
 
 
 def read_csv(path: Path) -> pd.DataFrame:
+    if 'price_history_cache.csv' in str(path):
+        from paths import get_shared_price_df
+        df = get_shared_price_df()
+        if df is not None and not df.empty:
+            return df
     return pd.read_csv(path, dtype=str) if path.exists() else pd.DataFrame()
 
 
@@ -339,12 +344,18 @@ def select_member_series(symbol: str, quotes: dict, mats: dict | None, calendar:
                         selection_reason='单窗口单源：优先完整覆盖应有近21交易日的序列，再比较截止日和覆盖；同等条件优先全市场前复权缓存。无完整源时降级，不拼接补洞。')
 
 
+_CROWDING_REPORT_MEMO: dict[str, dict] = {}
+
 def build_crowding_report(report_date: str, *, data_dir: str | Path | None = None,
                           prices: pd.DataFrame | None = None, limits: pd.DataFrame | None = None,
                           sentiment: pd.DataFrame | None = None, calendar: list[str] | None = None,
                           names: dict | None = None, quotes: dict | None = None,
                           tracking_rules: dict | None = None, external_snapshot: dict | None = None) -> dict:
-    requested = day(report_date)
+    requested = day(report_date) if report_date else ""
+    cache_key = requested
+    if cache_key and data_dir is None and prices is None and limits is None and tracking_rules is None:
+        if cache_key in _CROWDING_REPORT_MEMO:
+            return _CROWDING_REPORT_MEMO[cache_key]
     start = (pd.Timestamp(requested) - pd.DateOffset(months=2)).strftime('%Y-%m-%d')
     root = Path(data_dir or DATA_DIR)
     prices = read_csv(root / 'price_history_cache.csv') if prices is None else prices
@@ -579,4 +590,6 @@ def build_crowding_report(report_date: str, *, data_dir: str | Path | None = Non
                                backtest='未做可成交回测；不提供胜率、收益承诺或固定买卖价。'))
     from crowding_external import build_external_evidence
     result["external_evidence"] = build_external_evidence(result, data_dir=root, snapshot=external_snapshot)
+    if cache_key and data_dir is None and prices is None and limits is None and tracking_rules is None:
+        _CROWDING_REPORT_MEMO[cache_key] = result
     return result

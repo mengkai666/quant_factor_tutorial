@@ -770,9 +770,10 @@ def load_and_classify_zt(n_days=60):
     if os.path.exists(CLS_PLATE_CACHE):
         try:
             cache_df = pd.read_csv(CLS_PLATE_CACHE, dtype=str)
-            for _, row in cache_df.iterrows():
-                key = (row['date'], row['code'])
-                cached_plates[key] = {'sub': row.get('sub',''), 'mainline': row.get('mainline','')}
+            sub_col = cache_df['sub'].fillna('').tolist() if 'sub' in cache_df.columns else [''] * len(cache_df)
+            ml_col = cache_df['mainline'].fillna('').tolist() if 'mainline' in cache_df.columns else [''] * len(cache_df)
+            for d, c, s, m in zip(cache_df['date'], cache_df['code'], sub_col, ml_col):
+                cached_plates[(d, c)] = {'sub': s, 'mainline': m}
         except Exception as e:
             print(f'  ⚠️ CLS 板块缓存加载失败: {e}')
 
@@ -825,11 +826,17 @@ def load_and_classify_zt(n_days=60):
 
     stock_plate_map.update(cached_plates)
 
-    def apply_cls(row):
-        m = stock_plate_map.get((row['日期'], row['代码']), {'sub': '其它', 'mainline': '其它'})
-        return pd.Series([m['sub'], m['mainline']])
-
-    df[['细分板块', '大主线']] = df.apply(apply_cls, axis=1)
+    sub_list, ml_list = [], []
+    for d, c in zip(df['日期'], df['代码']):
+        m = stock_plate_map.get((d, c))
+        if m:
+            sub_list.append(m.get('sub', '其它') or '其它')
+            ml_list.append(m.get('mainline', '其它') or '其它')
+        else:
+            sub_list.append('其它')
+            ml_list.append('其它')
+    df['细分板块'] = sub_list
+    df['大主线'] = ml_list
     return df
 
 def build_echelon_table(cls_data, zt_today=None):
@@ -2231,7 +2238,10 @@ def rate_sub(series):
 def load_price_cache(*, include_future=False, report_date=None):
     """读取价格缓存；默认仅返回报告截止日及之前的数据。"""
     if os.path.exists(PRICE_CACHE):
-        df = pd.read_csv(PRICE_CACHE, dtype={'code': str})
+        from paths import get_shared_price_df
+        df = get_shared_price_df(dtype={'code': str})
+        if df is None:
+            df = pd.read_csv(PRICE_CACHE, dtype={'code': str})
         if not df.empty:
             df = normalize_price_frame(df)
             # 旧版本缓存只有 date/code/close。读取时立即落成统一契约，避免
@@ -5943,8 +5953,8 @@ def _main_impl():
         industry_map = {}
         if os.path.exists(INDUSTRY_CACHE):
             idf = pd.read_csv(INDUSTRY_CACHE, dtype=str)
-            for _, row in idf.iterrows():
-                industry_map[row['code']] = {'name': row['name'], 'industry': row['industry']}
+            for c, n, ind in zip(idf['code'], idf['name'].fillna(''), idf['industry'].fillna('')):
+                industry_map[c] = {'name': n, 'industry': ind}
 
         returns_df = calc_nday_returns(price_df)
         if not returns_df.empty:

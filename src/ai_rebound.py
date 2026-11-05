@@ -84,7 +84,7 @@ def _int_env(name, default, *, minimum=1):
 AI_PRIMARY_MAX_ATTEMPTS = _int_env("AI_PRIMARY_MAX_ATTEMPTS", 2)
 AI_RETRY_BASE_DELAY = _float_env("AI_RETRY_BASE_DELAY", 0.5)
 AI_RETRY_MAX_DELAY = _float_env("AI_RETRY_MAX_DELAY", 2.0)
-AI_REQUEST_TIMEOUT = _float_env("AI_REQUEST_TIMEOUT", 120.0)
+AI_REQUEST_TIMEOUT = _float_env("AI_REQUEST_TIMEOUT", 15.0)
 # 一次日报里 AI 研判允许占用的**墙钟总预算** (含重试与备用模型), 秒。
 #
 # 为什么必须存在: AI 只是报告的增强项, 却同步挂在报告主链路上, 而"单次请求超时"
@@ -610,6 +610,9 @@ def generate_ai_rebound(
                     f"(模型 {model} 第{attempt + 1}/{attempts}次): "
                     f"{str(getattr(response, 'text', ''))[:160]}"
                 )
+                if status in (522, 504, 521, 523, 524):
+                    print(f"  [提示] 上游网关返回 {status} 离线状态，跳过重试直接 fallback")
+                    return None
                 if status not in retryable_statuses or not allow_retry or attempt + 1 >= attempts:
                     return None
                 retry_after = None
@@ -643,7 +646,8 @@ def generate_ai_rebound(
     try:
         successful_response = call_model(ANTHROPIC_MODEL, AI_PRIMARY_MAX_ATTEMPTS, True)
         primary_attempt_count = sum(1 for item in model_attempts if item["model"] == ANTHROPIC_MODEL)
-        if successful_response is None and ANTHROPIC_FALLBACK_MODEL and ANTHROPIC_FALLBACK_MODEL != ANTHROPIC_MODEL:
+        last_status = getattr(last_response, "status_code", None)
+        if successful_response is None and last_status not in (522, 504, 521, 523, 524) and ANTHROPIC_FALLBACK_MODEL and ANTHROPIC_FALLBACK_MODEL != ANTHROPIC_MODEL:
             successful_response = call_model(ANTHROPIC_FALLBACK_MODEL, 1, False)
             fallback_attempt_count = sum(1 for item in model_attempts if item["model"] == ANTHROPIC_FALLBACK_MODEL)
 

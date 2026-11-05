@@ -529,7 +529,12 @@ def build_stock_chart_dataset(df: pd.DataFrame, cfg: dict[str, Any], quote: dict
     }
 
 
+_ZHAO_TRACKER_DATA_MEMO: dict[str, dict[str, Any]] = {}
+
 def generate_zhao_tracker_data(report_date: str = "", report_context: dict[str, Any] | None = None) -> dict[str, Any]:
+    cache_key = str(report_date or "")
+    if cache_key in _ZHAO_TRACKER_DATA_MEMO:
+        return _ZHAO_TRACKER_DATA_MEMO[cache_key]
     """组装全量数据与图表数据集"""
     codes = [item['code'] for item in ZHAO_PORTFOLIO_CONFIG]
     quotes = fetch_realtime_quotes(codes)
@@ -636,13 +641,15 @@ def generate_zhao_tracker_data(report_date: str = "", report_context: dict[str, 
             market_stance = thesis.get('market_stance', market_stance)
             macro_note = thesis.get('summary', macro_note)
 
-    return {
+    res = {
         'report_date': report_date or datetime.now().strftime('%Y-%m-%d'),
         'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         'market_stance': market_stance,
         'macro_note': macro_note,
         'dossiers': dossiers,
     }
+    _ZHAO_TRACKER_DATA_MEMO[cache_key] = res
+    return res
 
 
 # ─────────────────────────────────────────────────────────────

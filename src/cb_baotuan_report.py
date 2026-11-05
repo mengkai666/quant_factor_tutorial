@@ -208,6 +208,8 @@ CB_TRACKING_DATA = [
 
 
 
+_CB_TRACKING_MEMO: dict[str, tuple[list[dict], str]] = {}
+
 def get_dynamic_cb_tracking_data(report_date: str = "") -> tuple[list[dict], str]:
     """获取指定日期的可转债抱团与核心成交榜数据.
     
@@ -216,8 +218,11 @@ def get_dynamic_cb_tracking_data(report_date: str = "") -> tuple[list[dict], str
     - 若网络受限，平滑回退至基准样本并明确标注。
     """
     dt_clean = str(report_date or "").replace("-", "").replace("/", "").strip()[:8]
+    if dt_clean in _CB_TRACKING_MEMO:
+        return _CB_TRACKING_MEMO[dt_clean]
     if dt_clean and dt_clean <= "20261023":
-        return CB_TRACKING_DATA, f"历史基准复盘 · 2026-10-23"
+        _CB_TRACKING_MEMO[dt_clean] = (CB_TRACKING_DATA, f"历史基准复盘 · 2026-10-23")
+        return _CB_TRACKING_MEMO[dt_clean]
 
     try:
         import requests
@@ -225,7 +230,8 @@ def get_dynamic_cb_tracking_data(report_date: str = "") -> tuple[list[dict], str
         market = cbar._fetch_market()
         rows = market.get('rows', [])
         if not rows:
-            return CB_TRACKING_DATA, "历史基准复盘 · 2026-10-23 (离线)"
+            _CB_TRACKING_MEMO[dt_clean] = (CB_TRACKING_DATA, "历史基准复盘 · 2026-10-23 (离线)")
+            return _CB_TRACKING_MEMO[dt_clean]
         
         # 按成交额降序排序
         rows.sort(key=lambda r: float(r.get('amount') or 0), reverse=True)

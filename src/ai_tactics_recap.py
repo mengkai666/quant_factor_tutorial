@@ -72,8 +72,8 @@ def call_gemini_json(
     prompt: str,
     system_instruction: str = "",
     model: str | None = None,
-    timeout: int = 30,
-    max_retries: int = 2,
+    timeout: int = 10,
+    max_retries: int = 1,
 ) -> Optional[Dict[str, Any]]:
     """调用 Gemini API 生成结构化 JSON."""
     if not is_gemini_available():
@@ -274,6 +274,12 @@ def update_tactics_recap_file(
     if _iso_date(facts.get("trade_date")) != report_date:
         print(f"  [Gemini] 缺少 {report_date} 当日行情事实（收到 {facts.get('trade_date') or '无'}），跳过 AI 对账。")
         return existing_data
+
+    if existing_data.get("report_date") == report_date:
+        yc = existing_data.get("yesterday_comparison")
+        if yc and isinstance(yc, list) and len(yc) > 0:
+            print(f"  [Gemini] {report_date} 当日已有战法对账记录，直接复用。")
+            return existing_data
     
     print(f"🤖 [Gemini] 正在调用 {GEMINI_MODEL} 分析 {report_date} 盘面对账与 {target_date} 竞价风向标...")
     ai_result = generate_recap_analysis(report_date, target_date, existing_data, facts)

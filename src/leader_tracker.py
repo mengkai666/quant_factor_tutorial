@@ -379,7 +379,10 @@ def _today_pct(ctx, codes) -> dict:
     """从价格缓存算 codes 今日涨幅% (今收/上一真实交易日收 -1)。缺失跳过。"""
     from paths import PRICE_CACHE
     as_of = ctx['as_of']
-    df = pd.read_csv(PRICE_CACHE, dtype={'code': str}) if os.path.exists(PRICE_CACHE) else pd.DataFrame()
+    from paths import get_shared_price_df
+    df = get_shared_price_df(dtype={'code': str}) if os.path.exists(PRICE_CACHE) else None
+    if df is None:
+        df = pd.read_csv(PRICE_CACHE, dtype={'code': str}) if os.path.exists(PRICE_CACHE) else pd.DataFrame()
     if df.empty or 'date' not in df.columns:
         return {}
     df['d'] = df['date'].astype(str).map(_norm_date)

@@ -841,17 +841,18 @@ def _build_macro_sentiment_dossier(report_date: str, plan: dict[str, Any]) -> st
     dash_date = f"{dt_clean[:4]}-{dt_clean[4:6]}-{dt_clean[6:]}" if len(dt_clean) == 8 else report_date
 
     dyn_prices: dict[str, float] = {}
-    if os.path.exists(PRICE_CACHE):
-        try:
-            df_p = pd.read_csv(PRICE_CACHE, dtype=str)
+    from paths import get_shared_price_df
+    try:
+        df_p = get_shared_price_df()
+        if df_p is not None and not df_p.empty:
             sub = df_p[df_p['date'] == dash_date]
             for _, r in sub.iterrows():
                 try:
                     dyn_prices[r['code']] = float(r['close_raw'])
                 except Exception:
                     pass
-        except Exception:
-            pass
+    except Exception:
+        pass
 
     # 1. 2026-09-30 及以前 (节前宏观舆情与题材洗牌)
     if dt_clean <= "20260930":
