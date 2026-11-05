@@ -5013,6 +5013,16 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     except Exception as _fupan_err:
         print(f"  [警告] 连续展示复盘报告生成失败: {_fupan_err}")
 
+    # 复盘与独立预案共用同日事实和执行资格，避免两套交易结论。
+    crowding_plan_marker = '<!-- trusted-crowding-plan -->'
+    trusted_crowding_plan_html = ''
+    try:
+        from crowding_next_day_plan import build_next_day_plan, render_plan_panel_html
+        _shared_plan = build_next_day_plan(unified_context, echelon=echelon, price_df=price_df)
+        trusted_crowding_plan_html = render_plan_panel_html(_shared_plan, is_site_mode=False)
+    except Exception as _plan_err:
+        print(f"  [警告] 抱团操作预案生成失败: {_plan_err}")
+
     # 内嵌看板已包含择时状态、情绪温度和质量门禁；成功生成后隐藏旧版雷达，
     # 避免首屏连续出现两套“发布状态”表达。看板失败时仍保留旧版雷达兜底。
     if dashboard_section_html:
@@ -5345,6 +5355,7 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     {tactics_panel_html}
 
     {fupan_sanitize_marker}
+    {crowding_plan_marker}
 
     {legacy_decision_block_html}
 
@@ -5467,6 +5478,7 @@ window.addEventListener('resize',function(){{c.resize();}});}})();
         html = html.replace(baotuan_sanitize_marker, trusted_baotuan_html)
     if trusted_fupan_html:
         html = html.replace(fupan_sanitize_marker, trusted_fupan_html)
+    html = html.replace(crowding_plan_marker, trusted_crowding_plan_html)
     research_link = unified_context.get('research_subpage')
     if isinstance(research_link, dict) and research_link.get('href'):
         from research_subpages import add_research_entry
@@ -6960,6 +6972,20 @@ def _main_impl():
         report_date=_report_date, context=_report_context, lineage=_lineage,
     )
 
+    # 抱团周期：纯本地计算；截图注释与行情代理隔离，缺证据不生成确认信号。
+    _crowding_html = None
+    try:
+        from paths import OUTPUT_DIR
+        from crowding_cycle import build_crowding_report
+        from crowding_view import export_crowding_reports, generate_crowding_html
+        _crowding_result = build_crowding_report(latest_date, prices=price_df)
+        _crowding_files = export_crowding_reports(_crowding_result, OUTPUT_DIR)
+        _crowding_html = generate_crowding_html(_crowding_result, is_site_mode=True)
+        print(f"  → 抱团周期研究报告: {_crowding_files['local_latest']}")
+    except Exception as e:
+        print(f"  [警告] 抱团周期子页生成失败 (不影响主流程): {e}")
+
+
     print("\n[6/6] 生成可视化...")
     generate_html(
         ml_strength=ml_strength, sub_strength=sub_strength,
@@ -7050,7 +7076,7 @@ def _main_impl():
         _plan_html = None
         try:
             from paths import OUTPUT_DIR
-            from next_day_plan import build_next_day_plan, generate_plan_html, export_plan_standalone_reports
+            from crowding_next_day_plan import build_next_day_plan, generate_plan_html, export_plan_standalone_reports
             _plan_data = build_next_day_plan(_report_context, echelon, price_df)
             _plan_res = export_plan_standalone_reports(latest_date, output_dir=OUTPUT_DIR, site_dir=SITE_DIR, plan_data=_plan_data)
             _plan_html = generate_plan_html(_plan_data, is_site_mode=True)
@@ -7114,17 +7140,6 @@ def _main_impl():
         except Exception as e:
             print(f"  [警告] 抱团周期与新周期试错分析子页生成失败 (不影响主流程): {e}")
 
-        # 抱团周期：纯本地计算；截图注释与行情代理隔离，缺证据不生成确认信号。
-        _crowding_html = None
-        try:
-            from crowding_cycle import build_crowding_report
-            from crowding_view import export_crowding_reports, generate_crowding_html
-            _crowding_result = build_crowding_report(latest_date)
-            _crowding_files = export_crowding_reports(_crowding_result, OUTPUT_DIR)
-            _crowding_html = generate_crowding_html(_crowding_result, is_site_mode=True)
-            print(f"  → 抱团周期研究报告: {_crowding_files['local_latest']}")
-        except Exception as e:
-            print(f"  [警告] 抱团周期子页生成失败 (不影响主流程): {e}")
 
         publish_result = publish(
             OUTPUT_HTML,

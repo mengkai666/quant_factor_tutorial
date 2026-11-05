@@ -3,7 +3,7 @@ import json
 import pandas as pd
 import pytest
 
-import next_day_plan as ndp
+import crowding_next_day_plan as ndp
 
 
 @pytest.mark.parametrize("prev,close,code,name,expected", [

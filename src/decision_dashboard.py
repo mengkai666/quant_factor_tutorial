@@ -609,7 +609,7 @@ def _build_action_plan(ctx: dict, judgement: dict | None = None) -> dict[str, An
                 action = '核心强度与换手确认后进入条件计划'
                 trigger = '核心强于市场、换手确认且未跌破竞价低点；逐项验证，不依赖全市场回封率'
             if role in {'attack', 'confirm'} and not execution_allowed:
-                action = '模拟跟踪 / 待信号确认'
+                action = '仅观察，不下单'
                 # 解耦风控与条件：保留真实技术触发条件，绝不覆盖为未开放执行
             role_rows.append({
                 **row,

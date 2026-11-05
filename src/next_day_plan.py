@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from html import escape
 from typing import Any
 
@@ -1574,114 +1575,223 @@ def _load_continuous_market_history(report_date: str) -> list[dict[str, Any]]:
     ]
 
 
+def _select_tomorrow_cb_action_targets(report_date: str) -> list[dict[str, Any]]:
+    """提取重点抱团可转债 T+0 明日实战作战预案（直接给出买卖指令与风控红线）."""
+    r_clean = str(report_date).replace('-', '').strip()[:8]
+    targets = []
+    try:
+        try:
+            from .cb_baotuan_report import get_dynamic_cb_tracking_data
+        except ImportError:
+            from cb_baotuan_report import get_dynamic_cb_tracking_data
+
+        items, _ = get_dynamic_cb_tracking_data(report_date)
+        if items:
+            for it in items:
+                b_name = it.get('bond_name') or ''
+                b_code = it.get('bond_code') or ''
+                p = it.get('price') or 0.0
+                pct_day = it.get('pct_day') or 0.0
+                s_name = it.get('stock_name') or (b_name.replace('转债', '').replace('转02', '').replace('转2', ''))
+                s_pct = it.get('stock_pct')
+                s_pct_str = f"{s_pct:+.2f}%" if isinstance(s_pct, (int, float)) else "平盘"
+                amt = it.get('amount_yi')
+                amt_str = f"{amt:.1f}亿" if isinstance(amt, (int, float)) else "高频周转"
+
+                if pct_day > 10.0 or (s_pct is not None and s_pct >= 9.8):
+                    role = "【标杆中军 · 龙头共振主攻】"
+                    badge_color = "#f85149"
+                    action = (
+                        f"<b>竞价预期：</b>正股一字封单或高开 &gt; +5%，转债高开 +3%~+6%；<br>"
+                        f"<b>T+0 操盘指令：</b>早盘放量脉冲不追，待回踩分时均线平盘支撑确认企稳低吸；若正股封死涨停，持仓博弈冲高分批止盈；若正股开板立即平仓抢跑！<br>"
+                        f"<b>纪律底线：</b>严格日内 T+0 锁利，14:55 前坚决清仓不隔夜！"
+                    )
+                    pos = "0.5~1.0 成"
+                    stop = "盘中跌破分时黄线超过 5 分钟，或正股炸板无回封立即无条件止损"
+                elif pct_day > 3.0:
+                    role = "【日内弹性先锋 · 波段套利】"
+                    badge_color = "#58a6ff"
+                    action = (
+                        f"<b>竞价预期：</b>平开或小幅高开 +1%~+2%；<br>"
+                        f"<b>T+0 操盘指令：</b>早盘锚定正股分时脉冲，正股急拉冲板时跟随低吸转债，日内涨幅达 +3%~+5% 坚决分批落袋，绝不格局！<br>"
+                        f"<b>纪律底线：</b>冲高回落一旦跌破开盘价立即离场，严禁由盈转亏。"
+                    )
+                    pos = "0.5 成"
+                    stop = "日内分时破位 -2.5% 或正股转弱跳水坚决止损"
+                elif pct_day < -1.0 or (s_pct is not None and s_pct < -3.0):
+                    role = "【破位出清 · 一票否决禁买】"
+                    badge_color = "#8b949e"
+                    action = (
+                        f"<b>警示定性：</b>正股大跌破位（{s_pct_str}），正向反馈完全丧失！<br>"
+                        f"<b>操盘指令：</b>严禁任何抄底博反弹！若有底仓，趁盘中任何反抽急拉立即清仓离场，规避正股继续下探带崩转债溢价风险！"
+                    )
+                    pos = "0 仓位"
+                    stop = "坚决一票否决，绝不开新仓"
+                else:
+                    role = "【震荡防守 · 观察标的】"
+                    badge_color = "#e3b341"
+                    action = "<b>观望定性：</b>窄幅震荡缺乏板块合力，以盯盘观察为主，无确定性放量突破前不开新仓。"
+                    pos = "观望"
+                    stop = "破 20 日均线撤销跟踪"
+
+                targets.append({
+                    "bond_code": b_code,
+                    "bond_name": b_name,
+                    "price": f"{p:.2f}元" if isinstance(p, (int, float)) else str(p),
+                    "amt": amt_str,
+                    "role": role,
+                    "badge_color": badge_color,
+                    "stock_name": s_name,
+                    "stock_pct": s_pct_str,
+                    "action": action,
+                    "pos": pos,
+                    "stop": stop,
+                })
+        if targets:
+            return targets[:4]
+    except Exception as e:
+        print(f"[警告] 转债预案动态生成异常: {e}")
+
+    if r_clean == "20261023":
+        return [
+            {
+                "bond_code": "118051", "bond_name": "奥普转债", "price": "221.21元", "amt": "35.0 亿巨量",
+                "role": "【机器人转债总龙头 · T+0 核心博弈载体】", "badge_color": "#f85149",
+                "stock_name": "奥普特 (+1.27%)", "stock_pct": "+1.27%",
+                "action": "<b>竞价预期：</b>小幅高开 +1.5%；<b>T+0 操盘指令：</b>早盘放量回踩分时均线平盘企稳低吸，分时拉升冲高 +4%~+6% 分批止盈，14:55 前坚决清仓不隔夜！",
+                "pos": "0.5~1.0 成", "stop": "盘中跌破分时黄线或正股转弱立即止损",
+            },
+            {
+                "bond_code": "127053", "bond_name": "豪美转债", "price": "213.92元", "amt": "7.2 亿",
+                "role": "【机器人弹性辅攻债】", "badge_color": "#58a6ff",
+                "stock_name": "豪美新材 (+0.20%)", "stock_pct": "+0.20%",
+                "action": "<b>竞价预期：</b>平开附近；<b>T+0 操盘指令：</b>跟随奥普转债脉冲套利，冲高 3% 即刻锁定收益离场！",
+                "pos": "0.5 成", "stop": "日内跌幅超 -2.0% 止损",
+            },
+        ]
+    return targets
+
+
 def _select_tomorrow_focus_targets(report_date: str, plan: dict[str, Any]) -> dict[str, Any]:
     """精选明日确定性关注标的与禁买黑名单（直接给结果，拒绝罗列很多筛选条件）."""
-    focus_targets = [
-        {
-            "code": "000678",
-            "name": "襄阳轴承",
-            "role": "【连板接力 · 主线身位总龙 · 进攻先锋】",
-            "role_tag": "tag-hero",
-            "height": "3 板",
-            "vol": "12.8 亿",
-            "theme": "具身智能机器人 + 减速器核心",
-            "logic": "主流题材（机器人）绝对身位核心，日内爆量 12.8 亿充分换手承接，最具备新周期破局潜质！",
-            "action": "<b>竞价定性：</b>红开高开 &gt; +3% 且成交 &gt; 8000 万；<b>买入指令：</b>9:35 确认分歧转一致后快速封板打板买入；<b>配置仓位：</b>1.0 成",
-            "pos": "1.0 成",
-            "stop": "盘中跌破分时均线或日内跌幅超 -3.5% 坚决止损出局",
-        },
-        {
-            "code": "600838",
-            "name": "上海九百",
-            "role": "【连板接力 · 空间天花板】",
-            "role_tag": "tag-space",
-            "height": "4 板",
-            "vol": "8.5 亿",
-            "theme": "零售商业 + 地方国资平台",
-            "logic": "全市场最高 4 连板独苗，测试短线连板空间拓展压制；无后排梯队助攻前仅作情绪风向标。",
-            "action": "<b>竞价定性：</b>超预期大单顶一字或高开 &gt; +5% 秒板；<b>买入指令：</b>通道顶一字或开盘秒板打板排单；平开分歧不追，仅轻仓 0.5 成试错",
-            "pos": "0.5 成",
-            "stop": "开盘 10 分钟内未封死涨停，或盘中开板回封乏力立即撤单并弃用",
-        },
-        {
-            "code": "301502",
-            "name": "华阳智能",
-            "role": "【连板接力 · 20cm弹性先锋】",
-            "role_tag": "tag-flex",
-            "height": "3 板 (20cm)",
-            "vol": "6.2 亿",
-            "theme": "微特电机 + 伺服系统 + 机器人",
-            "logic": "20cm 弹性连板先锋，配合空间龙形成梯队共振，具备极高日内反弹博弈弹性。",
-            "action": "<b>竞价定性：</b>竞价小幅高开 +1%~+3%；<b>买入指令：</b>早盘在分时均线上方震荡洗盘放量突破时打板介入；<b>配置仓位：</b>0.5 成",
-            "pos": "0.5 成",
-            "stop": "跌破分时黄线超过 10 分钟或日内跌幅触及 -5% 坚决清仓",
-        },
-        {
-            "code": "000559",
-            "name": "万向钱潮",
-            "role": "【核心产业抱团 · 容量中军定海神针 · 主攻重点】",
-            "role_tag": "tag-army",
-            "height": "2 板",
-            "vol": "25.1 亿巨量",
-            "theme": "汽车零部件 + 机器人关节轴承",
-            "logic": "日内爆出 25.1 亿巨量成交，机构与主力大兵团主战场，是机器人行情的定海神针与流动性压舱石！",
-            "action": "<b>竞价定性：</b>小幅平开或高开 +1%；<b>买入指令：</b>盘中回踩分时均线附近分批低吸，博弈板块中军趋势溢价；<b>配置仓位：</b>0.5~1.0 成",
-            "pos": "0.5~1.0 成",
-            "stop": "跌破昨日涨停收盘价或分时放量破位 -3% 无条件止损",
-        },
-        {
-            "code": "000700",
-            "name": "模塑科技",
-            "role": "【核心产业抱团 · 容量中位骨干 · 重点跟随】",
-            "role_tag": "tag-army",
-            "height": "2 板",
-            "vol": "15.3 亿",
-            "theme": "汽车轻量化 + 机器人外壳",
-            "logic": "2 板中军容量骨干，放量换手承接有力，中位大资金容量配置载体。",
-            "action": "<b>竞价定性：</b>分时黄线上方震荡；<b>买入指令：</b>回踩均线低吸或分时推升加仓 0.5 成",
-            "pos": "0.5 成",
-            "stop": "跌破分时黄线超过 15 分钟止损",
-        },
-    ]
+    r_clean = str(report_date).replace('-', '').strip()[:8]
+    if r_clean == "20261023":
+        focus_targets = [
+            {
+                "code": "000678", "name": "襄阳轴承",
+                "role": "【连板接力 · 主线身位总龙 · 进攻先锋】", "role_tag": "tag-hero",
+                "height": "3 板", "vol": "12.8 亿", "theme": "具身智能机器人 + 减速器核心",
+                "logic": "主流题材（机器人）绝对身位核心，日内爆量 12.8 亿充分换手承接，最具备新周期破局潜质！",
+                "action": "<b>竞价定性：</b>红开高开 &gt; +3% 且成交 &gt; 8000 万；<b>买入指令：</b>9:35 确认分歧转一致后快速封板打板买入；<b>配置仓位：</b>1.0 成",
+                "pos": "1.0 成", "stop": "盘中跌破分时均线或日内跌幅超 -3.5% 坚决止损出局",
+            },
+            {
+                "code": "600838", "name": "上海九百",
+                "role": "【连板接力 · 空间天花板】", "role_tag": "tag-space",
+                "height": "4 板", "vol": "8.5 亿", "theme": "零售商业 + 地方国资平台",
+                "logic": "全市场最高 4 连板独苗，测试短线连板空间拓展压制；无后排梯队助攻前仅作情绪风向标。",
+                "action": "<b>竞价定性：</b>超预期大单顶一字或高开 &gt; +5% 秒板；<b>买入指令：</b>通道顶一字或开盘秒板打板排单；平开分歧不追，仅轻仓 0.5 成试错",
+                "pos": "0.5 成", "stop": "开盘 10 分钟内未封死涨停，或盘中开板回封乏力立即撤单并弃用",
+            },
+            {
+                "code": "000559", "name": "万向钱潮",
+                "role": "【核心产业抱团 · 容量中军定海神针 · 主攻重点】", "role_tag": "tag-army",
+                "height": "2 板", "vol": "25.1 亿巨量", "theme": "汽车零部件 + 机器人关节轴承",
+                "logic": "日内爆出 25.1 亿巨量成交，机构与主力大兵团主战场，是机器人行情的定海神针与流动性压舱石！",
+                "action": "<b>竞价定性：</b>小幅平开或高开 +1%；<b>买入指令：</b>盘中回踩分时均线附近分批低吸，博弈板块中军趋势溢价；<b>配置仓位：</b>0.5~1.0 成",
+                "pos": "0.5~1.0 成", "stop": "跌破昨日涨停收盘价或分时放量破位 -3% 无条件止损",
+            },
+        ]
+        avoid_targets = [
+            {
+                "code": "603278", "name": "大业股份",
+                "role": "【老抱团瓦解 · 空间断板跌停】", "height": "昨日 6 板 ➔ 今日断板跌停",
+                "reason": "老周期空间板见顶决裂，典型高位 A 杀形态。次日反包概率不足 8%，盘中任何冲高均为诱多自救，严禁抄底、严禁搏首阴！",
+                "action_order": "一票否决！严禁开仓！严禁抄底搏首阴！若已持仓，早盘任何冲高一律逢高斩仓清零！",
+                "pos": "0 仓位", "stop": "趁冲高全力清仓，绝不抱幻想",
+            },
+            {
+                "code": "002724", "name": "海洋王",
+                "role": "【老抱团瓦解 · 长阴决裂伴生龙】", "height": "昨日 6 板 ➔ 今日长阴断板",
+                "reason": "与大业股份同步见顶决裂，盘中巨量出逃。主力资金彻底出清，禁止任何低吸博弈！",
+                "action_order": "一票否决！严禁任何低吸接飞刀！",
+                "pos": "0 仓位", "stop": "逢高坚决离场",
+            },
+        ]
+        return {
+            "focus_targets": focus_targets,
+            "avoid_targets": avoid_targets,
+            "cb_targets": _select_tomorrow_cb_action_targets(report_date),
+        }
 
-    avoid_targets = [
-        {
-            "code": "603278",
-            "name": "大业股份",
-            "role": "【老抱团瓦解 · 空间断板跌停】",
-            "height": "昨日 6 板 ➔ 今日断板跌停",
-            "reason": "老周期空间板见顶决裂，典型高位 A 杀形态。次日反包概率不足 8%，盘中任何冲高均为诱多自救，严禁抄底、严禁搏首阴！",
+    focus_targets = []
+    avoid_targets = []
+
+    ladder = plan.get("ladder") or []
+    if ladder:
+        top_tier = ladder[0]
+        top_h = top_tier.get("height", 1)
+        top_names = top_tier.get("stocks", [])
+        for name in top_names[:2]:
+            focus_targets.append({
+                "code": "", "name": name,
+                "role": f"【连板接力 · 空间天花板 ({top_h}板)】", "role_tag": "tag-space",
+                "height": f"{top_h} 板", "vol": "放量换手板", "theme": "市场最高高度龙头",
+                "logic": f"全市场最高 {top_h} 连板高度标的，测试连板空间拓展压制；具备最强情绪风向标作用。",
+                "action": f"<b>竞价定性：</b>大单高开 &gt; +3% 确认弱转强；<b>买入指令：</b>9:35 确认分歧转一致后快速封板打板买入；<b>配置仓位：</b>0.5~1.0 成",
+                "pos": "0.5~1.0 成", "stop": "开盘 10 分钟内未封死涨停，或盘中跌破分时黄线坚决止损撤单",
+            })
+        if len(ladder) > 1:
+            sec_tier = ladder[1]
+            sec_h = sec_tier.get("height", 1)
+            sec_names = sec_tier.get("stocks", [])
+            for name in sec_names[:2]:
+                focus_targets.append({
+                    "code": "", "name": name,
+                    "role": f"【连板接力 · 主线身位先锋 ({sec_h}板)】", "role_tag": "tag-hero",
+                    "height": f"{sec_h} 板", "vol": "换手接力先锋", "theme": "梯队中坚接力核心",
+                    "logic": f"主升梯队 {sec_h} 板身位核心，若空间龙分歧，该梯队先锋具备极高卡位成为新周期破局总龙潜质！",
+                    "action": f"<b>竞价定性：</b>小幅高开 +1%~+3%；<b>买入指令：</b>早盘放量回踩分时黄线企稳打板；<b>配置仓位：</b>0.5~1.0 成",
+                    "pos": "0.5~1.0 成", "stop": "盘中跌破分时均线超过 10 分钟无条件止损出局",
+                })
+
+    cands = (plan.get("decision") or {}).get("candidates") or []
+    for c in cands[:2]:
+        c_name = c.get("name", "")
+        if c_name and not any(f["name"] == c_name for f in focus_targets):
+            focus_targets.append({
+                "code": c.get("code", ""), "name": c_name,
+                "role": "【核心产业抱团 · 容量中军】", "role_tag": "tag-army",
+                "height": "中军核心", "vol": "主流容量", "theme": "主流板块中坚",
+                "logic": "主流主线大资金兵团建仓中军，承载大资金沉淀，是板块主升周期的定海神针与流动性底座！",
+                "action": f"<b>触发条件：</b>{c.get('trigger', '回踩分时均线平盘支撑低吸')}；<b>配置仓位：</b>0.5~1.0 成",
+                "pos": "0.5~1.0 成", "stop": f"失效风控：{c.get('invalid', '破位止损')}",
+            })
+
+    avoid_list = plan.get("avoid") or []
+    for a in avoid_list[:3]:
+        avoid_targets.append({
+            "code": a.get("code", "—"), "name": a.get("name", "退潮高标"),
+            "role": "【高位断板决裂 · 老周期退潮】", "height": f"昨 {a.get('height', '—')} 板 ➔ 今日断板",
+            "reason": "老周期空间板见顶决裂，次日反包率不足 8%，盘中任何冲高均为诱多自救，严禁抄底、严禁搏首阴！",
             "action_order": "一票否决！严禁开仓！严禁抄底搏首阴！若已持仓，早盘任何冲高一律逢高斩仓清零！",
-            "pos": "0 仓位",
-            "stop": "趁冲高全力清仓，绝不抱幻想",
-        },
-        {
-            "code": "002724",
-            "name": "海洋王",
-            "role": "【老抱团瓦解 · 长阴决裂伴生龙】",
-            "height": "昨日 6 板 ➔ 今日长阴断板",
-            "reason": "与大业股份同步见顶决裂，盘中巨量出逃。主力资金彻底出清，禁止任何低吸博弈！",
-            "action_order": "一票否决！严禁任何低吸接飞刀！",
-            "pos": "0 仓位",
-            "stop": "逢高坚决离场",
-        },
-        {
-            "code": "002889",
-            "name": "东方嘉盛",
-            "role": "跌停破位股",
-            "height": "全天跌停封死",
-            "reason": "大单封死跌停，流动性锁死，次日惯性低开核按钮概率极高，坚决回避！",
-            "action_order": "流动性冰冻，严禁买入！",
-            "pos": "0 仓位",
-            "stop": "跌停开板即走",
-        },
-    ]
+            "pos": "0 仓位", "stop": "趁冲高全力清仓，绝不抱幻想",
+        })
+
+    if not avoid_targets:
+        avoid_targets.append({
+            "code": "—", "name": "全市场无极端断板高标",
+            "role": "市场健康度良好", "height": "无退潮A杀",
+            "reason": "当日高位连板未出现极端跌停决裂，市场分歧在温和范围内释放。",
+            "action_order": "正常按梯队防守纪律执行即可",
+            "pos": "按策略配置", "stop": "以个股止损线为准",
+        })
 
     return {
         "focus_targets": focus_targets,
         "avoid_targets": avoid_targets,
+        "cb_targets": _select_tomorrow_cb_action_targets(report_date),
     }
-
 
 def _build_continuous_review_and_action_section(
     plan: dict[str, Any],
@@ -1695,7 +1805,6 @@ def _build_continuous_review_and_action_section(
     report_date = plan.get('report_date') or ''
     target_date = plan.get('target_date') or '下一交易日'
 
-    # 1. 历史演化数据
     history = _load_continuous_market_history(report_date)
     hist_rows = ''.join(
         f"<tr>"
@@ -1710,7 +1819,6 @@ def _build_continuous_review_and_action_section(
         for h in history
     )
 
-    # 2. 标的矩阵 (直接给结果)
     target_data = _select_tomorrow_focus_targets(report_date, plan)
     focus_rows = ''.join(
         f"<tr>"
@@ -1738,11 +1846,70 @@ def _build_continuous_review_and_action_section(
         for a in target_data['avoid_targets']
     )
 
+    cb_targets = target_data.get('cb_targets') or []
+    cb_rows = ''.join(
+        f"<tr>"
+        f"<td><b>{_e(c['bond_name'])}</b><br><span class='muted' style='font-size:11px'>{_e(c['bond_code'])}</span></td>"
+        f"<td><span style='background:rgba(255,255,255,0.08);color:{c.get('badge_color', '#58a6ff')};padding:2px 6px;border-radius:4px;font-size:11.5px;font-weight:700'>{_e(c['role'])}</span><br><span style='font-size:11px;color:#8b949e'>{_e(c['price'])} · {c['amt']}</span></td>"
+        f"<td><b style='color:#f0f6fc'>{_e(c['stock_name'])}</b><br><span style='font-size:11.5px;color:{"#f85149" if "+" in c["stock_pct"] else "#3fb950"}'>{_e(c['stock_pct'])}</span></td>"
+        f"<td style='font-size:12px;line-height:1.5;color:#c9d1d9'>{c['action']}</td>"
+        f"<td style='font-size:12px;text-align:center;font-weight:800;color:#e3b341'>{_e(c.get('pos', '0.5成'))}</td>"
+        f"<td style='font-size:11.5px;color:#ff7b72;line-height:1.4'>{_e(c['stop'])}</td>"
+        f"</tr>"
+        for c in cb_targets
+    )
+
+    hero_stock = target_data['focus_targets'][0] if target_data['focus_targets'] else None
+    sec_stock = target_data['focus_targets'][1] if len(target_data['focus_targets']) > 1 else None
+    hero_cb = cb_targets[0] if cb_targets else None
+
+    cards_baotuan = []
+    if hero_stock:
+        cards_baotuan.append(f"""
+        <div style="background:#0d1117;border:1px solid #30363d;border-left:4px solid #3fb950;border-radius:6px;padding:12px 14px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <b style="color:#3fb950;font-size:13.5px">① 龙头/中军进攻 · {hero_stock['name']} ({hero_stock['code']})</b>
+            <span style="font-size:11px;padding:1px 6px;border-radius:4px;background:rgba(63,185,80,0.2);color:#3fb950;font-weight:700">配置 {hero_stock['pos']}</span>
+          </div>
+          <div style="font-size:12px;color:#c9d1d9;line-height:1.55;margin-top:4px">
+            <b>• 实操指令：</b>{hero_stock['action']}<br>
+            <b>• 止损底线：</b>{hero_stock['stop']}
+          </div>
+        </div>
+        """)
+    if sec_stock:
+        cards_baotuan.append(f"""
+        <div style="background:#0d1117;border:1px solid #30363d;border-left:4px solid #58a6ff;border-radius:6px;padding:12px 14px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <b style="color:#58a6ff;font-size:13.5px">② 梯队/换手先锋 · {sec_stock['name']} ({sec_stock['code']})</b>
+            <span style="font-size:11px;padding:1px 6px;border-radius:4px;background:rgba(88,166,255,0.2);color:#58a6ff;font-weight:700">配置 {sec_stock['pos']}</span>
+          </div>
+          <div style="font-size:12px;color:#c9d1d9;line-height:1.55;margin-top:4px">
+            <b>• 实操指令：</b>{sec_stock['action']}<br>
+            <b>• 止损底线：</b>{sec_stock['stop']}
+          </div>
+        </div>
+        """)
+    if hero_cb:
+        cards_baotuan.append(f"""
+        <div style="background:#0d1117;border:1px solid #bc8cff;border-left:4px solid #bc8cff;border-radius:6px;padding:12px 14px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <b style="color:#bc8cff;font-size:13.5px">③ T+0 转债套利 · {hero_cb['bond_name']} ({hero_cb['bond_code']})</b>
+            <span style="font-size:11px;padding:1px 6px;border-radius:4px;background:rgba(188,140,255,0.2);color:#bc8cff;font-weight:700">配置 {hero_cb['pos']}</span>
+          </div>
+          <div style="font-size:12px;color:#c9d1d9;line-height:1.55;margin-top:4px">
+            <b>• 联动正股：</b>{hero_cb['stock_name']} ({hero_cb['stock_pct']}) ｜ <b>买入与止盈：</b>{hero_cb['action']}<br>
+            <b>• 止损底线：</b>{hero_cb['stop']}
+          </div>
+        </div>
+        """)
+    cards_baotuan_html = "".join(cards_baotuan)
+
     default_scen = (
         "<div style='font-size:12.5px;color:#c9d1d9;line-height:1.6'>"
-        "<b>【主情景 · 分歧转一致（发生概率 65%）】</b>老周期高位退潮释放充分，具身智能机器人主线在襄阳轴承带领下弱转强封板，万向钱潮大容量中军承接有力。<br>"
-        "<b>实操定论：</b>执行打板襄阳轴承（1.0成）+ 低吸万向钱潮（0.5~1.0成），总仓位上限严格控制在 2.0 成内。<br>"
-        "<b>【备选情景 · 恐慌再蔓延（发生概率 35%）】</b>若早盘跌停家数再次突破 25 家，襄阳轴承被砸开翻绿跳水。<br>"
+        "<b>【主情景 · 分歧转一致】</b>主线新周期确立，领涨龙头弱转强封板，大容量中军稳住分时黄线。<br>"
+        "<b>实操定论：</b>执行核心空间龙与身位先锋打板买入 + 容量中军低吸，总仓位上限控制在 2.0 成内。<br>"
+        "<b>【备选情景 · 恐慌再蔓延】</b>若早盘跌停家数激增或高标决裂跳水。<br>"
         "<b>实操定论：</b>一键执行风险熔断，全天彻底空仓观望，不开新仓！"
         "</div>"
     )
@@ -1776,16 +1943,6 @@ def _build_continuous_review_and_action_section(
     </table>
   </div>
 
-  <div class="card" style="padding:12px 14px;margin-bottom:12px;font-size:12.5px;line-height:1.65;color:#c9d1d9">
-    <b style="color:#58a6ff;font-size:13px">📈 近 3~5 日盘面演进脉络深度穿透：</b><br>
-    • <b>10-22（极端冰点）：</b>全市场跌停家数激增至 49 家，市场情绪彻底进入恐慌出清期，老题材全线崩溃。<br>
-    • <b>10-23（普涨大反弹）：</b>全市场 82 家涨停报复性修复，具身智能机器人横空出世掀起板块涨停潮，但老周期高度板（大业股份、海洋王）已现筹码疲态。<br>
-    • <b>10-26（今日分化与大洗牌）：</b>高位 6 板双雄（大业股份、海洋王）今日断板决裂补跌，跌停家数扩大至 25 家，老周期见顶出清；而机器人内部<b>中位 3 板群（襄阳轴承、华阳智能）与大容量中军（万向钱潮 25.1亿）</b>逆势崛起，梯队重构分化！<br>
-    <div style="margin-top:8px;padding:8px 12px;background:rgba(88,166,255,0.1);border-left:4px solid #58a6ff;border-radius:4px;color:#f0f6fc;font-weight:700">
-      💡 连续复盘核心结论（情景推演定论）：老周期孤峰补跌出清、新周期中位梯队重构的分歧转一致临界点。绝不可去抄底老高位断板股，资金主战场全面向具身智能机器人中位身位龙与容量中军聚焦！
-    </div>
-  </div>
-
   <div class="card" style="padding:12px 14px;margin-bottom:16px">
     <div class="k" style="margin-bottom:6px"><h2>情景推演</h2></div>
     {scen_html or default_scen}
@@ -1795,59 +1952,22 @@ def _build_continuous_review_and_action_section(
   <div class="card" style="margin-bottom:14px;padding:16px 18px;border:1px solid #3fb950;border-left:5px solid #238636;background:linear-gradient(180deg, rgba(35,134,54,0.12) 0%, rgba(22,27,34,0.95) 100%)">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">
       <div style="font-size:15.5px;font-weight:900;color:#f0f6fc;display:flex;align-items:center;gap:8px">
-        <span>🤝 核心重点 · 明日产业中军抱团实战操盘战法与指令（直接给结果）</span>
+        <span>🤝 核心重点 · 明日抱团个股与转债实战操盘战法与指令（直接给结果）</span>
         <span style="font-size:11px;background:rgba(63,185,80,0.25);color:#3fb950;border:1px solid #3fb950;padding:2px 8px;border-radius:10px;font-weight:700">预案重点主攻</span>
       </div>
-      <span style="font-size:12px;color:#c9d1d9">主力基本盘: <b>产业大中军抱团</b> ｜ 辅助攻坚: <b>连板身位龙</b></span>
-    </div>
-
-    <div style="font-size:12.5px;color:#c9d1d9;line-height:1.6;margin-bottom:12px">
-      <b>【明日抱团战略定论】</b>老抱团小票（大业股份、海洋王）决裂出清，资金绝不会离场，而是全面聚焦于具有产业硬逻辑的<b>大容量中军抱团</b>！
-      明日操盘主战略：<b style="color:#3fb950">“以产业大容量中军抱团为基本盘（守中带攻，配 1.0~1.5 成），以主线连板身位龙为先锋（攻，配 0.5 成），严禁参与老抱团退潮妖股！”</b>
+      <span style="font-size:12px;color:#c9d1d9">主力基本盘: <b>产业大中军抱团</b> ｜ 进攻先锋: <b>空间连板龙</b> ｜ 机动套利: <b>T+0可转债</b></span>
     </div>
 
     <!-- 抱团三大核心执行指令卡片 -->
     <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:10px">
-      <div style="background:#0d1117;border:1px solid #30363d;border-left:4px solid #3fb950;border-radius:6px;padding:12px 14px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-          <b style="color:#3fb950;font-size:13.5px">① 万向钱潮 (000559 · 25.1亿中军) · 均线低吸战法</b>
-          <span style="font-size:11px;padding:1px 6px;border-radius:4px;background:rgba(63,185,80,0.2);color:#3fb950;font-weight:700">配置 1.0 成</span>
-        </div>
-        <div style="font-size:12px;color:#c9d1d9;line-height:1.55;margin-top:4px">
-          <b>• 买入指令：</b>早盘 9:30~9:45 观察大单承接，放量回踩分时黄线平盘附近（+0.0% ~ +1.5%）企稳，分两批低吸建仓 1.0 成。<br>
-          <b>• 止损底线：</b>跌破昨日涨停收盘价（或分时放量破位 -3%）立即清仓。<br>
-          <b>• 止盈目标：</b>持股博弈板块中军趋势大二波，次日冲高 +5% 以上或量价背离分批减半止盈。
-        </div>
-      </div>
-
-      <div style="background:#0d1117;border:1px solid #30363d;border-left:4px solid #58a6ff;border-radius:6px;padding:12px 14px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-          <b style="color:#58a6ff;font-size:13.5px">② 模塑科技 (000700 · 15.3亿骨干) · 黄线承接战法</b>
-          <span style="font-size:11px;padding:1px 6px;border-radius:4px;background:rgba(88,166,255,0.2);color:#58a6ff;font-weight:700">配置 0.5 成</span>
-        </div>
-        <div style="font-size:12px;color:#c9d1d9;line-height:1.55;margin-top:4px">
-          <b>• 买入指令：</b>分时黄线上方缩量回踩企稳时低吸接入 0.5 成，作为中军梯队辅助组合。<br>
-          <b>• 止损底线：</b>跌破分时黄线超过 15 分钟无条件止损出局。
-        </div>
-      </div>
-
-      <div style="background:#0d1117;border:1px solid #da3633;border-left:4px solid #da3633;border-radius:6px;padding:12px 14px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-          <b style="color:#ff7b72;font-size:13.5px">③ 老抱团出清回避军规 (大业股份/海洋王)</b>
-          <span style="font-size:11px;padding:1px 6px;border-radius:4px;background:rgba(218,54,51,0.25);color:#ff7b72;font-weight:700">严格 0 仓位</span>
-        </div>
-        <div style="font-size:12px;color:#c9d1d9;line-height:1.55;margin-top:4px">
-          <b>• 竞价应对：</b>若 9:25 跌停封单 > 10 万手，全天严禁任何抄底！<br>
-          <b>• 诱多应对：</b>盘中任何急拉抽高均为主力诱多自救，次日反包率仅 7.6%，严禁接飞刀，持有者趁拉高坚决清仓斩仓！
-        </div>
-      </div>
+      {cards_baotuan_html}
     </div>
   </div>
 
-  <!-- 模块二：明日核心关注标的矩阵（直接给结果） -->
+  <!-- 模块二：明日核心重点关注标的矩阵（个股正面确定性结果） -->
   <div class="card tw" style="margin-bottom:12px">
-    <div class="k" style="font-size:13.5px;color:#f0f6fc;margin-bottom:4px">🎯 明日核心重点关注标的清单（正面确定性结果）</div>
-    <p class="sub" style="margin:0 0 8px">拒绝罗列多重繁复筛选条件，直接给出明日主攻标的、具体买入指令与止损清仓线：</p>
+    <div class="k" style="font-size:13.5px;color:#f0f6fc;margin-bottom:4px">🎯 明日核心重点关注标的清单（抱团个股 · 明确买卖指令）</div>
+    <p class="sub" style="margin:0 0 8px">拒绝罗列多重繁复筛选条件，直接给出明日主攻个股、具体买入指令与止损清仓线：</p>
     <table>
       <thead>
         <tr>
@@ -1864,6 +1984,31 @@ def _build_continuous_review_and_action_section(
         {focus_rows}
       </tbody>
     </table>
+  </div>
+
+  <!-- 模块二(附)：重点抱团可转债 · 明日 T+0 深度实战作战预案 (零隔夜风险) -->
+  <div class="card tw" style="margin-bottom:12px;border-left:4px solid #bc8cff">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+      <div class="k" style="font-size:14px;color:#bc8cff;font-weight:800">⚡ 重点抱团可转债 · 明日 T+0 深度实战作战预案（直接给指令）</div>
+      <div style="font-size:12px;color:#8b949e">T+0 极致机动性 ｜ 锚定正股封单溢价 ｜ 14:55 前坚决清仓不隔夜</div>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="focus-table">
+        <thead>
+          <tr>
+            <th style="width:12%">转债标的</th>
+            <th style="width:18%">抱团角色 / 价格成交</th>
+            <th style="width:12%">联动正股</th>
+            <th style="width:34%">明日竞价预期与 T+0 操盘指令 (精准触发)</th>
+            <th style="width:10%;text-align:center">配置仓位</th>
+            <th style="width:14%">硬性止损与撤退底线</th>
+          </tr>
+        </thead>
+        <tbody>
+          {cb_rows if cb_rows else "<tr><td colspan='6' class='muted' style='text-align:center;padding:12px'>今日暂无可转债抱团数据</td></tr>"}
+        </tbody>
+      </table>
+    </div>
   </div>
 
   <!-- 禁买黑名单 (不追名单) -->
@@ -1899,90 +2044,19 @@ def _build_continuous_review_and_action_section(
       </div>
       <div style="background:#0d1117;border:1px solid #30363d;padding:10px 12px;border-radius:6px">
         <div style="font-size:12px;color:#8b949e">第二道开关：定主攻方向</div>
-        <div style="font-size:14px;font-weight:700;color:#58a6ff;margin-top:2px">具身智能机器人产业链新周期</div>
-        <div style="font-size:11.5px;color:#8b949e;margin-top:2px">板块有持续性，中位梯队与中军共振</div>
+        <div style="font-size:14px;font-weight:700;color:#58a6ff;margin-top:2px">主流题材新周期领涨梯队</div>
+        <div style="font-size:11.5px;color:#8b949e;margin-top:2px">梯队结构完整，龙头与中军共振</div>
       </div>
       <div style="background:#0d1117;border:1px solid #30363d;padding:10px 12px;border-radius:6px">
-        <div style="font-size:12px;color:#8b949e">第三道开关：定具体执行标的</div>
-        <div style="font-size:14px;font-weight:700;color:#f0f6fc;margin-top:2px">打板襄阳轴承 + 低吸万向钱潮</div>
-        <div style="font-size:11.5px;color:#8b949e;margin-top:2px">双标的进攻防守组合，拒绝漫天开花</div>
-      </div>
-    </div>
-    {f"<div style='margin-top:10px'>{extra_gates}</div>" if extra_gates else ''}
-  </div>
-
-  <!-- 4 大实战执行指令卡片 -->
-  <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:12px;margin-bottom:14px">
-    <div style="background:#161b22;border:1px solid #30363d;border-left:4px solid #58a6ff;border-radius:8px;padding:12px 14px">
-      <b style="font-size:13px;color:#58a6ff">⏱️ 09:20~09:25 集合竞价定性结论与买卖军规</b>
-      <div style="font-size:12px;color:#c9d1d9;line-height:1.6;margin-top:6px">
-        <b>• 观察锚点：</b>跌停家数是否继续收敛（&le; 15 家合格）。<br>
-        <b>• 操盘军规：</b>开盘前 10 分钟（09:30~09:40）一律不买！防范老龙头大业股份/海洋王水下核按钮带崩盘面。<br>
-        <b>• 竞价买入结论：</b>若襄阳轴承竞价成交 &gt; 8000 万且高开 +3% 以上，确认为日内主线总龙，准备 09:35 之后打板。
-      </div>
-    </div>
-    <div style="background:#161b22;border:1px solid #30363d;border-left:4px solid #3fb950;border-radius:8px;padding:12px 14px">
-      <b style="font-size:13px;color:#3fb950">⚡ 盘中明确买入执行指令（连板打板 + 产业抱团低吸）</b>
-      <div style="font-size:12px;color:#c9d1d9;line-height:1.6;margin-top:6px">
-        <b>• 连板接力指令（打板）：</b>襄阳轴承在 09:35~10:00 放量封板时打板买入 1.0 成；上海九百若超预期大单顶一字秒板排单 0.5 成试错（平开分歧不追）；华阳智能 20cm 冲板打板 0.5 成。<br>
-        <b>• 产业抱团指令（低吸）：</b>万向钱潮早盘放量回踩分时均线平盘附近企稳分批低吸 0.5~1.0 成；模塑科技回踩均线低吸 0.5 成。<br>
-        <b>• 核心配置原则：</b>连板博弹性 + 中军做波段防守，总仓位上限严格压在 2.0 成内。
-      </div>
-    </div>
-    <div style="background:#161b22;border:1px solid #30363d;border-left:4px solid #f85149;border-radius:8px;padding:12px 14px">
-      <b style="font-size:13px;color:#f85149">🛑 卖出与止损清仓底线指令（坚决执行）</b>
-      <div style="font-size:12px;color:#c9d1d9;line-height:1.6;margin-top:6px">
-        <b>• 止损线：</b>任何买入标的，若跌破分时黄线超过 15 分钟或日内亏损达 -3.5%，立即坚决止损，决不心存侥幸！<br>
-        <b>• 止盈线：</b>次日冲高加速或出现量价背离滞涨时，分批减半止盈锁定利润。<br>
-        <b>• 绝对禁令：</b>亏损绝对禁止加仓摊平成本！
-      </div>
-    </div>
-    <div style="background:#161b22;border:1px solid #30363d;border-left:4px solid #d29922;border-radius:8px;padding:12px 14px">
-      <b style="font-size:13px;color:#e3b341">🚨 临盘一键风险熔断指令（紧急拉闸）</b>
-      <div style="font-size:12px;color:#c9d1d9;line-height:1.6;margin-top:6px">
-        <b>• 熔断触发 1：</b>盘中全市场跌停家数再次飙升超过 25 家。<br>
-        <b>• 熔断触发 2：</b>襄阳轴承冲高回落翻绿跳水，或大业股份焊死跌停带崩高标。<br>
-        <b>• 熔断动作：</b>全天立即撤回所有买单，关机停止一切开仓操作！
+        <div style="font-size:12px;color:#8b949e">第三道开关：定实操战法</div>
+        <div style="font-size:14px;font-weight:700;color:#e3b341;margin-top:2px">打板身位龙 + 低吸中军 + T+0转债</div>
+        <div style="font-size:11.5px;color:#8b949e;margin-top:2px">三位一体，严守止损止盈纪律</div>
       </div>
     </div>
   </div>
 
-  <!-- 分时段操盘检查表 -->
-  <div class="card tw" style="margin-bottom:12px">
-    <div class="k" style="font-size:13.5px;color:#f0f6fc;margin-bottom:6px">⏱️ 分时段操盘执行检查表 (Checklist)</div>
-    <table class="checklist-table">
-      <thead>
-        <tr><th>时间节点</th><th>监控焦点</th><th>量化通过门槛</th><th>熔断动作</th></tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td><span class="time-tag">09:25 集合竞价</span></td>
-          <td>全市场跌停家数、高标溢价率</td>
-          <td>跌停家数 &le; 10 家，襄阳轴承红开 +2% 以上且成交 &gt; 8000 万</td>
-          <td>跌停 &gt; 15 家，或大业股份/海洋王大单焊死跌停：全天禁止开新仓</td>
-        </tr>
-        <tr>
-          <td><span class="time-tag">09:35 开盘前10分</span></td>
-          <td>跌停封单变化、黄白线分化</td>
-          <td>上涨家数不再恶化，跌停板无新增扩散，有承接盘撬板</td>
-          <td>出现高标快速拉高天地板跳水：判定为出货诱多，立即放弃参与</td>
-        </tr>
-        <tr>
-          <td><span class="time-tag">10:00 盘中确认</span></td>
-          <td>梯队晋级情况、市场宽度回暖</td>
-          <td>上涨家数回升至 2000 家以上，机器人板块走出 2 只连板</td>
-          <td>上涨家数 &lt; 1500 家且无板块合力：全天彻底锁定空仓</td>
-        </tr>
-        <tr>
-          <td><span class="time-tag">14:00 午后防守</span></td>
-          <td>尾盘流动性与抢筹真实度</td>
-          <td>尾盘无大规模砸盘，主流板块有持续大买单护盘</td>
-          <td>无增量资金进场严禁尾盘博弈次日抢筹，防范次日低开埋人</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-  {f"<div class='card tw' style='margin-top:10px'><div class='k'>规则引擎候选监控池</div><table><tr><th>候选</th><th>角色</th><th>触发条件</th><th>失效 / 止损</th></tr>{cands}</table></div>" if cands else ''}
+  <!-- 晨会操作内参精要 -->
+  {_build_executive_action_brief(plan, v)}
 </section>
 """
 
@@ -1990,6 +2064,62 @@ def _build_continuous_review_and_action_section(
 def _build_executive_action_brief(plan_data: dict[str, Any], v: dict[str, Any]) -> str:
     """构建嵌入主报告中的实战预案核心执行提要（直出结果，免冗长条件）."""
     target_date = plan_data.get('target_date') or '下一交易日'
+    report_date = plan_data.get('report_date') or ''
+    target_data = _select_tomorrow_focus_targets(report_date, plan_data)
+    focus = target_data.get('focus_targets') or []
+    avoids = target_data.get('avoid_targets') or []
+    cb_targets = target_data.get('cb_targets') or []
+
+    hero_stock = focus[0] if focus else None
+    sec_stock = focus[1] if len(focus) > 1 else None
+    hero_cb = cb_targets[0] if cb_targets else None
+    avoid_names = " / ".join(a['name'] for a in avoids[:2]) if avoids else "前期高位严重决裂退潮股"
+
+    cards_brief = []
+    if hero_stock:
+        cards_brief.append(f"""
+      <div style="background:#0d1117;border:1px solid #30363d;border-left:4px solid #f85149;border-radius:8px;padding:10px 12px">
+        <b style="color:#f85149;font-size:13px">① 主攻身位龙头：{_e(hero_stock['name'])} ({_e(hero_stock.get('code', ''))} · {_e(hero_stock.get('height', ''))})</b>
+        <div style="font-size:11.8px;color:#c9d1d9;line-height:1.5;margin-top:4px">
+          <b>指令：</b>{hero_stock['action']}<br>
+          <b>止损：</b>{hero_stock['stop']}
+        </div>
+      </div>
+        """)
+    if sec_stock:
+        cards_brief.append(f"""
+      <div style="background:#0d1117;border:1px solid #30363d;border-left:4px solid #58a6ff;border-radius:8px;padding:10px 12px">
+        <b style="color:#58a6ff;font-size:13px">② 核心梯队/中军：{_e(sec_stock['name'])} ({_e(sec_stock.get('code', ''))} · {_e(sec_stock.get('height', ''))})</b>
+        <div style="font-size:11.8px;color:#c9d1d9;line-height:1.5;margin-top:4px">
+          <b>指令：</b>{sec_stock['action']}<br>
+          <b>止损：</b>{sec_stock['stop']}
+        </div>
+      </div>
+        """)
+    if hero_cb:
+        cards_brief.append(f"""
+      <div style="background:#0d1117;border:1px solid #bc8cff;border-left:4px solid #bc8cff;border-radius:8px;padding:10px 12px">
+        <b style="color:#bc8cff;font-size:13px">③ T+0 转债套利：{_e(hero_cb['bond_name'])} ({_e(hero_cb.get('bond_code', ''))})</b>
+        <div style="font-size:11.8px;color:#c9d1d9;line-height:1.5;margin-top:4px">
+          <b>联动正股：</b>{_e(hero_cb.get('stock_name', ''))} ({_e(hero_cb.get('stock_pct', ''))}) ｜ <b>指令：</b>{hero_cb['action']}<br>
+          <b>止损：</b>{hero_cb['stop']}
+        </div>
+      </div>
+        """)
+    cards_brief.append(f"""
+      <div style="background:#0d1117;border:1px solid #da3633;border-left:4px solid #da3633;border-radius:8px;padding:10px 12px">
+        <b style="color:#ff7b72;font-size:13px">⛔ 禁买黑名单：{_e(avoid_names)}</b>
+        <div style="font-size:11.8px;color:#c9d1d9;line-height:1.5;margin-top:4px">
+          <b>军规：</b>退潮断板股次日反包率极低，冲高一律诱多，严禁低吸、抄底、追反包！
+        </div>
+      </div>
+    """)
+    cards_brief_html = "".join(cards_brief)
+
+    lead_name = hero_stock['name'] if hero_stock else '主线领涨龙头'
+    sec_name = sec_stock['name'] if sec_stock else '梯队核心'
+    cb_name = hero_cb['bond_name'] if hero_cb else '标杆转债'
+
     return f"""
     <!-- Part 2 嵌入式精要 -->
     <div style="background:linear-gradient(135deg,rgba(35,134,54,0.18) 0%,rgba(13,17,23,0.95) 100%);border:1px solid #3fb950;border-left:5px solid #2ea043;border-radius:10px;padding:14px 18px;margin-bottom:16px">
@@ -1998,41 +2128,15 @@ def _build_executive_action_brief(plan_data: dict[str, Any], v: dict[str, Any]) 
         <span style="background:rgba(63,185,80,0.25);color:#3fb950;border:1px solid #3fb950;padding:2px 10px;border-radius:14px;font-size:11.5px;font-weight:700">目标日：{_e(target_date)}</span>
       </div>
       <div style="font-size:12.5px;color:#c9d1d9;line-height:1.6">
-        <div><b>抱团分析定论（核心重点）：</b>资金彻底抛弃微盘纯情绪小妖股，全面转向具备具身智能机器人产业硬逻辑与 25 亿级容量的大中军深度抱团（万向钱潮 25.1亿、模塑科技 15.3亿）！</div>
-        <div style="margin-top:3px"><b>连板分析定论：</b>老高标（大业股份、海洋王）高位决裂跌停彻底出清；空间高度回缩至 4 板（上海九百独苗），主线接力聚焦 3 板襄阳轴承与 20cm 华阳智能！</div>
-        <div style="margin-top:4px"><b>实操总控结论：</b>总仓位锁定在 <b style="color:#3fb950">1.5~2.0 成</b>，以【核心产业抱团万向钱潮分时均线平盘低吸 1.0 成】为基本盘，辅以【襄阳轴承打板 1.0 成】，老抱团坚决拉黑！</div>
+        <div><b>抱团与个股定论（核心重点）：</b>资金聚焦主线核心，进攻锁定龙头/身位先锋【{_e(lead_name)}】与中军【{_e(sec_name)}】，日内机动结合 T+0 转债【{_e(cb_name)}】套利！</div>
+        <div style="margin-top:3px"><b>连板与出清定论：</b>高位退潮决裂标的【{_e(avoid_names)}】坚决拉黑不接飞刀；主线接力聚焦分歧转一致的换手板。</div>
+        <div style="margin-top:4px"><b>实操总控结论：</b>总仓位严格控制在 <b style="color:#3fb950">1.5~2.0 成</b>，以【主线中军低吸/龙头打板】为基本盘，辅以【T+0 转债日内套利】，老周期退潮坚决一票否决！</div>
       </div>
     </div>
 
     <!-- 关注标的与操作指令列表 -->
     <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:10px;margin-bottom:16px">
-      <div style="background:#0d1117;border:1px solid #30363d;border-left:4px solid #f85149;border-radius:8px;padding:10px 12px">
-        <b style="color:#f85149;font-size:13px">① 主线身位总龙：襄阳轴承 (000678 · 3板)</b>
-        <div style="font-size:11.8px;color:#c9d1d9;line-height:1.5;margin-top:4px">
-          <b>指令：</b>竞价高开 &gt; +3% 且成交 &gt; 8000 万，9:35 后快速封板打板买入 1.0 成。<br>
-          <b>止损：</b>跌破分时黄线或跌超 -3.5% 坚决离场。
-        </div>
-      </div>
-      <div style="background:#0d1117;border:1px solid #30363d;border-left:4px solid #58a6ff;border-radius:8px;padding:10px 12px">
-        <b style="color:#58a6ff;font-size:13px">② 容量中军定海神针：万向钱潮 (000559 · 2板)</b>
-        <div style="font-size:11.8px;color:#c9d1d9;line-height:1.5;margin-top:4px">
-          <b>指令：</b>早盘放量回踩分时均线平盘附近低吸，配置 0.5~1.0 成，博弈趋势溢价。<br>
-          <b>止损：</b>破昨日涨停价或分时破位 -3% 止损。
-        </div>
-      </div>
-      <div style="background:#0d1117;border:1px solid #30363d;border-left:4px solid #bc8cff;border-radius:8px;padding:10px 12px">
-        <b style="color:#bc8cff;font-size:13px">③ 20cm 弹性先锋：华阳智能 (301502 · 3板)</b>
-        <div style="font-size:11.8px;color:#c9d1d9;line-height:1.5;margin-top:4px">
-          <b>指令：</b>黄线上方震荡确认分歧换手，冲板时打板买入 0.5 成。<br>
-          <b>止损：</b>破分时黄线超过 10 分钟或日内 -5% 清仓。
-        </div>
-      </div>
-      <div style="background:#0d1117;border:1px solid #da3633;border-left:4px solid #da3633;border-radius:8px;padding:10px 12px">
-        <b style="color:#ff7b72;font-size:13px">⛔ 禁买黑名单：大业股份 / 海洋王</b>
-        <div style="font-size:11.8px;color:#c9d1d9;line-height:1.5;margin-top:4px">
-          <b>军规：</b>6板决裂断板，次日反包率仅 7.6%，冲高一律诱多，严禁低吸、抄底、追反包！
-        </div>
-      </div>
+      {cards_brief_html}
     </div>
     """
 
@@ -2109,6 +2213,25 @@ def generate_plan_html(plan: dict[str, Any], is_site_mode: bool = True) -> str:
         pullback_html = render_pullback_tracker_panel(report_date)
     except Exception:
         pullback_html = ''
+
+    # 提取动态晨会操盘卡片文本数据
+    t_data_digest = _select_tomorrow_focus_targets(report_date, plan)
+    d_focus = t_data_digest.get('focus_targets') or []
+    d_avoid = t_data_digest.get('avoid_targets') or []
+    d_cb = t_data_digest.get('cb_targets') or []
+
+    d_lines = []
+    for idx, f_item in enumerate(d_focus[:3], 1):
+        c_act = re.sub(r'<[^>]+>', '', f_item['action']).replace('&gt;', '>').replace('&lt;', '<')
+        d_lines.append(f"{idx}. {f_item['name']} ({f_item.get('code', '')} · {f_item.get('height', '')}) ➔ {c_act}")
+    if d_cb:
+        c_item = d_cb[0]
+        c_cb_act = re.sub(r'<[^>]+>', '', c_item['action']).replace('&gt;', '>').replace('&lt;', '<')
+        d_lines.append(f"{len(d_lines)+1}. 转债套利：{c_item['bond_name']} ({c_item.get('bond_code', '')}) ➔ {c_cb_act}")
+    if d_avoid:
+        av_str = '、'.join(a['name'] for a in d_avoid[:2])
+        d_lines.append(f"⛔ 禁买黑名单：{av_str} ➔ 严禁低吸抄底追反包！")
+    digest_targets_str = "\\n".join(d_lines)
 
     macro_sentiment_html = _build_macro_sentiment_dossier(report_date, plan)
     lianban_analysis_html = _build_lianban_analysis_component(report_date, plan)
@@ -2289,11 +2412,8 @@ function copyMorningPlanDigest() {{
     `仓位上限：{v['position_cap']} (默认动作：{v['default_act']})\n\n` +
     `【连板分析定论】空间高度回缩至 4 板 (上海九百独苗)，主流连板接力看襄阳轴承 (3板 · 12.8亿) 与华阳智能 (20cm · 3板)\n` +
     `【抱团分析定论】老高标 (大业股份/海洋王) 决裂跌停彻底出清；主力大资金深度抱团机器人大容量中军 (万向钱潮 25.1亿)\n\n` +
-    `【明日关注标的清单 (直接给结果)】\n` +
-    `1. 身位总龙：襄阳轴承 (000678 · 3板) ➔ 竞价高开>3%且成交>8000万，9:35后打板买入 1.0成\n` +
-    `2. 容量中军：万向钱潮 (000559 · 2板) ➔ 早盘回踩分时均线平盘企稳低吸 0.5~1.0成\n` +
-    `3. 20cm先锋：华阳智能 (301502 · 3板) ➔ 冲板打板买入 0.5成\n` +
-    `4. 禁买黑名单：大业股份、海洋王 ➔ 严禁低吸抄底追反包！\n\n` +
+    `【明日关注标的清单 (直接给结果 · 动态生成)】\n` +
+    `{digest_targets_str}\n\n` +
     `【分时熔断底线】\n` +
     `- 09:25 竞价：跌停>15家或老龙头焊死跌停，全天彻底空仓\n` +
     `- 10:00 盘中：上涨家数<1500家无合力，严禁开新仓`;
@@ -2358,6 +2478,24 @@ def render_plan_teaser_html(report_date: Any) -> str:
     except Exception:
         plan_data = {"report_date": day}
         v = _build_plan_dynamic_views(plan_data)
+
+    t_data_teaser = _select_tomorrow_focus_targets(day, plan_data)
+    td_focus = t_data_teaser.get('focus_targets') or []
+    td_avoid = t_data_teaser.get('avoid_targets') or []
+    td_cb = t_data_teaser.get('cb_targets') or []
+
+    td_lines = []
+    for idx, f_item in enumerate(td_focus[:3], 1):
+        c_act = re.sub(r'<[^>]+>', '', f_item['action']).replace('&gt;', '>').replace('&lt;', '<')
+        td_lines.append(f"{idx}. {f_item['name']} ({f_item.get('code', '')} · {f_item.get('height', '')}) ➔ {c_act}")
+    if td_cb:
+        c_item = td_cb[0]
+        c_cb_act = re.sub(r'<[^>]+>', '', c_item['action']).replace('&gt;', '>').replace('&lt;', '<')
+        td_lines.append(f"{len(td_lines)+1}. 转债套利：{c_item['bond_name']} ({c_item.get('bond_code', '')}) ➔ {c_cb_act}")
+    if td_avoid:
+        av_str = '、'.join(a['name'] for a in td_avoid[:2])
+        td_lines.append(f"⛔ 禁买黑名单：{av_str} ➔ 严禁低吸抄底追反包！")
+    teaser_digest_targets_str = "\\n".join(td_lines)
 
     p2_brief = _build_executive_action_brief(plan_data, v)
 
@@ -2492,11 +2630,8 @@ def render_plan_teaser_html(report_date: Any) -> str:
           `定性军规：{v['macro_t1']}\n` +
           `仓位上限：{v['position_cap']} (默认动作：{v['default_act']})\n\n` +
           `【连续复盘定论】老周期孤峰见顶出清，新周期具身智能机器人中位重构\n\n` +
-          `【明日关注标的清单 (直接给结果)】\n` +
-          `1. 身位总龙：襄阳轴承 (000678 · 3板) ➔ 竞价高开>3%且成交>8000万，9:35后打板买入 1.0成\n` +
-          `2. 容量中军：万向钱潮 (000559 · 2板) ➔ 早盘回踩分时均线平盘企稳低吸 0.5~1.0成\n` +
-          `3. 20cm先锋：华阳智能 (301502 · 3板) ➔ 冲板打板买入 0.5成\n` +
-          `4. 禁买黑名单：大业股份、海洋王 ➔ 严禁低吸抄底追反包！\n\n` +
+          `【明日关注标的清单 (直接给结果 · 动态生成)】\n` +
+          `{teaser_digest_targets_str}\n\n` +
           `【分时熔断底线】\n` +
           `- 09:25 竞价：跌停>15家或老龙头焊死跌停，全天彻底空仓\n` +
           `- 10:00 盘中：上涨家数<1500家无合力，严禁开新仓`;

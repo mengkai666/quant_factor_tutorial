@@ -28,12 +28,8 @@ def matches_mainline(sector: Any, mainline: Any) -> bool:
         return False
     tokens = [t.strip() for t in re.split(r"[,，、;；|/]+", str(sector or "")) if t.strip()]
     tokens_clean = {re.sub(r"\d+(?:\.\d+)?%$", "", token).strip() for token in tokens}
-    if clean_mainline in tokens_clean:
-        return True
-    for t in tokens_clean:
-        if t and (t in clean_mainline or clean_mainline in t):
-            return True
-    return False
+    # 题材归属按完整 token 判断，避免把“AI算力设备”误作“AI算力”。
+    return clean_mainline in tokens_clean
 
 
 def _extract_candidates(ctx: dict) -> list[dict[str, Any]]:

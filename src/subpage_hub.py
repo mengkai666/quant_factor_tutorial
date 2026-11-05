@@ -31,9 +31,16 @@ def render_war_room_hub_html(
     if len(r_date) == 8 and r_date.isdigit():
         r_date = f"{r_date[:4]}-{r_date[4:6]}-{r_date[6:]}"
 
-    # 动态定性与仓位
+    # 入口同步统一决策状态，不从单一涨跌停数量推导开仓许可或仓位。
     is_heavy_retreat = isinstance(dt, int) and dt >= 20
-    pos_cap = "0 仓位" if is_heavy_retreat else "≤ 1.5 成"
+    decision = ctx.get('today_decision') or {}
+    readiness = ctx.get('decision_readiness') or decision.get('readiness') or {}
+    permitted = (decision.get('execution_allowed') is True
+                 and readiness.get('execution_ready') is True
+                 and readiness.get('plan_permitted') is True
+                 and str(decision.get('report_date') or '').replace('-', '') == r_date.replace('-', '')
+                 and str(readiness.get('report_date') or '').replace('-', '') == r_date.replace('-', ''))
+    execution_label = "已通过资格，仍须确认条件" if permitted else "当前不开新仓，等待确认"
     stance_tag = "🚨 极端退潮防守" if is_heavy_retreat else "⚖️ 中性控仓防守"
     from trading_playbook_links import render_main_entry
     playbook_entry = render_main_entry(Path(__file__).resolve().parents[1] / 'output', report_date)
@@ -68,13 +75,13 @@ def render_war_room_hub_html(
                     <span style="font-size:11px;font-weight:700;color:#58a6ff;background:rgba(88,166,255,0.12);padding:2px 8px;border-radius:10px;border:1px solid rgba(88,166,255,0.25);">
                         {stance_tag}
                     </span>
-                    <span style="font-size:11px;color:#8b949e;">仓位上限 {pos_cap}</span>
+                    <span style="font-size:11px;color:#8b949e;">{execution_label}</span>
                 </div>
                 <div style="font-size:15px;font-weight:700;color:#f0f6fc;margin-bottom:6px;">
                     📋 今日盘面复盘 × 明日实战预案
                 </div>
                 <div style="font-size:12px;color:#8b949e;line-height:1.55;margin-bottom:12px;">
-                    涨停 {zt} 家 / 跌停 {dt} 家 · 空间最高 {max_h} 板。集合竞价信标 (09:25) · 盘中应变分支 (P0~P3) · 禁买雷区与一键复制晨会卡片。
+                    涨停 {zt} 家 / 跌停 {dt} 家 · 空间最高 {max_h} 板。板块、股票与转债同日分析；延续、分歧、退潮三种情景；9:25 / 9:35 / 10:00 / 午后逐项核验。
                 </div>
             </div>
             <div style="padding-top:10px;border-top:1px solid #21262d;">
@@ -143,7 +150,7 @@ def render_war_room_hub_html(
                     👑 抱团周期演进与新周期试错
                 </div>
                 <div style="font-size:12px;color:#8b949e;line-height:1.55;margin-bottom:12px;">
-                    旧抱团瓦解出清 vs 新周期试错竞争。连板总龙身位晋级、监管周期阶梯、近岸蛋白/善水科技等趋势候选证据核验与证伪。
+                    核验同日核心、旧团分歧与新候选的证据；跟踪价格延续、板块扩散、监管条款和失效条件。
                 </div>
             </div>
             <div style="padding-top:10px;border-top:1px solid #21262d;">
@@ -157,15 +164,15 @@ def render_war_room_hub_html(
             <div>
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
                     <span style="font-size:11px;font-weight:700;color:#00cccc;background:rgba(0,204,204,0.12);padding:2px 8px;border-radius:10px;border:1px solid rgba(0,204,204,0.25);">
-                        🤖 机器人转债集群主升
+                        股债联动与溢价观察
                     </span>
-                    <span style="font-size:11px;color:#8b949e;">澳弘破位出清</span>
+                    <span style="font-size:11px;color:#8b949e;">同日证据与失效条件</span>
                 </div>
                 <div style="font-size:15px;font-weight:700;color:#f0f6fc;margin-bottom:6px;">
                     🎯 可转债抱团与新周期追踪
                 </div>
                 <div style="font-size:12px;color:#8b949e;line-height:1.55;margin-bottom:12px;">
-                    澳弘转债天量破位杀跌出清(-5.5%，正股-8.18%) ➔ 机器人转债集群(奥普/豪美/丰茂/震裕02)全线接力爆发。正股涨停板上溢出、T+0高频做T与量化个股筛选。
+                    比较同日债股表现、交易日区间收益、转股溢价与公告条款。观察条件需要盘中核验；活跃成交不代表已确认的交易机会。
                 </div>
             </div>
             <div style="padding-top:10px;border-top:1px solid #21262d;">
