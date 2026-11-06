@@ -306,12 +306,81 @@ class FocusStock {
   }
 }
 
+class BaotuanStockTarget {
+  final String role;
+  final String logic;
+  final String action;
+  final String pos;
+  final String stop;
+  final String badgeColor;
+
+  BaotuanStockTarget({
+    required this.role,
+    required this.logic,
+    required this.action,
+    required this.pos,
+    required this.stop,
+    required this.badgeColor,
+  });
+
+  factory BaotuanStockTarget.fromJson(Map<String, dynamic> json) {
+    return BaotuanStockTarget(
+      role: json['role'] ?? '',
+      logic: json['logic'] ?? '',
+      action: json['action'] ?? '',
+      pos: json['pos'] ?? '',
+      stop: json['stop'] ?? '',
+      badgeColor: json['badge_color'] ?? '#38BDF8',
+    );
+  }
+}
+
+class BaotuanCbTarget {
+  final String bondName;
+  final String bondCode;
+  final String role;
+  final String stockName;
+  final String stockPct;
+  final String action;
+  final String pos;
+  final String stop;
+  final String badgeColor;
+
+  BaotuanCbTarget({
+    required this.bondName,
+    required this.bondCode,
+    required this.role,
+    required this.stockName,
+    required this.stockPct,
+    required this.action,
+    required this.pos,
+    required this.stop,
+    required this.badgeColor,
+  });
+
+  factory BaotuanCbTarget.fromJson(Map<String, dynamic> json) {
+    return BaotuanCbTarget(
+      bondName: json['bond_name'] ?? '',
+      bondCode: json['bond_code'] ?? '',
+      role: json['role'] ?? '',
+      stockName: json['stock_name'] ?? '',
+      stockPct: json['stock_pct'] ?? '',
+      action: (json['action'] ?? '').replaceAll('<br>', '\n'),
+      pos: json['pos'] ?? '',
+      stop: json['stop'] ?? '',
+      badgeColor: json['badge_color'] ?? '#A78BFA',
+    );
+  }
+}
+
 class StrategyPlan {
   final String title;
   final String actionSlogan;
   final String recommendedPosition;
   final List<String> rules;
   final String defenseLine;
+  final List<BaotuanStockTarget> baotuanStockTargets;
+  final List<BaotuanCbTarget> baotuanCbTargets;
 
   StrategyPlan({
     required this.title,
@@ -319,6 +388,8 @@ class StrategyPlan {
     required this.recommendedPosition,
     required this.rules,
     required this.defenseLine,
+    this.baotuanStockTargets = const [],
+    this.baotuanCbTargets = const [],
   });
 
   factory StrategyPlan.fromJson(Map<String, dynamic> json) {
@@ -328,6 +399,12 @@ class StrategyPlan {
       recommendedPosition: json['recommended_position'] ?? '',
       rules: (json['rules'] as List? ?? []).map((e) => e.toString()).toList(),
       defenseLine: json['defense_line'] ?? '',
+      baotuanStockTargets: (json['baotuan_stock_targets'] as List? ?? [])
+          .map((e) => BaotuanStockTarget.fromJson(Map<String, dynamic>.from(e)))
+          .toList(),
+      baotuanCbTargets: (json['baotuan_cb_targets'] as List? ?? [])
+          .map((e) => BaotuanCbTarget.fromJson(Map<String, dynamic>.from(e)))
+          .toList(),
     );
   }
 }

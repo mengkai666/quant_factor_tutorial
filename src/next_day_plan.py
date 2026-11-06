@@ -1964,6 +1964,66 @@ def _build_continuous_review_and_action_section(
     </div>
   </div>
 
+  <!-- 核心标的关注及优先级分层作战矩阵 (Priority Matrix) -->
+  <div class="card" style="margin-bottom:14px;padding:14px 16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-size:14px;font-weight:800;color:#f0f6fc">🎯 核心标的关注及优先级分层作战矩阵 (Priority Matrix)</div>
+      <span style="font-size:11.5px;color:#8b949e">逐级执行 · 绝不越级</span>
+    </div>
+    <div class="pm-card pm-p0" style="padding:11px 15px;margin-bottom:8px;background:rgba(22,27,34,0.8);border:1px solid #30363d;border-left:4px solid var(--accent-red);border-radius:6px">
+      <div class="pm-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <div><span class="tag" style="background:rgba(248,81,73,0.2);color:#ff7b72;padding:2px 6px;border-radius:4px;font-weight:700;font-size:11px">P0 空间独苗</span> <b style="color:#f0f6fc;font-size:13.5px;margin-left:6px">{v['p0_name']}</b></div>
+        <span class="pm-badge" style="background:rgba(248,81,73,0.2);color:var(--accent-red);border:1px solid var(--accent-red);padding:2px 8px;border-radius:12px;font-size:11px">{v['p0_badge']}</span>
+      </div>
+      <div style="font-size:12px;color:#c9d1d9;line-height:1.5">
+        <b>【触发】</b>{v['p0_trigger']}<br>
+        <b>【止损】</b>{v['p0_stop']}
+      </div>
+    </div>
+
+    <div class="pm-card pm-p1" style="padding:11px 15px;margin-bottom:8px;background:rgba(22,27,34,0.8);border:1px solid #30363d;border-left:4px solid var(--accent-yellow);border-radius:6px">
+      <div class="pm-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <div><span class="tag" style="background:rgba(210,153,34,0.2);color:#e3b341;padding:2px 6px;border-radius:4px;font-weight:700;font-size:11px">P1 中位换手</span> <b style="color:#f0f6fc;font-size:13.5px;margin-left:6px">{v['p1_name']}</b></div>
+        <span class="pm-badge" style="background:rgba(210,153,34,0.2);color:var(--accent-yellow);border:1px solid var(--accent-yellow);padding:2px 8px;border-radius:12px;font-size:11px">{v['p1_badge']}</span>
+      </div>
+      <div style="font-size:12px;color:#c9d1d9;line-height:1.5">
+        <b>【触发】</b>{v['p1_trigger']}<br>
+        <b>【止损】</b>{v['p1_stop']}
+      </div>
+    </div>
+
+    <div class="pm-card pm-p2" style="padding:11px 15px;margin-bottom:8px;background:rgba(22,27,34,0.8);border:1px solid #30363d;border-left:4px solid var(--accent-blue);border-radius:6px">
+      <div class="pm-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <div><span class="tag" style="background:rgba(88,166,255,0.2);color:#58a6ff;padding:2px 6px;border-radius:4px;font-weight:700;font-size:11px">P2 低位防守</span> <b style="color:#f0f6fc;font-size:13.5px;margin-left:6px">{v['p2_name']}</b></div>
+        <span class="pm-badge" style="background:rgba(88,166,255,0.2);color:var(--accent-blue);border:1px solid var(--accent-blue);padding:2px 8px;border-radius:12px;font-size:11px">{v['p2_badge']}</span>
+      </div>
+      <div style="font-size:12px;color:#c9d1d9;line-height:1.5">
+        <b>【触发】</b>{v['p2_trigger']}<br>
+        <b>【止损】</b>{v['p2_stop']}
+      </div>
+    </div>
+
+    <div class="pm-card pm-p3" style="padding:11px 15px;margin-bottom:8px;background:rgba(22,27,34,0.8);border:1px solid #30363d;border-left:4px solid var(--accent-purple);border-radius:6px">
+      <div class="pm-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <div><span class="tag" style="background:rgba(188,140,255,0.2);color:#bc8cff;padding:2px 6px;border-radius:4px;font-weight:700;font-size:11px">P3 风险熔断</span> <b style="color:#f0f6fc;font-size:13.5px;margin-left:6px">{v['p3_name']}</b></div>
+        <span class="pm-badge" style="background:rgba(239,68,68,0.25);color:#fca5a5;border:1px solid #ef4444;padding:2px 8px;border-radius:12px;font-size:11px">跌停熔断哨</span>
+      </div>
+      <div style="font-size:12px;color:#c9d1d9;line-height:1.5">
+        <b>【监控】</b>{v['p3_trigger']}
+      </div>
+    </div>
+
+    <div class="pm-card pm-black" style="padding:11px 15px;margin-bottom:8px;background:rgba(218,54,51,0.08);border:1px solid rgba(218,54,51,0.3);border-left:4px solid #da3633;border-radius:6px">
+      <div class="pm-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <div><span class="tag" style="background:#da3633;color:#fff;padding:2px 6px;border-radius:4px;font-weight:700;font-size:11px">P-Black 禁买雷区</span> <b style="color:#ff7b72;font-size:13.5px;margin-left:6px">{v['black_names_str']}</b></div>
+        <span class="pm-badge" style="background:rgba(248,81,73,0.25);color:#ff7b72;border:1px solid #da3633;padding:2px 8px;border-radius:12px;font-size:11px">一票否决</span>
+      </div>
+      <div style="font-size:12px;color:#ff7b72;line-height:1.5">
+        <b>【禁令】</b>严禁低吸、抄底、追反包！高位断板首日与次日反包成功率仅 7.6%，冲高皆为诱多出逃！
+      </div>
+    </div>
+  </div>
+
   <!-- 模块二：明日核心重点关注标的矩阵（个股正面确定性结果） -->
   <div class="card tw" style="margin-bottom:12px">
     <div class="k" style="font-size:13.5px;color:#f0f6fc;margin-bottom:4px">🎯 明日核心重点关注标的清单（抱团个股 · 明确买卖指令）</div>

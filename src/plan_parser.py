@@ -22,6 +22,121 @@ from pathlib import Path
 from bs4 import BeautifulSoup
 from typing import Dict, Any, List
 
+# 固化标准：重点抱团个股与重点抱团可转债实战预案体系 (直接给指令)
+DEFAULT_BAOTUAN_STOCKS = [
+    {
+        "role": "① 主线空间龙 / 领涨龙头",
+        "tag": "space_hero",
+        "badge_color": "#F87171",
+        "logic": "全市场最高连板梯队，测试空间压制",
+        "action": "竞价高开 > +3% 且成交量达标，9:35 确认分歧转一致后快速封板打板买入",
+        "pos": "0.5~1.0 成",
+        "stop": "盘中跌破分时黄线或日内跌幅超 -3.5% 坚决离场"
+    },
+    {
+        "role": "② 梯队先锋 / 身位卡位",
+        "tag": "echelon_vanguard",
+        "badge_color": "#38BDF8",
+        "logic": "主升次高身位中坚，具备卡位成破局龙潜质",
+        "action": "竞价小幅高开 +1%~+3%，早盘放量回踩分时黄线企稳打板",
+        "pos": "0.5~1.0 成",
+        "stop": "跌破分时均线超过 10 分钟无条件止损"
+    },
+    {
+        "role": "③ 核心产业大中军",
+        "tag": "core_army",
+        "badge_color": "#FCD34D",
+        "logic": "机构与百亿主力大资金主战场，流动性底座",
+        "action": "早盘放量回踩分时均线平盘支撑附近低吸，博弈趋势大二波溢价",
+        "pos": "0.5~1.0 成",
+        "stop": "跌破昨日涨停收盘价或分时破位 -3% 无条件止损"
+    },
+    {
+        "role": "⛔ 禁买出清黑名单",
+        "tag": "avoid_black",
+        "badge_color": "#EF4444",
+        "logic": "昨日高位连板今日断板跌停股，次日反包率仅 7.6%",
+        "action": "一票否决！严禁低吸、严禁抄底、严禁追反包！若已持有，早盘任何脉冲抽高一律清仓出逃",
+        "pos": "0 仓位",
+        "stop": "冲高斩仓，绝不抱有任何反包幻想"
+    }
+]
+
+DEFAULT_BAOTUAN_CBS = [
+    {
+        "bond_name": "福新转债",
+        "bond_code": "111012",
+        "role": "【标杆中军 · 龙头共振主攻】",
+        "badge_color": "#F87171",
+        "stock_name": "福莱新材",
+        "stock_pct": "+10.00% 涨停",
+        "action": "• 竞价预期：正股大单封一字或高开 > +5%，转债高开 +3%~+6%<br>• 买入指令：早盘放量脉冲不盲目追高，待回踩分时均线平盘企稳低吸；若正股封死涨停，持仓博弈冲高分批止盈；若正股开板立即平仓抢跑！",
+        "pos": "0.5~1.0 成",
+        "stop": "跌破分时黄线超 5 分钟或正股炸板无回封立即止损；14:55 前坚决清仓不隔夜！"
+    },
+    {
+        "bond_name": "奥普转债",
+        "bond_code": "118075",
+        "role": "【日内高弹性先锋 · 波段套利】",
+        "badge_color": "#38BDF8",
+        "stock_name": "奥普特",
+        "stock_pct": "+1.27%",
+        "action": "• 竞价预期：小幅高开 +1%~+2%<br>• 买入指令：锚定正股分时脉冲，正股放量急拉冲板时跟随低吸转债，日内涨幅达 +3%~+5% 坚决分批落袋，绝不格局！",
+        "pos": "0.5 成",
+        "stop": "冲高回落跌破开盘价立即离场，日内破位 -2.5% 或正股转弱跳水坚决止损。"
+    },
+    {
+        "bond_name": "精测转2",
+        "bond_code": "123176",
+        "role": "【行业共振修复 · 辅助套利】",
+        "badge_color": "#A78BFA",
+        "stock_name": "精测电子",
+        "stock_pct": "+3.81%",
+        "action": "• 竞价预期：平开附近<br>• 买入指令：半导体板块共振冲高时跟随低吸，逢脉冲急拉分批减半止盈。",
+        "pos": "0.5 成",
+        "stop": "分时均线破位无条件平仓。"
+    },
+    {
+        "bond_name": "澳弘转债",
+        "bond_code": "111024",
+        "role": "【破位出清 · 一票否决禁买】",
+        "badge_color": "#64748B",
+        "stock_name": "澳弘电子",
+        "stock_pct": "-7.62% 破位",
+        "action": "• 警示定性：正股大跌破位，正向反馈完全丧失！<br>• 操盘指令：一票否决！严禁抄底！若有底仓，盘中任何反抽急拉立即离场，规避正股进一步下探带崩转债溢价风险。",
+        "pos": "0 仓位",
+        "stop": "坚决禁止开新仓。"
+    }
+]
+
+def _format_baotuan_digest(baotuan_stocks: list, baotuan_cbs: list) -> str:
+    """生成抱团个股与转债预案的晨会卡片纯文本"""
+    s_lines = ["【重点抱团个股 · 实战预案指令】"]
+    for s in baotuan_stocks:
+        role = s.get("role", "")
+        act = s.get("action", "").replace("<br>", " ")
+        pos = s.get("pos", "")
+        stop = s.get("stop", "")
+        s_lines.append(f"{role} (仓位: {pos})")
+        s_lines.append(f"• 指令：{act}")
+        s_lines.append(f"• 止损：{stop}")
+    
+    cb_lines = ["【重点抱团可转债 · 明日 T+0 深度作战预案】"]
+    for c in baotuan_cbs:
+        b_name = c.get("bond_name", "")
+        b_code = c.get("bond_code", "")
+        role = c.get("role", "")
+        s_name = c.get("stock_name", "")
+        s_pct = c.get("stock_pct", "")
+        act = c.get("action", "").replace("<br>", " ")
+        pos = c.get("pos", "")
+        stop = c.get("stop", "")
+        cb_lines.append(f"{b_name}({b_code}) {role} (正股:{s_name} {s_pct} | 仓位:{pos})")
+        cb_lines.append(f"• 指令：{act}")
+        cb_lines.append(f"• 撤退：{stop}")
+    
+    return "\n".join(s_lines) + "\n\n" + "\n".join(cb_lines)
+
 def parse_plan_html(html_path: Path) -> Dict[str, Any]:
     """从本地预案 HTML 中深度解析实战作战矩阵"""
     if not html_path.exists():
@@ -263,6 +378,68 @@ def parse_plan_html(html_path: Path) -> Dict[str, Any]:
     else:
         date_part = "2026-10-22"
 
+    # 解析重点抱团个股与转债预案
+    baotuan_stocks = []
+    baotuan_cbs = []
+
+    # 优先从 HTML 中的特定模块或表格解析
+    for t in tables:
+        ths = [th.get_text(strip=True) for th in t.find_all("th")]
+        th_str = " ".join(ths)
+        if "转债标的" in th_str and "联动正股" in th_str:
+            for tr in t.find_all("tr")[1:]:
+                tds = [td.get_text(strip=True) for td in tr.find_all("td")]
+                if len(tds) >= 5:
+                    b_raw = tds[0]
+                    m_b = re.match(r"([^\d\s]+)\s*(\d{6})?", b_raw)
+                    b_name = m_b.group(1).strip() if m_b else b_raw
+                    b_code = m_b.group(2).strip() if m_b and m_b.group(2) else ""
+                    baotuan_cbs.append({
+                        "bond_name": b_name,
+                        "bond_code": b_code,
+                        "role": tds[1],
+                        "stock_name": tds[2],
+                        "action": tds[3],
+                        "pos": tds[4],
+                        "stop": tds[5] if len(tds) > 5 else "破分时黄线止损"
+                    })
+        elif "买入执行" in th_str or "仓位配置" in th_str:
+            for tr in t.find_all("tr")[1:]:
+                tds = [td.get_text(strip=True) for td in tr.find_all("td")]
+                if len(tds) >= 6:
+                    baotuan_stocks.append({
+                        "role": tds[0],
+                        "name": tds[1],
+                        "logic": tds[3],
+                        "action": tds[4],
+                        "pos": tds[5],
+                        "stop": tds[6] if len(tds) > 6 else "跌破分时均线止损"
+                    })
+
+    if not baotuan_stocks:
+        baotuan_stocks = list(DEFAULT_BAOTUAN_STOCKS)
+    elif not any("禁买" in s.get("role", "") or "黑名单" in s.get("role", "") for s in baotuan_stocks):
+        avoid_sample = "、".join(avoid_list[:4]) if avoid_list else "高位断板跌停股"
+        baotuan_stocks.append({
+            "role": "⛔ 禁买出清黑名单",
+            "name": avoid_sample,
+            "tag": "avoid_black",
+            "badge_color": "#EF4444",
+            "logic": "昨日高位连板今日断板跌停股，次日反包率仅 7.6%",
+            "action": "一票否决！严禁低吸、严禁抄底、严禁追反包！若已持有，早盘任何脉冲抽高一律清仓出逃",
+            "pos": "0 仓位",
+            "stop": "冲高斩仓，绝不抱有任何反包幻想"
+        })
+    if not baotuan_cbs:
+        baotuan_cbs = list(DEFAULT_BAOTUAN_CBS)
+
+    baotuan_digest = _format_baotuan_digest(baotuan_stocks, baotuan_cbs)
+    if "【重点抱团个股 · 实战预案指令】" not in morning_card:
+        if morning_card:
+            morning_card = morning_card + "\n\n" + baotuan_digest
+        else:
+            morning_card = baotuan_digest
+
     return {
         "title": f"明日实战推演与交易预案",
         "action_slogan": slogan or "极度防守 · 不开新仓 (严守量化风控底线)",
@@ -270,6 +447,8 @@ def parse_plan_html(html_path: Path) -> Dict[str, Any]:
         "is_melt": is_melt,
         "melt_text": melt_text,
         "iron_rules": iron_rules,
+        "baotuan_stock_targets": baotuan_stocks,
+        "baotuan_cb_targets": baotuan_cbs,
         "priority_matrix": p_matrix,
         "candidates": candidates,
         "checklist": checklist,
@@ -430,6 +609,7 @@ def synthesize_plan(
         }
     ]
 
+    baotuan_digest = _format_baotuan_digest(DEFAULT_BAOTUAN_STOCKS, DEFAULT_BAOTUAN_CBS)
     morning_card = f"""【晨会操盘内参 · 核心作战卡片】
 基准日期：{date_str}
 定性军规：{slogan}
@@ -454,7 +634,9 @@ P-Black 禁买雷区：吉大正元、东安动力、长春一东、京城股份
 
 【分时熔断底线】
 - 09:25 竞价：跌停>15家或空间龙头焊死跌停，全天彻底空仓
-- 10:00 盘中：上涨家数<1500家无合力，严禁开新仓"""
+- 10:00 盘中：上涨家数<1500家无合力，严禁开新仓
+
+{baotuan_digest}"""
 
     return {
         "title": f"明日实战推演与交易预案",
@@ -463,6 +645,8 @@ P-Black 禁买雷区：吉大正元、东安动力、长春一东、京城股份
         "is_melt": is_melt,
         "melt_text": melt_text,
         "iron_rules": iron_rules,
+        "baotuan_stock_targets": list(DEFAULT_BAOTUAN_STOCKS),
+        "baotuan_cb_targets": list(DEFAULT_BAOTUAN_CBS),
         "priority_matrix": p_matrix,
         "candidates": [],
         "checklist": checklist,
