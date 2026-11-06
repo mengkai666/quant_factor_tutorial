@@ -1,0 +1,2137 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="report-date" content="20261015">
+<title>属于zhao的个股追踪 · 每日复盘 · 明日推演 · 操作预案 · 20261015</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+<script>
+(function () {
+  function warn() {
+    if (window.echarts) { return; }
+    var slots = document.querySelectorAll('.chart-container, .chart-wrap');
+    for (var i = 0; i < slots.length; i++) {
+      var box = slots[i];
+      if (box.getAttribute('data-charts-unavailable') === '1') { continue; }
+      box.setAttribute('data-charts-unavailable', '1');
+      var note = document.createElement('div');
+      note.style.cssText = 'padding:22px;text-align:center;line-height:1.8;'
+        + 'font-size:13px;color:#d29922;border:1px dashed #d29922;'
+        + 'border-radius:8px;background:rgba(210,153,34,0.06);';
+      note.textContent = '图表库未加载 (ECharts CDN 不可达), 此处只会是空白 —— '
+        + '这表示加载失败, 不代表当天没有数据。表格中的数值仍然有效。';
+      box.appendChild(note);
+    }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', warn);
+  } else {
+    warn();
+  }
+})();
+</script>
+<style>
+:root {
+  --bg-main: #0b0f19;
+  --bg-card: #161b22;
+  --bg-card-hover: #1c2333;
+  --border: #30363d;
+  --text-main: #e6edf3;
+  --text-muted: #8b949e;
+  --c-red: #f85149;
+  --c-green: #3fb950;
+  --c-gold: #e3b341;
+  --c-blue: #58a6ff;
+  --c-purple: #bc8cff;
+  --c-cyan: #39c5bb;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg-main);
+  color: var(--text-main);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+  line-height: 1.6;
+  padding: 16px 20px 48px;
+}
+.wrap { max-width: 1360px; margin: 0 auto; }
+
+/* 顶端导航 */
+.top-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 12px 18px;
+  background: rgba(22, 27, 34, 0.92);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  backdrop-filter: blur(8px);
+}
+.nav-links { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.nav-link {
+  color: var(--c-blue);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: all .2s;
+}
+.nav-link:hover { background: rgba(88, 166, 255, 0.15); color: #79c0ff; }
+.nav-cur {
+  color: #fff;
+  background: linear-gradient(135deg, #8957e5, #1f6feb);
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.sep { color: #30363d; }
+
+/* Hero Banner */
+.hero {
+  background: linear-gradient(135deg, #1b1428 0%, #161b26 100%);
+  border: 1px solid #bc8cff;
+  border-left: 6px solid #bc8cff;
+  border-radius: 12px;
+  padding: 22px 26px;
+  margin-bottom: 22px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.hero-title { font-size: 24px; font-weight: 800; color: #fff; }
+.hero-sub { color: var(--text-muted); font-size: 13.5px; margin-top: 4px; }
+.badge-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.tag-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 9px; border-radius: 6px; font-size: 12px; font-weight: 600;
+}
+.bg-purple { background: rgba(188, 140, 255, 0.15); border: 1px solid rgba(188, 140, 255, 0.4); color: var(--c-purple); }
+.bg-gold { background: rgba(227, 179, 65, 0.15); border: 1px solid rgba(227, 179, 65, 0.4); color: var(--c-gold); }
+.bg-green { background: rgba(63, 185, 80, 0.15); border: 1px solid rgba(63, 185, 80, 0.4); color: var(--c-green); }
+.bg-blue { background: rgba(88, 166, 255, 0.15); border: 1px solid rgba(88, 166, 255, 0.4); color: var(--c-blue); }
+
+/* 核心快速看板卡 */
+.sec-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #f0f6fc;
+  margin: 24px 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #21262d;
+  padding-bottom: 8px;
+}
+.quick-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+.mini-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  transition: all .2s;
+}
+.mini-card:hover {
+  background: var(--bg-card-hover);
+  border-color: #58a6ff;
+  transform: translateY(-2px);
+}
+.card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.stock-name { font-size: 18px; font-weight: 800; color: #fff; }
+.stock-code { font-size: 12.5px; color: var(--text-muted); margin-left: 6px; font-family: Consolas, monospace; }
+.stock-price { font-size: 20px; font-weight: 800; }
+.up { color: var(--c-red); }
+.down { color: var(--c-green); }
+.flat { color: var(--text-muted); }
+
+/* 深度个股战报大卡 */
+.dossier-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px 22px;
+  margin-bottom: 26px;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.25);
+}
+.dossier-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #21262d;
+  margin-bottom: 16px;
+}
+.role-badge {
+  background: rgba(88, 166, 255, 0.18);
+  border: 1px solid rgba(88, 166, 255, 0.4);
+  color: #79c0ff;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+/* 核心六大实战要素速查网格 (用户重点要求) */
+.action-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+@media (max-width: 900px) {
+  .action-summary-grid { grid-template-columns: 1fr; }
+}
+.summary-item {
+  background: #0d1117;
+  border: 1px solid #21262d;
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+.sum-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #8b949e;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+.sum-val {
+  font-size: 13.5px;
+  color: #e6edf3;
+  line-height: 1.5;
+}
+.sum-action-box {
+  background: rgba(248, 81, 73, 0.08);
+  border: 1px solid rgba(248, 81, 73, 0.35);
+  border-left: 4px solid var(--c-red);
+}
+.sum-action-box .sum-label { color: #ff7b72; }
+.sum-action-box .sum-val { color: #fff; font-weight: 700; font-size: 14px; }
+
+/* 关键关注点位标签条 */
+.levels-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: #111620;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 8px 14px;
+  margin-bottom: 14px;
+  font-size: 12.5px;
+}
+.level-tag { display: inline-flex; align-items: center; gap: 4px; }
+.level-tag b { font-family: Consolas, monospace; }
+
+/* 图表容器 */
+.chart-box {
+  background: #0d1117;
+  border: 1px solid #21262d;
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 10px;
+}
+.chart-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding: 0 4px;
+}
+.chart-title { font-size: 13.5px; font-weight: 700; color: #f0f6fc; }
+.chart-legend {
+  display: flex;
+  gap: 12px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+}
+.chart-container {
+  width: 100%;
+  height: 420px;
+}
+
+/* 一键复制与按钮 */
+.btn-copy {
+  background: #238636;
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.2);
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all .2s;
+}
+.btn-copy:hover { background: #2ea043; }
+
+footer {
+  margin-top: 48px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  border-top: 1px solid #21262d;
+  padding-top: 20px;
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- 顶部全功能导航条 -->
+  <div class="top-nav">
+    <div class="nav-links">
+      <a href="../index.html" class="nav-link">🏠 导航门户</a>
+      <span class="sep">|</span>
+      <a href="../reports/2026-10-15.html" class="nav-link">📊 主线追踪大报告</a>
+      <span class="sep">|</span>
+      <a href="../dashboards/latest.html" class="nav-link">📈 决策看板</a>
+      <span class="sep">|</span>
+      <a href="../plan/latest.html" class="nav-link">⚔️ 今日复盘与明日预案</a>
+      <span class="sep">|</span>
+      <a href="../pullback/latest.html" class="nav-link">🌊 强势板块回调跟踪</a>
+      <span class="sep">|</span>
+      <a href="../dragon/latest.html" class="nav-link">🐉 龙头接替谱系</a>
+      <span class="sep">|</span>
+      <span class="nav-cur">🎯 属于zhao的个股追踪 (当前)</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:12px;color:#8b949e">数据基准: 20261015</span>
+      <button class="btn-copy" onclick="copyMorningBrief()">📋 复制操盘摘要</button>
+    </div>
+  </div>
+
+  <!-- Hero Header -->
+  <div class="hero">
+    <div>
+      <div class="hero-title">
+        <span>🎯 属于zhao的个股追踪 · 专属实战作战室</span>
+      </div>
+      <div class="hero-sub">
+        聚焦 6 大自选持仓 · 摒弃冗长废话，直击“现处位置 / 当前趋势 / 量价评估 / 买卖操作 / 核心点位 / 缠论建议”与 K 线图解
+      </div>
+      <div class="badge-group">
+        <span class="tag-badge bg-purple">🌀 缠论中枢 &amp; 笔附着分析</span>
+        <span class="tag-badge bg-gold">⚔️ 游资量价攻防点位</span>
+        <span class="tag-badge bg-green">🛡️ 铁律防守止损线</span>
+        <span class="tag-badge bg-blue">📊 宏观定调: 中立震荡 · 结构性分化</span>
+      </div>
+    </div>
+    <div style="background:#0d1117;border:1px solid #30363d;padding:12px 18px;border-radius:10px;text-align:right;">
+      <div style="font-size:11px;color:#8b949e;text-transform:uppercase;">核心追踪池</div>
+      <div style="font-size:24px;font-weight:800;color:#58a6ff;">6 只自选标的</div>
+      <div style="font-size:11.5px;color:#3fb950;margin-top:2px;">● K线图形与点位标注已附着</div>
+    </div>
+  </div>
+
+  <!-- 宏观与板块共振提示 -->
+  <div style="background:#161b22;border:1px solid #30363d;border-left:4px solid #58a6ff;padding:12px 16px;border-radius:8px;margin-bottom:18px;font-size:13px;color:#c9d1d9;">
+    <b>【主线热点与大盘共振】</b>：市场处于结构性轮动与情绪分化期。顺周期涨价（染料、资源）与高股息防守表现出明显抗跌性，短线操作务必聚焦核心点位，拒绝盲目追高，严格执行纪律。
+    吉华集团与锦鸡股份双核驱动染料主线；焦作万方依托电解铝周期构筑大双底；深圳燃气地量中枢二买避险；华映科技中枢下轨防守反抽；易明医药突破中枢上沿颈线支撑。
+  </div>
+
+  <!-- 1. 核心看板速查 -->
+  <div class="sec-title">
+    <span>⚡ 持仓核心看板与操作速查 (Portfolio Quick Matrix)</span>
+    <span style="font-size:12px;color:#8b949e;font-weight:400">点击卡片可快速直达下方深度图表与分析</span>
+  </div>
+  <div class="quick-grid">
+    
+        <div class="mini-card" onclick="document.getElementById('stock-603980').scrollIntoView({behavior:'smooth'})" style="cursor:pointer">
+          <div class="card-head">
+            <div>
+              <span class="stock-name">吉华集团</span>
+              <span class="stock-code">sh603980</span>
+            </div>
+            <div class="stock-price down">9.82 <span style="font-size:14px">-2.58%</span></div>
+          </div>
+          <div style="font-size:12px;color:#8b949e;margin-bottom:6px">
+            <b>精细化工 · 染料及中间体</b> · 周期资源 / 涨价主线
+          </div>
+          <div style="font-size:12px;color:#c9d1d9;margin:4px 0;">
+            <b style="color:#58a6ff">指令:</b> 【主仓持股锁仓，切勿追高；冲高 9.50~9.60 分批减半止盈；盘中跌破 8.35 减仓防守】
+          </div>
+          <div style="font-size:11.5px;color:#8b949e;display:flex;justify-content:space-between;margin-top:6px;">
+            <span>阻力: <b style="color:#f85149">9.20</b></span>
+            <span>防守: <b style="color:#e3b341">8.35</b></span>
+            <span>止损: <b style="color:#da3633">8.05</b></span>
+          </div>
+        </div>
+        
+        <div class="mini-card" onclick="document.getElementById('stock-000536').scrollIntoView({behavior:'smooth'})" style="cursor:pointer">
+          <div class="card-head">
+            <div>
+              <span class="stock-name">华映科技</span>
+              <span class="stock-code">sz000536</span>
+            </div>
+            <div class="stock-price down">3.12 <span style="font-size:14px">-2.19%</span></div>
+          </div>
+          <div style="font-size:12px;color:#8b949e;margin-bottom:6px">
+            <b>光学光电子 · 面板显示模组</b> · 消费电子 / 华为折叠屏
+          </div>
+          <div style="font-size:12px;color:#c9d1d9;margin:4px 0;">
+            <b style="color:#58a6ff">指令:</b> 【中枢下轨 3.30 附近逢低挂单低吸做T；反抽冲高 3.65 坚决高抛减仓；有效跌破 3.20 坚决止损】
+          </div>
+          <div style="font-size:11.5px;color:#8b949e;display:flex;justify-content:space-between;margin-top:6px;">
+            <span>阻力: <b style="color:#f85149">3.65</b></span>
+            <span>防守: <b style="color:#e3b341">3.30</b></span>
+            <span>止损: <b style="color:#da3633">3.20</b></span>
+          </div>
+        </div>
+        
+        <div class="mini-card" onclick="document.getElementById('stock-000612').scrollIntoView({behavior:'smooth'})" style="cursor:pointer">
+          <div class="card-head">
+            <div>
+              <span class="stock-name">焦作万方</span>
+              <span class="stock-code">sz000612</span>
+            </div>
+            <div class="stock-price down">9.62 <span style="font-size:14px">-4.37%</span></div>
+          </div>
+          <div style="font-size:12px;color:#8b949e;margin-bottom:6px">
+            <b>工业金属 · 电解铝及铝合金</b> · 周期资源 / 大宗商品
+          </div>
+          <div style="font-size:12px;color:#c9d1d9;margin:4px 0;">
+            <b style="color:#58a6ff">指令:</b> 【中线波段持有；依托 10.10~10.40 区间逢低分批吸纳；反抽中枢下沿 11.20 减仓；破 9.85 止损】
+          </div>
+          <div style="font-size:11.5px;color:#8b949e;display:flex;justify-content:space-between;margin-top:6px;">
+            <span>阻力: <b style="color:#f85149">11.20</b></span>
+            <span>防守: <b style="color:#e3b341">10.20</b></span>
+            <span>止损: <b style="color:#da3633">9.85</b></span>
+          </div>
+        </div>
+        
+        <div class="mini-card" onclick="document.getElementById('stock-601139').scrollIntoView({behavior:'smooth'})" style="cursor:pointer">
+          <div class="card-head">
+            <div>
+              <span class="stock-name">深圳燃气</span>
+              <span class="stock-code">sh601139</span>
+            </div>
+            <div class="stock-price down">6.28 <span style="font-size:14px">-4.41%</span></div>
+          </div>
+          <div style="font-size:12px;color:#8b949e;margin-bottom:6px">
+            <b>公用事业 · 城市燃气及供应链</b> · 公用事业 / 高股息防守
+          </div>
+          <div style="font-size:12px;color:#c9d1d9;margin:4px 0;">
+            <b style="color:#58a6ff">指令:</b> 【避险底仓坚守卧倒，不盲目追涨；依托 6.18 支撑持有；反抽 6.38~6.45 做T高抛；破 6.10 离场】
+          </div>
+          <div style="font-size:11.5px;color:#8b949e;display:flex;justify-content:space-between;margin-top:6px;">
+            <span>阻力: <b style="color:#f85149">6.38</b></span>
+            <span>防守: <b style="color:#e3b341">6.18</b></span>
+            <span>止损: <b style="color:#da3633">6.10</b></span>
+          </div>
+        </div>
+        
+        <div class="mini-card" onclick="document.getElementById('stock-002826').scrollIntoView({behavior:'smooth'})" style="cursor:pointer">
+          <div class="card-head">
+            <div>
+              <span class="stock-name">易明医药</span>
+              <span class="stock-code">sz002826</span>
+            </div>
+            <div class="stock-price down">16.48 <span style="font-size:14px">-1.55%</span></div>
+          </div>
+          <div style="font-size:12px;color:#8b949e;margin-bottom:6px">
+            <b>医药生物 · 化学制剂与藏药</b> · 医药生物 / 创新防御
+          </div>
+          <div style="font-size:12px;color:#c9d1d9;margin:4px 0;">
+            <b style="color:#58a6ff">指令:</b> 【波段持股；回踩 17.20 颈线不破逢低吸纳；冲高逼近 18.20~18.50 分批止盈做T；破 16.80 止损】
+          </div>
+          <div style="font-size:11.5px;color:#8b949e;display:flex;justify-content:space-between;margin-top:6px;">
+            <span>阻力: <b style="color:#f85149">18.20</b></span>
+            <span>防守: <b style="color:#e3b341">17.20</b></span>
+            <span>止损: <b style="color:#da3633">16.80</b></span>
+          </div>
+        </div>
+        
+        <div class="mini-card" onclick="document.getElementById('stock-300798').scrollIntoView({behavior:'smooth'})" style="cursor:pointer">
+          <div class="card-head">
+            <div>
+              <span class="stock-name">锦鸡股份</span>
+              <span class="stock-code">sz300798</span>
+            </div>
+            <div class="stock-price down">7.80 <span style="font-size:14px">-6.36%</span></div>
+          </div>
+          <div style="font-size:12px;color:#8b949e;margin-bottom:6px">
+            <b>精细化工 + AI算力服务</b> · 周期涨价 + 算力科技双轮驱动
+          </div>
+          <div style="font-size:12px;color:#c9d1d9;margin:4px 0;">
+            <b style="color:#58a6ff">指令:</b> 【先锋进攻持股，依托 8.30 均线持股待涨；脉冲冲高 9.20~9.60 分批止盈高抛；跌破 8.05 止损】
+          </div>
+          <div style="font-size:11.5px;color:#8b949e;display:flex;justify-content:space-between;margin-top:6px;">
+            <span>阻力: <b style="color:#f85149">9.15</b></span>
+            <span>防守: <b style="color:#e3b341">8.30</b></span>
+            <span>止损: <b style="color:#da3633">8.05</b></span>
+          </div>
+        </div>
+        
+  </div>
+
+  <!-- 2. 六大个股深度战报（附着 K 线图形与清晰点位操作） -->
+  <div class="sec-title">
+    <span>📈 六大核心标的深度图解战报 (Visual Candlestick &amp; Tactical Dossiers)</span>
+  </div>
+  <div>
+    
+        <div class="dossier-card" id="stock-603980">
+          <!-- 标的头部信息 -->
+          <div class="dossier-header">
+            <div>
+              <span style="font-size:22px;font-weight:800;color:#fff;">吉华集团</span>
+              <span style="font-size:14px;color:#8b949e;font-family:Consolas,monospace;margin-left:6px;">sh603980</span>
+              <span class="role-badge" style="margin-left:8px;">核心主仓 · 周期进攻中军</span>
+              <span style="font-size:12.5px;color:#8b949e;margin-left:8px;">规划仓位: <b style="color:#f0f6fc">25% ~ 30%</b></span>
+            </div>
+            <div style="font-size:24px;font-weight:800;" class="down">
+              9.82 <span style="font-size:16px;">(-2.58%)</span>
+              <span style="font-size:12px;color:#8b949e;margin-left:8px;font-weight:400">昨收: 10.08 | 开: 9.90 | 高: 10.14 | 低: 9.56</span>
+            </div>
+          </div>
+
+          <!-- 模块标签导航条 -->
+          <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;">
+            <span class="tag-badge bg-blue">每日走势深度复盘</span>
+            <span class="tag-badge bg-purple">缠论多级别结构透视</span>
+            <span class="tag-badge bg-gold">游资量价战法攻防</span>
+            <span class="tag-badge bg-green">实战操盘预案矩阵</span>
+          </div>
+
+          <!-- 用户最关心的 6 大实操要素看板 (明了、直接、不讲废话) -->
+          <div class="action-summary-grid">
+            <div class="summary-item">
+              <div class="sum-label">📍 每日走势深度复盘 · 现阶段位置</div>
+              <div class="sum-val">脱离日线中枢 [6.40, 7.43] 底部成本区约 22%，处于前高 9.20 突破口下方的强势蓄势区。</div>
+            </div>
+            <div class="summary-item">
+              <div class="sum-label">📈 走势趋势与形态</div>
+              <div class="sum-val">强劲日线向上笔加速主升段，MA5 (8.54) 陡峭向上发散，多头单边反包推进。</div>
+            </div>
+            <div class="summary-item">
+              <div class="sum-label">📊 游资量价战法攻防 · 量价特征</div>
+              <div class="sum-val"><b style="color:#e3b341">【主线强度爆发 · 涨停反包主升模型】</b> 最新收盘 9.82 元 (当日涨跌幅 -2.58%)，成交额 7 万元 (换手率 10.35%)，量价结构随盘面动态计算。</div>
+            </div>
+            <div class="summary-item sum-action-box" style="grid-column: span 2;">
+              <div class="sum-label">⚡ 实战操盘预案矩阵 · 买卖操作明确指令</div>
+              <div class="sum-val">【主仓持股锁仓，切勿追高；冲高 9.50~9.60 分批减半止盈；盘中跌破 8.35 减仓防守】</div>
+            </div>
+            <div class="summary-item">
+              <div class="sum-label">🌀 缠论多级别结构透视 · 买卖点建议</div>
+              <div class='sum-val' style='color:#e3b341;font-weight:700;'>顶背驰·减仓区 <span style='font-size:11px;color:#8b949e;font-weight:400'>(chan_engine 计算)</span></div><div style='font-size:12px;color:#c9d1d9;margin-top:2px'>周线笔数不足, 仅看日线</div><div style='font-size:12px;color:#c9d1d9;margin-top:2px'>命中战法: 顶背驰减仓</div><div style='font-size:11px;color:#8b949e;margin-top:4px;border-top:1px dashed #30363d;padding-top:3px'>⚠ 人工预设 (与计算不一致, 以计算为准): 日线类三买主升段已确立（买点已过，目前处于享受主升浪拉升期，重点防范小级别顶分型冲高离场点）。</div>
+            </div>
+          </div>
+
+          <!-- 关注核心点位精准数值条 -->
+          <div class="levels-bar">
+            <span style="color:#8b949e;font-weight:700;">🎯 临盘关键点位：</span>
+            <span class="level-tag" style="color:#f85149">第一阻力: <b>9.20 元</b></span>
+            <span class="sep">|</span>
+            <span class="level-tag" style="color:#ff7b72">止盈目标: <b>9.60 元</b></span>
+            <span class="sep">|</span>
+            <span class="level-tag" style="color:#e3b341">关键支撑: <b>8.35 元</b></span>
+            <span class="sep">|</span>
+            <span class="level-tag" style="color:#da3633">绝对止损红线: <b>8.05 元</b></span>
+            <span class="sep">|</span>
+            <span class="level-tag" style="color:#8b949e">MA5: <b>9.91</b> / MA20: <b>8.83</b></span>
+          </div>
+
+          <!-- 明日三大走势推演 与 分时操盘执行检查表 -->
+          <div style="background:#0d1117;border:1px solid #21262d;border-radius:8px;padding:12px 14px;margin-bottom:14px;">
+            <div style="font-size:13px;font-weight:700;color:#c9d1d9;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
+              <span>📋 明日三大走势推演 与 分时操盘执行检查表</span>
+              <span style="font-size:11.5px;color:#8b949e;">缠论中枢定买卖点 · 分型确立定进出 · 纪律执行</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:10px;">
+              <div style="background:#161b22;border:1px solid rgba(248,81,73,0.3);border-radius:6px;padding:8px 10px;">
+                <div style="font-size:12px;font-weight:700;color:#f85149;">1. 强势冲高推演 (阻力位博弈)</div>
+                <div style="font-size:12px;color:#c9d1d9;margin-top:3px;line-height:1.5;">
+                  <b>触发点位:</b> 冲高逼近 <b>9.20 ~ 9.60 元</b><br/>
+                  <b>实操预案:</b> 次级别背驰出顶分型时减半止盈，不盲目追高。
+                </div>
+              </div>
+              <div style="background:#161b22;border:1px solid rgba(227,179,65,0.3);border-radius:6px;padding:8px 10px;">
+                <div style="font-size:12px;font-weight:700;color:#e3b341;">2. 震荡整固推演 (支撑位蓄势)</div>
+                <div style="font-size:12px;color:#c9d1d9;margin-top:3px;line-height:1.5;">
+                  <b>触发点位:</b> 缩量回踩 <b>8.35 元</b> (MA5=9.91)<br/>
+                  <b>实操预案:</b> 回踩中枢下沿或均线出底分型时锁仓，激进者轻仓低吸。
+                </div>
+              </div>
+              <div style="background:#161b22;border:1px solid rgba(218,54,51,0.4);border-radius:6px;padding:8px 10px;">
+                <div style="font-size:12px;font-weight:700;color:#da3633;">3. 破位走弱推演 (绝对止损防守)</div>
+                <div style="font-size:12px;color:#c9d1d9;margin-top:3px;line-height:1.5;">
+                  <b>触发点位:</b> 有效跌破 <b>8.05 元</b><br/>
+                  <b>实操预案:</b> 果断止损减仓，规避次级别中枢向下破位风险。
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 专业 ECharts K 线图与缠论附着图解 -->
+          <div class="chart-box">
+            <div class="chart-head">
+              <div class="chart-title">📊 吉华集团 K线走势与缠论结构附着图解</div>
+              <div class="chart-legend">
+                <span style="color:#00f0ff">━ 缠论笔折线</span>
+                <span style="color:#e3b341">■ 缠论中枢 [ZD, ZG]</span>
+                <span style="color:#f1e05a">━ MA5攻击线</span>
+                <span style="color:#bc8cff">━ MA20生命线</span>
+                <span style="color:#f85149">┄ 阻力/止盈位</span>
+                <span style="color:#da3633">━ 止损底线</span>
+              </div>
+            </div>
+            <div id="chart_603980" class="chart-container"></div>
+          </div>
+        </div>
+        
+        <div class="dossier-card" id="stock-000536">
+          <!-- 标的头部信息 -->
+          <div class="dossier-header">
+            <div>
+              <span style="font-size:22px;font-weight:800;color:#fff;">华映科技</span>
+              <span style="font-size:14px;color:#8b949e;font-family:Consolas,monospace;margin-left:6px;">sz000536</span>
+              <span class="role-badge" style="margin-left:8px;">情绪博弈 · 短线弹性仓位</span>
+              <span style="font-size:12.5px;color:#8b949e;margin-left:8px;">规划仓位: <b style="color:#f0f6fc">10% ~ 15%</b></span>
+            </div>
+            <div style="font-size:24px;font-weight:800;" class="down">
+              3.12 <span style="font-size:16px;">(-2.19%)</span>
+              <span style="font-size:12px;color:#8b949e;margin-left:8px;font-weight:400">昨收: 3.19 | 开: 3.15 | 高: 3.19 | 低: 3.11</span>
+            </div>
+          </div>
+
+          <!-- 模块标签导航条 -->
+          <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;">
+            <span class="tag-badge bg-blue">每日走势深度复盘</span>
+            <span class="tag-badge bg-purple">缠论多级别结构透视</span>
+            <span class="tag-badge bg-gold">游资量价战法攻防</span>
+            <span class="tag-badge bg-green">实战操盘预案矩阵</span>
+          </div>
+
+          <!-- 用户最关心的 6 大实操要素看板 (明了、直接、不讲废话) -->
+          <div class="action-summary-grid">
+            <div class="summary-item">
+              <div class="sum-label">📍 每日走势深度复盘 · 现阶段位置</div>
+              <div class="sum-val">处于日线中枢 [3.30, 3.84] 的箱体下轨 (3.30) 极限支撑位，属于箱体底部博弈区。</div>
+            </div>
+            <div class="summary-item">
+              <div class="sum-label">📈 走势趋势与形态</div>
+              <div class="sum-val">超跌阴跌后的弱势筑底震荡，日线出现低位横盘底分型雏形，具备次级别反弹动能。</div>
+            </div>
+            <div class="summary-item">
+              <div class="sum-label">📊 游资量价战法攻防 · 量价特征</div>
+              <div class="sum-val"><b style="color:#e3b341">【妖股超跌箱体 · 地量二买博弈模型】</b> 最新收盘 3.12 元 (当日涨跌幅 -2.19%)，成交额 1 万元 (换手率 1.00%)，量价结构随盘面动态计算。</div>
+            </div>
+            <div class="summary-item sum-action-box" style="grid-column: span 2;">
+              <div class="sum-label">⚡ 实战操盘预案矩阵 · 买卖操作明确指令</div>
+              <div class="sum-val">【中枢下轨 3.30 附近逢低挂单低吸做T；反抽冲高 3.65 坚决高抛减仓；有效跌破 3.20 坚决止损】</div>
+            </div>
+            <div class="summary-item">
+              <div class="sum-label">🌀 缠论多级别结构透视 · 买卖点建议</div>
+              <div class='sum-val' style='color:#3fb950;font-weight:700;'>三卖·下跌确认 <span style='font-size:11px;color:#8b949e;font-weight:400'>(chan_engine 计算)</span></div><div style='font-size:12px;color:#c9d1d9;margin-top:2px'>周线笔数不足, 仅看日线</div><div style='font-size:12px;color:#c9d1d9;margin-top:2px'>命中战法: 三卖规避</div><div style='font-size:11px;color:#8b949e;margin-top:4px;border-top:1px dashed #30363d;padding-top:3px'>⚠ 人工预设 (与计算不一致, 以计算为准): 日线中枢下轨二买博弈点（中枢下沿二次探底不破前低，具备底背驰脉冲反弹条件）。</div>
+            </div>
+          </div>
+
+          <!-- 关注核心点位精准数值条 -->
+          <div class="levels-bar">
+            <span style="color:#8b949e;font-weight:700;">🎯 临盘关键点位：</span>
+            <span class="level-tag" style="color:#f85149">第一阻力: <b>3.65 元</b></span>
+            <span class="sep">|</span>
+            <span class="level-tag" style="color:#ff7b72">止盈目标: <b>3.84 元</b></span>
+            <span class="sep">|</span>
+            <span class="level-tag" style="color:#e3b341">关键支撑: <b>3.30 元</b></span>
+            <span class="sep">|</span>
+            <span class="level-tag" style="color:#da3633">绝对止损红线: <b>3.20 元</b></span>
+            <span class="sep">|</span>
+            <span class="level-tag" style="color:#8b949e">MA5: <b>3.23</b> / MA20: <b>3.39</b></span>
+          </div>
+
+          <!-- 明日三大走势推演 与 分时操盘执行检查表 -->
+          <div style="background:#0d1117;border:1px solid #21262d;border-radius:8px;padding:12px 14px;margin-bottom:14px;">
+            <div style="font-size:13px;font-weight:700;color:#c9d1d9;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
+              <span>📋 明日三大走势推演 与 分时操盘执行检查表</span>
+              <span style="font-size:11.5px;color:#8b949e;">缠论中枢定买卖点 · 分型确立定进出 · 纪律执行</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:10px;">
+              <div style="background:#161b22;border:1px solid rgba(248,81,73,0.3);border-radius:6px;padding:8px 10px;">
+                <div style="font-size:12px;font-weight:700;color:#f85149;">1. 强势冲高推演 (阻力位博弈)</div>
+                <div style="font-size:12px;color:#c9d1d9;margin-top:3px;line-height:1.5;">
+                  <b>触发点位:</b> 冲高逼近 <b>3.65 ~ 3.84 元</b><br/>
+                  <b>实操预案:</b> 次级别背驰出顶分型时减半止盈，不盲目追高。
+                </div>
+              </div>
+              <div style="background:#161b22;border:1px solid rgba(227,179,65,0.3);border-radius:6px;padding:8px 10px;">
+                <div style="font-size:12px;font-weight:700;color:#e3b341;">2. 震荡整固推演 (支撑位蓄势)</div>
+                <div style="font-size:12px;color:#c9d1d9;margin-top:3px;line-height:1.5;">
+                  <b>触发点位:</b> 缩量回踩 <b>3.30 元</b> (MA5=3.23)<br/>
+                  <b>实操预案:</b> 回踩中枢下沿或均线出底分型时锁仓，激进者轻仓低吸。
+                </div>
+              </div>
+              <div style="background:#161b22;border:1px solid rgba(218,54,51,0.4);border-radius:6px;padding:8px 10px;">
+                <div style="font-size:12px;font-weight:700;color:#da3633;">3. 破位走弱推演 (绝对止损防守)</div>
+                <div style="font-size:12px;color:#c9d1d9;margin-top:3px;line-height:1.5;">
+                  <b>触发点位:</b> 有效跌破 <b>3.20 元</b><br/>
+                  <b>实操预案:</b> 果断止损减仓，规避次级别中枢向下破位风险。
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 专业 ECharts K 线图与缠论附着图解 -->
+          <div class="chart-box">
+            <div class="chart-head">
+              <div class="chart-title">📊 华映科技 K线走势与缠论结构附着图解</div>
+              <div class="chart-legend">
+                <span style="color:#00f0ff">━ 缠论笔折线</span>
+                <span style="color:#e3b341">■ 缠论中枢 [ZD, ZG]</span>
+                <span style="color:#f1e05a">━ MA5攻击线</span>
+                <span style="color:#bc8cff">━ MA20生命线</span>
+                <span style="color:#f85149">┄ 阻力/止盈位</span>
+                <span style="color:#da3633">━ 止损底线</span>
+              </div>
+            </div>
+            <div id="chart_000536" class="chart-container"></div>
+          </div>
+        </div>
+        
+        <div class="dossier-card" id="stock-000612">
+          <!-- 标的头部信息 -->
+          <div class="dossier-header">
+            <div>
+              <span style="font-size:22px;font-weight:800;color:#fff;">焦作万方</span>
+              <span style="font-size:14px;color:#8b949e;font-family:Consolas,monospace;margin-left:6px;">sz000612</span>
+              <span class="role-badge" style="margin-left:8px;">稳健配置 · 周期资源波段中军</span>
+              <span style="font-size:12.5px;color:#8b949e;margin-left:8px;">规划仓位: <b style="color:#f0f6fc">15% ~ 20%</b></span>
+            </div>
+            <div style="font-size:24px;font-weight:800;" class="down">
+              9.62 <span style="font-size:16px;">(-4.37%)</span>
+              <span style="font-size:12px;color:#8b949e;margin-left:8px;font-weight:400">昨收: 10.06 | 开: 9.86 | 高: 9.86 | 低: 9.57</span>
+            </div>
+          </div>
+
+          <!-- 模块标签导航条 -->
+          <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;">
+            <span class="tag-badge bg-blue">每日走势深度复盘</span>
+            <span class="tag-badge bg-purple">缠论多级别结构透视</span>
+            <span class="tag-badge bg-gold">游资量价战法攻防</span>
+            <span class="tag-badge bg-green">实战操盘预案矩阵</span>
+          </div>
+
+          <!-- 用户最关心的 6 大实操要素看板 (明了、直接、不讲废话) -->
+          <div class="action-summary-grid">
+            <div class="summary-item">
+              <div class="sum-label">📍 每日走势深度复盘 · 现阶段位置</div>
+              <div class="sum-val">位于前期大中枢 [10.80, 11.59] 下方超跌区，回踩 60 日牛熊线 (10.40) 构筑阶段大双底。</div>
+            </div>
+            <div class="summary-item">
+              <div class="sum-label">📈 走势趋势与形态</div>
+              <div class="sum-val">日线向下笔回调进入尾声，MACD绿柱大幅收窄，正在酝酿日线底背驰向上反抽笔。</div>
+            </div>
+            <div class="summary-item">
+              <div class="sum-label">📊 游资量价战法攻防 · 量价特征</div>
+              <div class="sum-val"><b style="color:#e3b341">【周期资源中军 · 大双底底背驰模型】</b> 最新收盘 9.62 元 (当日涨跌幅 -4.37%)，成交额 3 万元 (换手率 2.75%)，量价结构随盘面动态计算。</div>
+            </div>
+            <div class="summary-item sum-action-box" style="grid-column: span 2;">
+              <div class="sum-label">⚡ 实战操盘预案矩阵 · 买卖操作明确指令</div>
+              <div class="sum-val">【中线波段持有；依托 10.10~10.40 区间逢低分批吸纳；反抽中枢下沿 11.20 减仓；破 9.85 止损】</div>
+            </div>
+            <div class="summary-item">
+              <div class="sum-label">🌀 缠论多级别结构透视 · 买卖点建议</div>
+              <div class='sum-val' style='color:#3fb950;font-weight:700;'>中枢下移·下跌趋势 <span style='font-size:11px;color:#8b949e;font-weight:400'>(chan_engine 计算)</span></div><div style='font-size:12px;color:#c9d1d9;margin-top:2px'>周线向上笔·中枢下方 × 日线中枢下移·下跌趋势 → 大级别向上中的小级别回调, 等日线买点</div><div style='font-size:11px;color:#8b949e;margin-top:4px;border-top:1px dashed #30363d;padding-top:3px'>⚠ 人工预设 (与计算不一致, 以计算为准): 日线一买底背驰探底筑底阶段（MACD绿柱背驰收敛，等待放量底分型确立展开向上笔）。</div>
+            </div>
+          </div>
+
+          <!-- 关注核心点位精准数值条 -->
+          <div class="levels-bar">
+            <span style="color:#8b949e;font-weight:700;">🎯 临盘关键点位：</span>
+            <span class="level-tag" style="color:#f85149">第一阻力: <b>11.20 元</b></span>
+            <span class="sep">|</span>
+            <span class="level-tag" style="color:#ff7b72">止盈目标: <b>11.60 元</b></span>
+            <span class="sep">|</span>
+            <span class="level-tag" style="color:#e3b341">关键支撑: <b>10.20 元</b></span>
+            <span class="sep">|</span>
+            <span class="level-tag" style="color:#da3633">绝对止损红线: <b>9.85 元</b></span>
+            <span class="sep">|</span>
+            <span class="level-tag" style="color:#8b949e">MA5: <b>10.09</b> / MA20: <b>10.68</b></span>
+          </div>
+
+          <!-- 明日三大走势推演 与 分时操盘执行检查表 -->
+          <div style="background:#0d1117;border:1px solid #21262d;border-radius:8px;padding:12px 14px;margin-bottom:14px;">
+            <div style="font-size:13px;font-weight:700;color:#c9d1d9;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
+              <span>📋 明日三大走势推演 与 分时操盘执行检查表</span>
+              <span style="font-size:11.5px;color:#8b949e;">缠论中枢定买卖点 · 分型确立定进出 · 纪律执行</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:10px;">
+              <div style="background:#161b22;border:1px solid rgba(248,81,73,0.3);border-radius:6px;padding:8px 10px;">
+                <div style="font-size:12px;font-weight:700;color:#f85149;">1. 强势冲高推演 (阻力位博弈)</div>
+                <div style="font-size:12px;color:#c9d1d9;margin-top:3px;line-height:1.5;">
+                  <b>触发点位:</b> 冲高逼近 <b>11.20 ~ 11.60 元</b><br/>
+                  <b>实操预案:</b> 次级别背驰出顶分型时减半止盈，不盲目追高。
+                </div>
+              </div>
+              <div style="background:#161b22;border:1px solid rgba(227,179,65,0.3);border-radius:6px;padding:8px 10px;">
+                <div style="font-size:12px;font-weight:700;color:#e3b341;">2. 震荡整固推演 (支撑位蓄势)</div>
+                <div style="font-size:12px;color:#c9d1d9;margin-top:3px;line-height:1.5;">
+                  <b>触发点位:</b> 缩量回踩 <b>10.20 元</b> (MA5=10.09)<br/>
+                  <b>实操预案:</b> 回踩中枢下沿或均线出底分型时锁仓，激进者轻仓低吸。
+                </div>
+              </div>
+              <div style="background:#161b22;border:1px solid rgba(218,54,51,0.4);border-radius:6px;padding:8px 10px;">
+                <div style="font-size:12px;font-weight:700;color:#da3633;">3. 破位走弱推演 (绝对止损防守)</div>
+                <div style="font-size:12px;color:#c9d1d9;margin-top:3px;line-height:1.5;">
+                  <b>触发点位:</b> 有效跌破 <b>9.85 元</b><br/>
+                  <b>实操预案:</b> 果断止损减仓，规避次级别中枢向下破位风险。
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 专业 ECharts K 线图与缠论附着图解 -->
+          <div class="chart-box">
+            <div class="chart-head">
+              <div class="chart-title">📊 焦作万方 K线走势与缠论结构附着图解</div>
+              <div class="chart-legend">
+                <span style="color:#00f0ff">━ 缠论笔折线</span>
+                <span style="color:#e3b341">■ 缠论中枢 [ZD, ZG]</span>
+                <span style="color:#f1e05a">━ MA5攻击线</span>
+                <span style="color:#bc8cff">━ MA20生命线</span>
+                <span style="color:#f85149">┄ 阻力/止盈位</span>
+                <span style="color:#da3633">━ 止损底线</span>
+              </div>
+            </div>
+            <div id="chart_000612" class="chart-container"></div>
+          </div>
+        </div>
+        
+        <div class="dossier-card" id="stock-601139">
+          <!-- 标的头部信息 -->
+          <div class="dossier-header">
+            <div>
+              <span style="font-size:22px;font-weight:800;color:#fff;">深圳燃气</span>
+              <span style="font-size:14px;color:#8b949e;font-family:Consolas,monospace;margin-left:6px;">sh601139</span>
+              <span class="role-badge" style="margin-left:8px;">避险底仓 · 高股息压舱石</span>
+              <span style="font-size:12.5px;color:#8b949e;margin-left:8px;">规划仓位: <b style="color:#f0f6fc">15% ~ 20%</b></span>
+            </div>
+            <div style="font-size:24px;font-weight:800;" class="down">
+              6.28 <span style="font-size:16px;">(-4.41%)</span>
+              <span style="font-size:12px;color:#8b949e;margin-left:8px;font-weight:400">昨收: 6.57 | 开: 6.54 | 高: 6.54 | 低: 6.25</span>
+            </div>
+          </div>
+
+          <!-- 模块标签导航条 -->
+          <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;">
+            <span class="tag-badge bg-blue">每日走势深度复盘</span>
+            <span class="tag-badge bg-purple">缠论多级别结构透视</span>
+            <span class="tag-badge bg-gold">游资量价战法攻防</span>
+            <span class="tag-badge bg-green">实战操盘预案矩阵</span>
+          </div>
+
+          <!-- 用户最关心的 6 大实操要素看板 (明了、直接、不讲废话) -->
+          <div class="action-summary-grid">
+            <div class="summary-item">
+              <div class="sum-label">📍 每日走势深度复盘 · 现阶段位置</div>
+              <div class="sum-val">运行于日线中枢 [6.17, 6.39] 内部极窄幅地量区间，紧贴中枢下轨，安全边际极高。</div>
+            </div>
+            <div class="summary-item">
+              <div class="sum-label">📈 走势趋势与形态</div>
+              <div class="sum-val">低波动中枢横向蓄势，均线完全粘合，处于极端变盘临界点，向下空间极为有限。</div>
+            </div>
+            <div class="summary-item">
+              <div class="sum-label">📊 游资量价战法攻防 · 量价特征</div>
+              <div class="sum-val"><b style="color:#e3b341">【高股息避险 · 中枢地量防守模型】</b> 最新收盘 6.28 元 (当日涨跌幅 -4.41%)，成交额 2 万元 (换手率 1.03%)，量价结构随盘面动态计算。</div>
+            </div>
+            <div class="summary-item sum-action-box" style="grid-column: span 2;">
+              <div class="sum-label">⚡ 实战操盘预案矩阵 · 买卖操作明确指令</div>
+              <div class="sum-val">【避险底仓坚守卧倒，不盲目追涨；依托 6.18 支撑持有；反抽 6.38~6.45 做T高抛；破 6.10 离场】</div>
+            </div>
+            <div class="summary-item">
+              <div class="sum-label">🌀 缠论多级别结构透视 · 买卖点建议</div>
+              <div class='sum-val' style='color:#8b949e;font-weight:700;'>一买·底背驰 <span style='font-size:11px;color:#8b949e;font-weight:400'>(chan_engine 计算)</span></div><div style='font-size:12px;color:#c9d1d9;margin-top:2px'>周线向下笔·中枢下方 × 日线一买·底背驰 → 大级别未转, 日线底部信号先当反弹看</div><div style='font-size:12px;color:#c9d1d9;margin-top:2px'>结构止损 6.17</div><div style='font-size:12px;color:#c9d1d9;margin-top:2px'>命中战法: 一买底背驰</div><div style='font-size:11px;color:#8b949e;margin-top:4px;border-top:1px dashed #30363d;padding-top:3px'>⚠ 人工预设 (与计算不一致, 以计算为准): 日线中枢下轨二买防守段（安全边际极高，耐心等待放量向上突破中枢一笔）。</div>
+            </div>
+          </div>
+
+          <!-- 关注核心点位精准数值条 -->
+          <div class="levels-bar">
+            <span style="color:#8b949e;font-weight:700;">🎯 临盘关键点位：</span>
+            <span class="level-tag" style="color:#f85149">第一阻力: <b>6.38 元</b></span>
+            <span class="sep">|</span>
+            <span class="level-tag" style="color:#ff7b72">止盈目标: <b>6.50 元</b></span>
+            <span class="sep">|</span>
+            <span class="level-tag" style="color:#e3b341">关键支撑: <b>6.18 元</b></span>
+            <span class="sep">|</span>
+            <span class="level-tag" style="color:#da3633">绝对止损红线: <b>6.10 元</b></span>
+            <span class="sep">|</span>
+            <span class="level-tag" style="color:#8b949e">MA5: <b>6.43</b> / MA20: <b>6.37</b></span>
+          </div>
+
+          <!-- 明日三大走势推演 与 分时操盘执行检查表 -->
+          <div style="background:#0d1117;border:1px solid #21262d;border-radius:8px;padding:12px 14px;margin-bottom:14px;">
+            <div style="font-size:13px;font-weight:700;color:#c9d1d9;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
+              <span>📋 明日三大走势推演 与 分时操盘执行检查表</span>
+              <span style="font-size:11.5px;color:#8b949e;">缠论中枢定买卖点 · 分型确立定进出 · 纪律执行</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:10px;">
+              <div style="background:#161b22;border:1px solid rgba(248,81,73,0.3);border-radius:6px;padding:8px 10px;">
+                <div style="font-size:12px;font-weight:700;color:#f85149;">1. 强势冲高推演 (阻力位博弈)</div>
+                <div style="font-size:12px;color:#c9d1d9;margin-top:3px;line-height:1.5;">
+                  <b>触发点位:</b> 冲高逼近 <b>6.38 ~ 6.50 元</b><br/>
+                  <b>实操预案:</b> 次级别背驰出顶分型时减半止盈，不盲目追高。
+                </div>
+              </div>
+              <div style="background:#161b22;border:1px solid rgba(227,179,65,0.3);border-radius:6px;padding:8px 10px;">
+                <div style="font-size:12px;font-weight:700;color:#e3b341;">2. 震荡整固推演 (支撑位蓄势)</div>
+                <div style="font-size:12px;color:#c9d1d9;margin-top:3px;line-height:1.5;">
+                  <b>触发点位:</b> 缩量回踩 <b>6.18 元</b> (MA5=6.43)<br/>
+                  <b>实操预案:</b> 回踩中枢下沿或均线出底分型时锁仓，激进者轻仓低吸。
+                </div>
+              </div>
+              <div style="background:#161b22;border:1px solid rgba(218,54,51,0.4);border-radius:6px;padding:8px 10px;">
+                <div style="font-size:12px;font-weight:700;color:#da3633;">3. 破位走弱推演 (绝对止损防守)</div>
+                <div style="font-size:12px;color:#c9d1d9;margin-top:3px;line-height:1.5;">
+                  <b>触发点位:</b> 有效跌破 <b>6.10 元</b><br/>
+                  <b>实操预案:</b> 果断止损减仓，规避次级别中枢向下破位风险。
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 专业 ECharts K 线图与缠论附着图解 -->
+          <div class="chart-box">
+            <div class="chart-head">
+              <div class="chart-title">📊 深圳燃气 K线走势与缠论结构附着图解</div>
+              <div class="chart-legend">
+                <span style="color:#00f0ff">━ 缠论笔折线</span>
+                <span style="color:#e3b341">■ 缠论中枢 [ZD, ZG]</span>
+                <span style="color:#f1e05a">━ MA5攻击线</span>
+                <span style="color:#bc8cff">━ MA20生命线</span>
+                <span style="color:#f85149">┄ 阻力/止盈位</span>
+                <span style="color:#da3633">━ 止损底线</span>
+              </div>
+            </div>
+            <div id="chart_601139" class="chart-container"></div>
+          </div>
+        </div>
+        
+        <div class="dossier-card" id="stock-002826">
+          <!-- 标的头部信息 -->
+          <div class="dossier-header">
+            <div>
+              <span style="font-size:22px;font-weight:800;color:#fff;">易明医药</span>
+              <span style="font-size:14px;color:#8b949e;font-family:Consolas,monospace;margin-left:6px;">sz002826</span>
+              <span class="role-badge" style="margin-left:8px;">轮动配置 · 医药防御反弹仓</span>
+              <span style="font-size:12.5px;color:#8b949e;margin-left:8px;">规划仓位: <b style="color:#f0f6fc">10% ~ 15%</b></span>
+            </div>
+            <div style="font-size:24px;font-weight:800;" class="down">
+              16.48 <span style="font-size:16px;">(-1.55%)</span>
+              <span style="font-size:12px;color:#8b949e;margin-left:8px;font-weight:400">昨收: 16.74 | 开: 16.44 | 高: 16.99 | 低: 16.31</span>
+            </div>
+          </div>
+
+          <!-- 模块标签导航条 -->
+          <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;">
+            <span class="tag-badge bg-blue">每日走势深度复盘</span>
+            <span class="tag-badge bg-purple">缠论多级别结构透视</span>
+            <span class="tag-badge bg-gold">游资量价战法攻防</span>
+            <span class="tag-badge bg-green">实战操盘预案矩阵</span>
+          </div>
+
+          <!-- 用户最关心的 6 大实操要素看板 (明了、直接、不讲废话) -->
+          <div class="action-summary-grid">
+            <div class="summary-item">
+              <div class="sum-label">📍 每日走势深度复盘 · 现阶段位置</div>
+              <div class="sum-val">位于前期震荡中枢 [16.82, 18.40] 内部中上轴，突破后回踩 17.20 获得承接，守住颈线位。</div>
+            </div>
+            <div class="summary-item">
+              <div class="sum-label">📈 走势趋势与形态</div>
+              <div class="sum-val">医药防御性波段震荡上行，均线多头粘合抬升 (MA5=17.52, MA20=17.48)，保持强势。</div>
+            </div>
+            <div class="summary-item">
+              <div class="sum-label">📊 游资量价战法攻防 · 量价特征</div>
+              <div class="sum-val"><b style="color:#e3b341">【医药防守反弹 · 三买突破蓄势模型】</b> 最新收盘 16.48 元 (当日涨跌幅 -1.55%)，成交额 0 万元 (换手率 1.25%)，量价结构随盘面动态计算。</div>
+            </div>
+            <div class="summary-item sum-action-box" style="grid-column: span 2;">
+              <div class="sum-label">⚡ 实战操盘预案矩阵 · 买卖操作明确指令</div>
+              <div class="sum-val">【波段持股；回踩 17.20 颈线不破逢低吸纳；冲高逼近 18.20~18.50 分批止盈做T；破 16.80 止损】</div>
+            </div>
+            <div class="summary-item">
+              <div class="sum-label">🌀 缠论多级别结构透视 · 买卖点建议</div>
+              <div class='sum-val' style='color:#3fb950;font-weight:700;'>中枢下移·下跌趋势 <span style='font-size:11px;color:#8b949e;font-weight:400'>(chan_engine 计算)</span></div><div style='font-size:12px;color:#c9d1d9;margin-top:2px'>周线笔数不足, 仅看日线</div><div style='font-size:11px;color:#8b949e;margin-top:4px;border-top:1px dashed #30363d;padding-top:3px'>⚠ 人工预设 (与计算不一致, 以计算为准): 日线三买蓄势回抽段（次级别回踩未跌破中枢上沿颈线 17.20，具备波段上攻动力）。</div>
+            </div>
+          </div>
+
+          <!-- 关注核心点位精准数值条 -->
+          <div class="levels-bar">
+            <span style="color:#8b949e;font-weight:700;">🎯 临盘关键点位：</span>
+            <span class="level-tag" style="color:#f85149">第一阻力: <b>18.20 元</b></span>
+            <span class="sep">|</span>
+            <span class="level-tag" style="color:#ff7b72">止盈目标: <b>19.00 元</b></span>
+            <span class="sep">|</span>
+            <span class="level-tag" style="color:#e3b341">关键支撑: <b>17.20 元</b></span>
+            <span class="sep">|</span>
+            <span class="level-tag" style="color:#da3633">绝对止损红线: <b>16.80 元</b></span>
+            <span class="sep">|</span>
+            <span class="level-tag" style="color:#8b949e">MA5: <b>16.92</b> / MA20: <b>17.21</b></span>
+          </div>
+
+          <!-- 明日三大走势推演 与 分时操盘执行检查表 -->
+          <div style="background:#0d1117;border:1px solid #21262d;border-radius:8px;padding:12px 14px;margin-bottom:14px;">
+            <div style="font-size:13px;font-weight:700;color:#c9d1d9;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
+              <span>📋 明日三大走势推演 与 分时操盘执行检查表</span>
+              <span style="font-size:11.5px;color:#8b949e;">缠论中枢定买卖点 · 分型确立定进出 · 纪律执行</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:10px;">
+              <div style="background:#161b22;border:1px solid rgba(248,81,73,0.3);border-radius:6px;padding:8px 10px;">
+                <div style="font-size:12px;font-weight:700;color:#f85149;">1. 强势冲高推演 (阻力位博弈)</div>
+                <div style="font-size:12px;color:#c9d1d9;margin-top:3px;line-height:1.5;">
+                  <b>触发点位:</b> 冲高逼近 <b>18.20 ~ 19.00 元</b><br/>
+                  <b>实操预案:</b> 次级别背驰出顶分型时减半止盈，不盲目追高。
+                </div>
+              </div>
+              <div style="background:#161b22;border:1px solid rgba(227,179,65,0.3);border-radius:6px;padding:8px 10px;">
+                <div style="font-size:12px;font-weight:700;color:#e3b341;">2. 震荡整固推演 (支撑位蓄势)</div>
+                <div style="font-size:12px;color:#c9d1d9;margin-top:3px;line-height:1.5;">
+                  <b>触发点位:</b> 缩量回踩 <b>17.20 元</b> (MA5=16.92)<br/>
+                  <b>实操预案:</b> 回踩中枢下沿或均线出底分型时锁仓，激进者轻仓低吸。
+                </div>
+              </div>
+              <div style="background:#161b22;border:1px solid rgba(218,54,51,0.4);border-radius:6px;padding:8px 10px;">
+                <div style="font-size:12px;font-weight:700;color:#da3633;">3. 破位走弱推演 (绝对止损防守)</div>
+                <div style="font-size:12px;color:#c9d1d9;margin-top:3px;line-height:1.5;">
+                  <b>触发点位:</b> 有效跌破 <b>16.80 元</b><br/>
+                  <b>实操预案:</b> 果断止损减仓，规避次级别中枢向下破位风险。
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 专业 ECharts K 线图与缠论附着图解 -->
+          <div class="chart-box">
+            <div class="chart-head">
+              <div class="chart-title">📊 易明医药 K线走势与缠论结构附着图解</div>
+              <div class="chart-legend">
+                <span style="color:#00f0ff">━ 缠论笔折线</span>
+                <span style="color:#e3b341">■ 缠论中枢 [ZD, ZG]</span>
+                <span style="color:#f1e05a">━ MA5攻击线</span>
+                <span style="color:#bc8cff">━ MA20生命线</span>
+                <span style="color:#f85149">┄ 阻力/止盈位</span>
+                <span style="color:#da3633">━ 止损底线</span>
+              </div>
+            </div>
+            <div id="chart_002826" class="chart-container"></div>
+          </div>
+        </div>
+        
+        <div class="dossier-card" id="stock-300798">
+          <!-- 标的头部信息 -->
+          <div class="dossier-header">
+            <div>
+              <span style="font-size:22px;font-weight:800;color:#fff;">锦鸡股份</span>
+              <span style="font-size:14px;color:#8b949e;font-family:Consolas,monospace;margin-left:6px;">sz300798</span>
+              <span class="role-badge" style="margin-left:8px;">高弹性先锋 · 进攻突破主打标</span>
+              <span style="font-size:12.5px;color:#8b949e;margin-left:8px;">规划仓位: <b style="color:#f0f6fc">15% ~ 20%</b></span>
+            </div>
+            <div style="font-size:24px;font-weight:800;" class="down">
+              7.80 <span style="font-size:16px;">(-6.36%)</span>
+              <span style="font-size:12px;color:#8b949e;margin-left:8px;font-weight:400">昨收: 8.33 | 开: 8.20 | 高: 8.75 | 低: 7.73</span>
+            </div>
+          </div>
+
+          <!-- 模块标签导航条 -->
+          <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;">
+            <span class="tag-badge bg-blue">每日走势深度复盘</span>
+            <span class="tag-badge bg-purple">缠论多级别结构透视</span>
+            <span class="tag-badge bg-gold">游资量价战法攻防</span>
+            <span class="tag-badge bg-green">实战操盘预案矩阵</span>
+          </div>
+
+          <!-- 用户最关心的 6 大实操要素看板 (明了、直接、不讲废话) -->
+          <div class="action-summary-grid">
+            <div class="summary-item">
+              <div class="sum-label">📍 每日走势深度复盘 · 现阶段位置</div>
+              <div class="sum-val">强力突破日线中枢 [7.17, 8.13] 后的主升加速区，回踩 8.01 获得三买强力支撑。</div>
+            </div>
+            <div class="summary-item">
+              <div class="sum-label">📈 走势趋势与形态</div>
+              <div class="sum-val">日线向上笔强劲延伸，与吉华集团形成染料主线与AI算力双核共振，弹性极大。</div>
+            </div>
+            <div class="summary-item">
+              <div class="sum-label">📊 游资量价战法攻防 · 量价特征</div>
+              <div class="sum-val"><b style="color:#e3b341">【20cm先锋进攻 · 突破三买主升模型】</b> 最新收盘 7.80 元 (当日涨跌幅 -6.36%)，成交额 3 万元 (换手率 10.35%)，量价结构随盘面动态计算。</div>
+            </div>
+            <div class="summary-item sum-action-box" style="grid-column: span 2;">
+              <div class="sum-label">⚡ 实战操盘预案矩阵 · 买卖操作明确指令</div>
+              <div class="sum-val">【先锋进攻持股，依托 8.30 均线持股待涨；脉冲冲高 9.20~9.60 分批止盈高抛；跌破 8.05 止损】</div>
+            </div>
+            <div class="summary-item">
+              <div class="sum-label">🌀 缠论多级别结构透视 · 买卖点建议</div>
+              <div class='sum-val' style='color:#8b949e;font-weight:700;'>中枢震荡·上半 <span style='font-size:11px;color:#8b949e;font-weight:400'>(chan_engine 计算)</span></div><div style='font-size:12px;color:#c9d1d9;margin-top:2px'>周线向上笔·中枢内部 × 日线中枢震荡·上半 → 顺大级别, 等日线结构选点</div><div style='font-size:12px;color:#c9d1d9;margin-top:2px'>命中战法: 中枢震荡</div><div style='font-size:11px;color:#8b949e;margin-top:4px;border-top:1px dashed #30363d;padding-top:3px'>⚠ 人工预设 (与计算不一致, 以计算为准): 日线标准三买确立（次级别回踩未触及中枢 [7.17, 8.13]，向上主升浪笔强劲发散）。</div>
+            </div>
+          </div>
+
+          <!-- 关注核心点位精准数值条 -->
+          <div class="levels-bar">
+            <span style="color:#8b949e;font-weight:700;">🎯 临盘关键点位：</span>
+            <span class="level-tag" style="color:#f85149">第一阻力: <b>9.15 元</b></span>
+            <span class="sep">|</span>
+            <span class="level-tag" style="color:#ff7b72">止盈目标: <b>9.80 元</b></span>
+            <span class="sep">|</span>
+            <span class="level-tag" style="color:#e3b341">关键支撑: <b>8.30 元</b></span>
+            <span class="sep">|</span>
+            <span class="level-tag" style="color:#da3633">绝对止损红线: <b>8.05 元</b></span>
+            <span class="sep">|</span>
+            <span class="level-tag" style="color:#8b949e">MA5: <b>8.31</b> / MA20: <b>8.35</b></span>
+          </div>
+
+          <!-- 明日三大走势推演 与 分时操盘执行检查表 -->
+          <div style="background:#0d1117;border:1px solid #21262d;border-radius:8px;padding:12px 14px;margin-bottom:14px;">
+            <div style="font-size:13px;font-weight:700;color:#c9d1d9;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
+              <span>📋 明日三大走势推演 与 分时操盘执行检查表</span>
+              <span style="font-size:11.5px;color:#8b949e;">缠论中枢定买卖点 · 分型确立定进出 · 纪律执行</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:10px;">
+              <div style="background:#161b22;border:1px solid rgba(248,81,73,0.3);border-radius:6px;padding:8px 10px;">
+                <div style="font-size:12px;font-weight:700;color:#f85149;">1. 强势冲高推演 (阻力位博弈)</div>
+                <div style="font-size:12px;color:#c9d1d9;margin-top:3px;line-height:1.5;">
+                  <b>触发点位:</b> 冲高逼近 <b>9.15 ~ 9.80 元</b><br/>
+                  <b>实操预案:</b> 次级别背驰出顶分型时减半止盈，不盲目追高。
+                </div>
+              </div>
+              <div style="background:#161b22;border:1px solid rgba(227,179,65,0.3);border-radius:6px;padding:8px 10px;">
+                <div style="font-size:12px;font-weight:700;color:#e3b341;">2. 震荡整固推演 (支撑位蓄势)</div>
+                <div style="font-size:12px;color:#c9d1d9;margin-top:3px;line-height:1.5;">
+                  <b>触发点位:</b> 缩量回踩 <b>8.30 元</b> (MA5=8.31)<br/>
+                  <b>实操预案:</b> 回踩中枢下沿或均线出底分型时锁仓，激进者轻仓低吸。
+                </div>
+              </div>
+              <div style="background:#161b22;border:1px solid rgba(218,54,51,0.4);border-radius:6px;padding:8px 10px;">
+                <div style="font-size:12px;font-weight:700;color:#da3633;">3. 破位走弱推演 (绝对止损防守)</div>
+                <div style="font-size:12px;color:#c9d1d9;margin-top:3px;line-height:1.5;">
+                  <b>触发点位:</b> 有效跌破 <b>8.05 元</b><br/>
+                  <b>实操预案:</b> 果断止损减仓，规避次级别中枢向下破位风险。
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 专业 ECharts K 线图与缠论附着图解 -->
+          <div class="chart-box">
+            <div class="chart-head">
+              <div class="chart-title">📊 锦鸡股份 K线走势与缠论结构附着图解</div>
+              <div class="chart-legend">
+                <span style="color:#00f0ff">━ 缠论笔折线</span>
+                <span style="color:#e3b341">■ 缠论中枢 [ZD, ZG]</span>
+                <span style="color:#f1e05a">━ MA5攻击线</span>
+                <span style="color:#bc8cff">━ MA20生命线</span>
+                <span style="color:#f85149">┄ 阻力/止盈位</span>
+                <span style="color:#da3633">━ 止损底线</span>
+              </div>
+            </div>
+            <div id="chart_300798" class="chart-container"></div>
+          </div>
+        </div>
+        
+  </div>
+
+  <footer>
+    主线强度追踪系统 · 属于zhao的个股追踪专属模块 · 数据跑批生成 · 仅供研究参考，不构成投资建议
+  </footer>
+
+</div>
+
+<script>
+
+        (function() {
+          var chartDom = document.getElementById('chart_603980');
+          if (!chartDom || !window.echarts) return;
+          var myChart = echarts.init(chartDom, 'dark');
+
+          var dates = ["2026-04-17", "2026-04-20", "2026-04-21", "2026-04-22", "2026-04-23", "2026-04-24", "2026-04-27", "2026-04-28", "2026-04-29", "2026-04-30", "2026-05-06", "2026-05-07", "2026-05-08", "2026-05-11", "2026-05-12", "2026-05-13", "2026-05-14", "2026-05-15", "2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21", "2026-05-22", "2026-05-25", "2026-05-26", "2026-05-27", "2026-05-28", "2026-05-29", "2026-06-01", "2026-06-02", "2026-06-03", "2026-06-04", "2026-06-05", "2026-06-08", "2026-06-09", "2026-06-10", "2026-06-11", "2026-06-12", "2026-06-15", "2026-06-16", "2026-06-17", "2026-06-18", "2026-06-22", "2026-06-23", "2026-06-24", "2026-06-25", "2026-06-26", "2026-06-29", "2026-06-30", "2026-07-01", "2026-07-02", "2026-07-03", "2026-07-06", "2026-07-07", "2026-07-08", "2026-07-09", "2026-07-10", "2026-07-13", "2026-07-14", "2026-07-15", "2026-07-16", "2026-07-17", "2026-07-20", "2026-07-21", "2026-07-22", "2026-07-23", "2026-07-24", "2026-07-27", "2026-07-28", "2026-07-29", "2026-07-30", "2026-07-31", "2026-08-03", "2026-08-04", "2026-08-05", "2026-08-06", "2026-08-07", "2026-08-10", "2026-08-11", "2026-08-12", "2026-08-13", "2026-08-14", "2026-08-17", "2026-08-18", "2026-08-19", "2026-08-20", "2026-08-21", "2026-08-24", "2026-08-25", "2026-08-26", "2026-08-27", "2026-08-28", "2026-08-31", "2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04", "2026-09-07", "2026-09-08", "2026-09-09", "2026-09-10", "2026-09-11", "2026-09-14", "2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18", "2026-09-21", "2026-09-22", "2026-09-23", "2026-09-24", "2026-09-28", "2026-09-29", "2026-09-30", "2026-10-08", "2026-10-09", "2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15"];
+          var ohlc = [[6.243, 6.093, 6.043, 6.283], [6.083, 6.123, 6.023, 6.173], [6.103, 6.093, 6.003, 6.123], [6.053, 6.143, 6.023, 6.153], [6.133, 6.143, 6.043, 6.193], [6.103, 6.063, 5.973, 6.153], [6.063, 5.973, 5.853, 6.083], [5.943, 6.013, 5.913, 6.103], [5.993, 6.043, 5.953, 6.093], [6.163, 6.203, 6.133, 6.303], [6.183, 6.233, 6.143, 6.253], [6.213, 6.283, 6.213, 6.353], [6.323, 6.313, 6.253, 6.333], [6.323, 6.253, 6.203, 6.373], [6.243, 6.173, 6.093, 6.253], [6.153, 6.303, 6.153, 6.383], [6.323, 6.063, 6.063, 6.333], [6.093, 6.103, 6.073, 6.233], [6.123, 6.083, 5.863, 6.133], [6.063, 6.113, 5.993, 6.303], [6.083, 5.953, 5.923, 6.103], [5.963, 5.683, 5.663, 6.073], [5.723, 5.803, 5.603, 5.863], [5.803, 5.683, 5.633, 5.873], [5.773, 5.763, 5.603, 5.953], [5.733, 5.643, 5.633, 5.883], [5.643, 5.683, 5.583, 5.763], [5.683, 5.463, 5.433, 5.683], [5.473, 5.633, 5.423, 5.703], [5.603, 5.503, 5.403, 5.643], [5.463, 5.583, 5.463, 5.613], [5.573, 5.583, 5.533, 5.703], [5.553, 5.613, 5.483, 5.683], [5.533, 5.443, 5.383, 5.683], [5.453, 5.553, 5.353, 5.573], [5.533, 5.433, 5.343, 5.593], [5.46, 5.39, 5.36, 5.5], [5.43, 5.65, 5.3, 5.85], [5.71, 5.92, 5.67, 6.02], [5.86, 5.86, 5.77, 5.92], [5.91, 5.85, 5.79, 5.94], [5.81, 5.85, 5.7, 5.98], [5.82, 6.36, 5.74, 6.43], [6.38, 6.71, 6.37, 6.75], [6.57, 6.86, 6.57, 7.02], [6.82, 6.7, 6.61, 6.95], [6.71, 6.62, 6.57, 6.75], [6.61, 6.55, 6.46, 6.74], [6.56, 6.64, 6.31, 6.75], [6.63, 6.62, 6.51, 6.7], [6.54, 6.54, 6.45, 6.68], [6.57, 6.41, 6.39, 6.64], [6.37, 6.27, 6.24, 6.41], [6.21, 6.12, 6.1, 6.27], [6.12, 5.95, 5.82, 6.16], [5.97, 6.24, 5.71, 6.26], [6.17, 6.03, 6.03, 6.28], [6.0, 5.84, 5.8, 6.09], [5.79, 6.05, 5.72, 6.15], [6.1, 6.2, 6.08, 6.39], [6.19, 6.02, 6.0, 6.27], [5.99, 6.17, 5.99, 6.4], [6.25, 6.05, 5.88, 6.36], [6.2, 6.07, 5.73, 6.34], [6.0, 5.93, 5.86, 6.09], [5.87, 6.15, 5.87, 6.18], [6.06, 5.82, 5.8, 6.13], [5.76, 5.91, 5.75, 5.97], [5.86, 6.5, 5.82, 6.5], [7.0, 6.8, 6.6, 7.15], [6.5, 6.33, 6.33, 6.72], [6.3, 6.6, 6.3, 6.65], [6.5, 6.64, 6.46, 6.75], [6.7, 6.75, 6.63, 6.8], [6.7, 6.74, 6.64, 6.77], [6.71, 6.77, 6.69, 6.85], [6.72, 6.81, 6.62, 6.83], [6.85, 6.93, 6.83, 7.01], [6.88, 6.78, 6.77, 6.97], [6.73, 7.21, 6.72, 7.38], [7.2, 7.12, 7.12, 7.43], [7.19, 6.95, 6.88, 7.21], [6.96, 7.05, 6.93, 7.2], [7.05, 7.08, 6.87, 7.15], [7.0, 6.79, 6.76, 7.0], [6.85, 6.73, 6.67, 6.93], [6.67, 6.62, 6.57, 6.72], [6.7, 6.72, 6.6, 6.79], [6.7, 6.55, 6.4, 6.7], [6.53, 6.74, 6.53, 6.94], [6.72, 6.82, 6.7, 6.88], [6.93, 7.1, 6.8, 7.18], [7.09, 7.2, 6.93, 7.35], [7.66, 7.92, 7.6, 7.92], [7.99, 7.31, 7.29, 8.15], [7.31, 7.69, 6.91, 7.76], [7.73, 7.94, 7.46, 8.41], [7.85, 7.65, 7.36, 7.93], [7.46, 7.71, 7.4, 7.82], [7.68, 7.76, 7.55, 7.99], [7.75, 8.15, 7.66, 8.19], [8.0, 7.92, 7.5, 8.3], [8.0, 8.16, 7.78, 8.22], [8.03, 7.86, 7.8, 8.08], [7.84, 8.22, 7.77, 8.37], [8.16, 8.24, 8.11, 8.47], [8.21, 8.82, 8.21, 8.97], [8.82, 8.94, 8.76, 9.19], [8.91, 8.95, 8.75, 9.17], [8.95, 8.68, 8.61, 9.08], [8.55, 8.09, 8.05, 8.72], [8.08, 8.04, 7.89, 8.23], [7.96, 8.84, 7.96, 8.84], [8.79, 9.06, 8.71, 9.18], [9.05, 9.0, 8.95, 9.37], [9.07, 9.27, 8.8, 9.3], [9.35, 9.7, 9.08, 9.88], [9.54, 10.67, 9.25, 10.67], [10.67, 10.08, 10.03, 11.24], [9.9, 9.82, 9.56, 10.14]];
+          var vol = [24.1, 14.0, 11.8, 13.2, 14.4, 25.9, 19.0, 16.1, 13.1, 24.9, 18.1, 15.9, 13.0, 14.6, 11.9, 14.4, 16.1, 17.6, 21.1, 19.0, 13.4, 20.3, 13.7, 14.3, 21.9, 20.7, 16.5, 14.9, 16.6, 15.0, 15.8, 16.4, 14.5, 15.5, 13.0, 13.1, 10.7, 23.7, 25.6, 15.1, 16.1, 22.4, 51.1, 61.5, 61.5, 42.0, 33.8, 28.8, 29.5, 25.0, 28.8, 25.1, 23.0, 17.8, 23.1, 27.5, 21.9, 16.7, 18.5, 25.7, 18.5, 41.3, 53.3, 55.0, 31.5, 29.5, 27.5, 18.4, 37.7, 110.1, 82.7, 71.7, 38.6, 41.6, 33.0, 28.3, 26.6, 32.2, 26.8, 53.2, 41.0, 29.2, 28.2, 27.1, 20.7, 15.2, 15.9, 15.7, 23.8, 34.4, 28.6, 44.8, 62.9, 58.9, 113.2, 100.7, 94.9, 76.4, 57.9, 58.5, 75.9, 72.2, 53.7, 42.8, 60.9, 44.0, 64.5, 54.7, 42.1, 58.5, 59.0, 37.6, 50.6, 66.1, 60.9, 55.3, 83.8, 99.7, 123.5, 70.1];
+          var ma5 = [6.17, 6.15, 6.15, 6.15, 6.12, 6.11, 6.08, 6.07, 6.05, 6.06, 6.09, 6.15, 6.21, 6.26, 6.25, 6.27, 6.22, 6.18, 6.15, 6.13, 6.06, 5.99, 5.93, 5.85, 5.78, 5.71, 5.71, 5.65, 5.64, 5.58, 5.57, 5.55, 5.58, 5.54, 5.56, 5.53, 5.49, 5.49, 5.59, 5.65, 5.73, 5.83, 5.97, 6.13, 6.33, 6.5, 6.65, 6.69, 6.67, 6.63, 6.59, 6.55, 6.5, 6.39, 6.26, 6.2, 6.12, 6.04, 6.02, 6.07, 6.03, 6.06, 6.1, 6.1, 6.05, 6.07, 6.0, 5.98, 6.06, 6.24, 6.27, 6.43, 6.57, 6.62, 6.61, 6.7, 6.74, 6.8, 6.81, 6.9, 6.97, 7.0, 7.02, 7.08, 7.0, 6.92, 6.85, 6.79, 6.68, 6.67, 6.69, 6.79, 6.88, 7.16, 7.27, 7.44, 7.61, 7.7, 7.66, 7.75, 7.84, 7.84, 7.94, 7.97, 8.06, 8.08, 8.26, 8.42, 8.63, 8.73, 8.7, 8.54, 8.52, 8.54, 8.61, 8.84, 9.17, 9.54, 9.74, 9.91];
+          var ma20 = [6.24, 6.23, 6.24, 6.24, 6.23, 6.22, 6.2, 6.18, 6.17, 6.16, 6.16, 6.17, 6.17, 6.17, 6.16, 6.16, 6.15, 6.15, 6.15, 6.14, 6.13, 6.11, 6.1, 6.07, 6.05, 6.03, 6.02, 5.99, 5.97, 5.94, 5.9, 5.87, 5.83, 5.79, 5.76, 5.72, 5.69, 5.66, 5.65, 5.64, 5.64, 5.65, 5.67, 5.72, 5.78, 5.83, 5.88, 5.93, 5.98, 6.04, 6.09, 6.13, 6.16, 6.2, 6.22, 6.26, 6.29, 6.3, 6.3, 6.32, 6.33, 6.34, 6.33, 6.3, 6.25, 6.22, 6.18, 6.15, 6.14, 6.15, 6.14, 6.15, 6.17, 6.2, 6.24, 6.27, 6.31, 6.36, 6.4, 6.45, 6.5, 6.54, 6.59, 6.64, 6.69, 6.72, 6.76, 6.8, 6.8, 6.8, 6.82, 6.85, 6.87, 6.93, 6.96, 7.01, 7.06, 7.1, 7.15, 7.17, 7.22, 7.27, 7.33, 7.37, 7.44, 7.51, 7.62, 7.73, 7.86, 7.95, 8.02, 8.06, 8.14, 8.2, 8.29, 8.37, 8.45, 8.6, 8.72, 8.83];
+          var biPts = [["2026-04-27", 5.853], ["2026-05-13", 6.383], ["2026-06-12", 5.3], ["2026-06-24", 7.02], ["2026-07-09", 5.71], ["2026-08-13", 7.43], ["2026-08-25", 6.4], ["2026-09-21", 9.19], ["2026-09-28", 7.89], ["2026-10-14", 11.24]];
+          var zsBoxes = [{"x0": "2026-04-17", "x1": "2026-08-14", "zd": 5.863, "zg": 6.383, "name": "\u65e5\u7ebf\u4e2d\u67a2 [5.86~6.38] (7\u7b14)"}];
+          var markPoints = [{"name": "\u9876\u80cc\u9a70\u00b7\u51cf\u4ed3\u533a", "coord": ["2026-10-14", 11.24], "value": "\u9876\u80cc\u9a70", "itemStyle": {"color": "#f0883e"}}];
+
+          // 中枢 markArea 数据结构
+          var markAreaData = zsBoxes.map(function(z) {
+            return [
+              { name: z.name, xAxis: z.x0, yAxis: z.zd, itemStyle: { color: 'rgba(227, 179, 65, 0.12)', borderColor: 'rgba(227, 179, 65, 0.45)', borderWidth: 1 } },
+              { xAxis: z.x1, yAxis: z.zg }
+            ];
+          });
+
+          var option = {
+            backgroundColor: '#0d1117',
+            animation: false,
+            tooltip: {
+              trigger: 'axis',
+              axisPointer: { type: 'cross' },
+              backgroundColor: 'rgba(22, 27, 34, 0.95)',
+              borderColor: '#30363d',
+              textStyle: { color: '#e6edf3', fontSize: 12 },
+              formatter: function(params) {
+                var d = params[0].name;
+                var res = '<div style="font-weight:700;margin-bottom:4px;">' + d + '</div>';
+                params.forEach(function(item) {
+                  if (item.seriesName === 'K线' && item.data) {
+                    res += '开盘: ' + item.data[1] + ' | 收盘: ' + item.data[2] + '<br/>';
+                    res += '最低: ' + item.data[3] + ' | 最高: ' + item.data[4] + '<br/>';
+                  } else if (item.seriesName === '成交量') {
+                    res += '成交量: ' + item.data + ' 万手<br/>';
+                  } else if (item.seriesName.indexOf('MA') !== -1 && item.data !== '-') {
+                    res += item.marker + item.seriesName + ': ' + item.data + '<br/>';
+                  }
+                });
+                return res;
+              }
+            },
+            grid: [
+              { left: 50, right: 30, top: 25, height: '62%' },
+              { left: 50, right: 30, top: '75%', height: '17%' }
+            ],
+            xAxis: [
+              {
+                type: 'category',
+                data: dates,
+                boundaryGap: true,
+                axisLine: { lineStyle: { color: '#30363d' } },
+                axisLabel: { color: '#8b949e', fontSize: 10 }
+              },
+              {
+                type: 'category',
+                gridIndex: 1,
+                data: dates,
+                boundaryGap: true,
+                axisLine: { lineStyle: { color: '#30363d' } },
+                axisLabel: { show: false }
+              }
+            ],
+            yAxis: [
+              {
+                scale: true,
+                splitLine: { lineStyle: { color: '#161b22' } },
+                axisLabel: { color: '#8b949e', fontSize: 10 }
+              },
+              {
+                gridIndex: 1,
+                splitLine: { show: false },
+                axisLabel: { color: '#8b949e', fontSize: 10 }
+              }
+            ],
+            dataZoom: [
+              { type: 'inside', xAxisIndex: [0, 1], start: 30, end: 100 },
+              { type: 'slider', xAxisIndex: [0, 1], top: '93%', height: 14, borderColor: '#30363d', fillerColor: 'rgba(88, 166, 255, 0.2)' }
+            ],
+            series: [
+              {
+                name: 'K线',
+                type: 'candlestick',
+                data: ohlc,
+                itemStyle: {
+                  color: '#f85149',
+                  color0: '#3fb950',
+                  borderColor: '#f85149',
+                  borderColor0: '#3fb950'
+                },
+                markArea: { data: markAreaData },
+                markPoint: {
+                  data: markPoints,
+                  symbolSize: 45,
+                  label: { fontSize: 10, fontWeight: 700, color: '#fff' }
+                },
+                markLine: {
+                  symbol: 'none',
+                  data: [
+                    { yAxis: 9.2, lineStyle: { color: '#f85149', type: 'dashed' }, label: { formatter: '阻力 9.20', position: 'end', color: '#f85149', fontSize: 10 } },
+                    { yAxis: 9.6, lineStyle: { color: '#ff7b72', type: 'dotted' }, label: { formatter: '目标 9.60', position: 'end', color: '#ff7b72', fontSize: 10 } },
+                    { yAxis: 8.35, lineStyle: { color: '#e3b341', type: 'dashed' }, label: { formatter: '支撑 8.35', position: 'end', color: '#e3b341', fontSize: 10 } },
+                    { yAxis: 8.05, lineStyle: { color: '#da3633', type: 'solid', width: 1.5 }, label: { formatter: '止损 8.05', position: 'end', color: '#da3633', fontSize: 10 } }
+                  ]
+                }
+              },
+              {
+                name: 'MA5',
+                type: 'line',
+                data: ma5,
+                smooth: true,
+                showSymbol: false,
+                lineStyle: { color: '#f1e05a', width: 1.2 }
+              },
+              {
+                name: 'MA20',
+                type: 'line',
+                data: ma20,
+                smooth: true,
+                showSymbol: false,
+                lineStyle: { color: '#bc8cff', width: 1.2 }
+              },
+              {
+                name: '缠论笔',
+                type: 'line',
+                data: biPts,
+                showSymbol: true,
+                symbol: 'circle',
+                symbolSize: 6,
+                itemStyle: { color: '#00f0ff' },
+                lineStyle: { color: '#00f0ff', width: 2, type: 'solid' }
+              },
+              {
+                name: '成交量',
+                type: 'bar',
+                xAxisIndex: 1,
+                yAxisIndex: 1,
+                data: vol,
+                itemStyle: {
+                  color: function(params) {
+                    var i = params.dataIndex;
+                    var c = ohlc[i];
+                    return (c && c[1] >= c[0]) ? '#f85149' : '#3fb950';
+                  }
+                }
+              }
+            ]
+          };
+
+          myChart.setOption(option);
+          window.addEventListener('resize', function() { myChart.resize(); });
+        })();
+        
+
+        (function() {
+          var chartDom = document.getElementById('chart_000536');
+          if (!chartDom || !window.echarts) return;
+          var myChart = echarts.init(chartDom, 'dark');
+
+          var dates = ["2026-04-17", "2026-04-20", "2026-04-21", "2026-04-22", "2026-04-23", "2026-04-24", "2026-04-27", "2026-04-28", "2026-04-29", "2026-04-30", "2026-05-06", "2026-05-07", "2026-05-08", "2026-05-11", "2026-05-12", "2026-05-13", "2026-05-14", "2026-05-15", "2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21", "2026-05-22", "2026-05-25", "2026-05-26", "2026-05-27", "2026-05-28", "2026-05-29", "2026-06-01", "2026-06-02", "2026-06-03", "2026-06-04", "2026-06-05", "2026-06-08", "2026-06-09", "2026-06-10", "2026-06-11", "2026-06-12", "2026-06-15", "2026-06-16", "2026-06-17", "2026-06-18", "2026-06-22", "2026-06-23", "2026-06-24", "2026-06-25", "2026-06-26", "2026-06-29", "2026-06-30", "2026-07-01", "2026-07-02", "2026-07-03", "2026-07-06", "2026-07-07", "2026-07-08", "2026-07-09", "2026-07-10", "2026-07-13", "2026-07-14", "2026-07-15", "2026-07-16", "2026-07-17", "2026-07-20", "2026-07-21", "2026-07-22", "2026-07-23", "2026-07-24", "2026-07-27", "2026-07-28", "2026-07-29", "2026-07-30", "2026-07-31", "2026-08-03", "2026-08-04", "2026-08-05", "2026-08-06", "2026-08-07", "2026-08-10", "2026-08-11", "2026-08-12", "2026-08-13", "2026-08-14", "2026-08-17", "2026-08-18", "2026-08-19", "2026-08-20", "2026-08-21", "2026-08-24", "2026-08-25", "2026-08-26", "2026-08-27", "2026-08-28", "2026-08-31", "2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04", "2026-09-07", "2026-09-08", "2026-09-09", "2026-09-10", "2026-09-11", "2026-09-14", "2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18", "2026-09-21", "2026-09-22", "2026-09-23", "2026-09-24", "2026-09-28", "2026-09-29", "2026-09-30", "2026-10-08", "2026-10-09", "2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15"];
+          var ohlc = [[4.24, 4.26, 4.22, 4.31], [4.26, 4.26, 4.23, 4.29], [4.25, 4.21, 4.18, 4.25], [4.2, 4.18, 4.17, 4.21], [4.17, 4.09, 4.08, 4.18], [4.06, 3.92, 3.9, 4.07], [3.88, 3.95, 3.8, 3.98], [4.0, 3.97, 3.96, 4.04], [3.98, 3.99, 3.93, 4.02], [4.0, 3.94, 3.93, 4.02], [3.94, 4.0, 3.94, 4.02], [4.02, 4.06, 3.99, 4.09], [4.04, 4.12, 4.01, 4.12], [4.13, 4.08, 4.04, 4.15], [4.11, 4.04, 4.02, 4.12], [4.01, 4.06, 3.98, 4.07], [4.08, 4.0, 3.98, 4.14], [3.97, 3.91, 3.9, 3.98], [3.89, 3.96, 3.85, 3.98], [3.94, 3.99, 3.91, 4.0], [4.0, 3.9, 3.89, 4.0], [4.28, 4.29, 4.25, 4.29], [4.14, 4.38, 4.1, 4.46], [4.29, 4.39, 4.2, 4.47], [4.3, 4.6, 4.29, 4.71], [4.51, 4.43, 4.35, 4.61], [4.35, 4.26, 4.17, 4.39], [4.24, 3.89, 3.83, 4.25], [3.8, 3.92, 3.77, 4.05], [3.92, 3.83, 3.71, 3.92], [3.75, 3.75, 3.71, 3.89], [3.7, 4.13, 3.66, 4.13], [4.1, 4.13, 4.02, 4.31], [3.97, 3.96, 3.93, 4.14], [4.01, 3.99, 3.9, 4.07], [3.9, 3.73, 3.71, 3.93], [3.68, 3.5, 3.48, 3.71], [3.54, 3.5, 3.45, 3.62], [3.53, 3.59, 3.5, 3.6], [3.57, 3.63, 3.51, 3.68], [3.56, 3.85, 3.55, 3.97], [3.75, 3.6, 3.58, 3.75], [3.58, 3.56, 3.52, 3.66], [3.53, 3.54, 3.5, 3.59], [3.51, 3.36, 3.34, 3.53], [3.37, 3.16, 3.12, 3.39], [3.12, 3.13, 3.04, 3.25], [3.1, 3.09, 3.0, 3.18], [3.1, 3.35, 3.09, 3.39], [3.3, 3.69, 3.26, 3.69], [3.65, 4.06, 3.58, 4.06], [4.12, 3.98, 3.88, 4.29], [3.91, 3.61, 3.6, 4.0], [3.73, 3.5, 3.48, 3.78], [3.5, 3.43, 3.37, 3.53], [3.43, 3.49, 3.33, 3.64], [3.45, 3.4, 3.4, 3.54], [3.34, 3.16, 3.15, 3.38], [3.22, 3.19, 3.1, 3.23], [3.2, 3.15, 3.13, 3.23], [3.14, 3.18, 3.11, 3.28], [3.18, 3.05, 3.03, 3.23], [3.05, 3.01, 2.96, 3.11], [3.02, 3.05, 2.82, 3.06], [3.05, 2.99, 2.97, 3.06], [2.96, 3.07, 2.96, 3.07], [3.03, 2.97, 2.97, 3.05], [2.98, 3.11, 2.95, 3.13], [3.07, 3.09, 3.06, 3.19], [3.08, 3.13, 3.04, 3.14], [3.1, 3.09, 3.05, 3.14], [3.16, 3.17, 3.12, 3.2], [3.2, 3.23, 3.17, 3.24], [3.25, 3.27, 3.21, 3.28], [3.27, 3.33, 3.25, 3.34], [3.3, 3.32, 3.25, 3.33], [3.33, 3.29, 3.24, 3.33], [3.31, 3.33, 3.24, 3.34], [3.33, 3.34, 3.26, 3.37], [3.34, 3.41, 3.33, 3.43], [3.45, 3.32, 3.32, 3.45], [3.32, 3.28, 3.23, 3.33], [3.3, 3.32, 3.25, 3.33], [3.33, 3.26, 3.24, 3.33], [3.23, 3.09, 3.08, 3.23], [3.12, 3.16, 3.09, 3.19], [3.13, 3.22, 3.09, 3.23], [3.2, 3.16, 3.11, 3.23], [3.14, 3.26, 3.12, 3.29], [3.26, 3.59, 3.26, 3.59], [3.51, 3.51, 3.48, 3.58], [3.5, 3.54, 3.46, 3.58], [3.5, 3.6, 3.49, 3.63], [3.62, 3.96, 3.6, 3.96], [3.73, 3.76, 3.71, 3.85], [3.77, 3.66, 3.64, 3.81], [3.66, 3.6, 3.58, 3.69], [3.65, 3.64, 3.58, 3.67], [3.63, 3.66, 3.6, 3.69], [3.69, 3.57, 3.54, 3.71], [3.54, 3.52, 3.49, 3.55], [3.48, 3.43, 3.37, 3.5], [3.4, 3.41, 3.37, 3.46], [3.4, 3.34, 3.33, 3.42], [3.32, 3.38, 3.3, 3.39], [3.38, 3.4, 3.33, 3.42], [3.44, 3.51, 3.4, 3.55], [3.57, 3.7, 3.57, 3.84], [3.65, 3.63, 3.58, 3.72], [3.6, 3.51, 3.51, 3.69], [3.5, 3.49, 3.43, 3.53], [3.61, 3.39, 3.36, 3.67], [3.4, 3.38, 3.33, 3.43], [3.39, 3.34, 3.31, 3.4], [3.33, 3.28, 3.25, 3.38], [3.28, 3.32, 3.19, 3.32], [3.32, 3.25, 3.23, 3.32], [3.2, 3.26, 3.15, 3.28], [3.26, 3.19, 3.18, 3.26], [3.15, 3.12, 3.11, 3.19]];
+          var vol = [32.0, 33.9, 32.5, 27.9, 39.3, 49.6, 43.1, 37.6, 25.5, 25.0, 41.0, 39.7, 43.7, 44.4, 30.9, 38.5, 53.9, 45.0, 33.6, 28.1, 33.4, 188.9, 265.1, 176.1, 248.1, 178.5, 134.1, 162.6, 84.1, 75.8, 80.1, 110.0, 208.4, 123.3, 81.9, 99.2, 91.0, 59.6, 50.9, 64.5, 134.3, 88.4, 68.6, 42.2, 67.8, 79.2, 64.7, 51.6, 108.3, 104.8, 161.8, 248.9, 165.8, 111.8, 73.8, 87.2, 97.3, 81.7, 55.3, 51.2, 73.5, 79.1, 64.0, 78.6, 44.8, 39.6, 33.5, 59.7, 61.2, 44.0, 40.7, 59.4, 42.7, 44.9, 60.9, 50.9, 42.0, 38.9, 40.9, 43.1, 54.0, 42.3, 31.8, 29.0, 49.3, 32.6, 30.9, 29.2, 46.0, 82.8, 166.7, 110.5, 110.2, 180.3, 168.4, 110.6, 72.6, 62.0, 68.5, 68.9, 38.6, 54.0, 33.5, 35.0, 38.2, 44.4, 79.5, 172.7, 119.8, 65.3, 45.6, 83.2, 51.6, 35.1, 35.9, 33.7, 23.9, 31.4, 22.3, 27.6];
+          var ma5 = [4.27, 4.26, 4.25, 4.23, 4.2, 4.13, 4.07, 4.02, 3.98, 3.95, 3.97, 3.99, 4.02, 4.04, 4.06, 4.07, 4.06, 4.02, 3.99, 3.98, 3.95, 4.01, 4.1, 4.19, 4.31, 4.42, 4.41, 4.31, 4.22, 4.07, 3.93, 3.9, 3.95, 3.96, 3.99, 3.99, 3.86, 3.74, 3.66, 3.59, 3.61, 3.63, 3.65, 3.64, 3.58, 3.44, 3.35, 3.26, 3.22, 3.28, 3.46, 3.63, 3.74, 3.77, 3.72, 3.6, 3.49, 3.4, 3.33, 3.28, 3.22, 3.15, 3.12, 3.09, 3.06, 3.03, 3.02, 3.04, 3.05, 3.07, 3.08, 3.12, 3.14, 3.18, 3.22, 3.26, 3.29, 3.31, 3.32, 3.34, 3.34, 3.34, 3.33, 3.32, 3.25, 3.22, 3.21, 3.18, 3.18, 3.28, 3.35, 3.41, 3.5, 3.64, 3.67, 3.7, 3.72, 3.72, 3.66, 3.63, 3.6, 3.56, 3.52, 3.45, 3.42, 3.39, 3.41, 3.47, 3.52, 3.55, 3.57, 3.54, 3.48, 3.42, 3.38, 3.34, 3.31, 3.29, 3.26, 3.23];
+          var ma20 = [4.3, 4.29, 4.28, 4.27, 4.25, 4.23, 4.21, 4.2, 4.19, 4.17, 4.16, 4.16, 4.15, 4.14, 4.13, 4.11, 4.1, 4.08, 4.06, 4.05, 4.03, 4.03, 4.04, 4.05, 4.08, 4.1, 4.12, 4.11, 4.11, 4.11, 4.09, 4.1, 4.1, 4.09, 4.09, 4.07, 4.05, 4.03, 4.01, 3.99, 3.99, 3.95, 3.91, 3.87, 3.81, 3.74, 3.69, 3.65, 3.62, 3.61, 3.63, 3.62, 3.59, 3.57, 3.54, 3.53, 3.53, 3.51, 3.49, 3.46, 3.43, 3.4, 3.38, 3.35, 3.33, 3.33, 3.32, 3.32, 3.31, 3.28, 3.23, 3.19, 3.17, 3.16, 3.16, 3.15, 3.14, 3.15, 3.16, 3.17, 3.18, 3.19, 3.21, 3.22, 3.22, 3.23, 3.24, 3.24, 3.25, 3.27, 3.29, 3.31, 3.33, 3.36, 3.39, 3.4, 3.42, 3.43, 3.45, 3.46, 3.47, 3.48, 3.48, 3.48, 3.5, 3.51, 3.52, 3.55, 3.57, 3.57, 3.57, 3.56, 3.55, 3.52, 3.49, 3.48, 3.46, 3.44, 3.42, 3.39];
+          var biPts = [["2026-04-27", 3.8], ["2026-05-11", 4.15], ["2026-05-18", 3.85], ["2026-05-26", 4.71], ["2026-06-29", 3.0], ["2026-07-03", 4.29], ["2026-07-21", 2.82], ["2026-09-01", 3.96], ["2026-09-16", 3.3], ["2026-09-21", 3.84]];
+          var zsBoxes = [{"x0": "2026-04-24", "x1": "2026-09-17", "zd": 3.85, "zg": 4.15, "name": "\u65e5\u7ebf\u4e2d\u67a2 [3.85~4.15] (8\u7b14)"}];
+          var markPoints = [{"name": "\u4e09\u5356\u00b7\u4e0b\u8dcc\u786e\u8ba4", "coord": ["2026-09-21", 3.84], "value": "\u4e09\u5356", "itemStyle": {"color": "#f85149"}}];
+
+          // 中枢 markArea 数据结构
+          var markAreaData = zsBoxes.map(function(z) {
+            return [
+              { name: z.name, xAxis: z.x0, yAxis: z.zd, itemStyle: { color: 'rgba(227, 179, 65, 0.12)', borderColor: 'rgba(227, 179, 65, 0.45)', borderWidth: 1 } },
+              { xAxis: z.x1, yAxis: z.zg }
+            ];
+          });
+
+          var option = {
+            backgroundColor: '#0d1117',
+            animation: false,
+            tooltip: {
+              trigger: 'axis',
+              axisPointer: { type: 'cross' },
+              backgroundColor: 'rgba(22, 27, 34, 0.95)',
+              borderColor: '#30363d',
+              textStyle: { color: '#e6edf3', fontSize: 12 },
+              formatter: function(params) {
+                var d = params[0].name;
+                var res = '<div style="font-weight:700;margin-bottom:4px;">' + d + '</div>';
+                params.forEach(function(item) {
+                  if (item.seriesName === 'K线' && item.data) {
+                    res += '开盘: ' + item.data[1] + ' | 收盘: ' + item.data[2] + '<br/>';
+                    res += '最低: ' + item.data[3] + ' | 最高: ' + item.data[4] + '<br/>';
+                  } else if (item.seriesName === '成交量') {
+                    res += '成交量: ' + item.data + ' 万手<br/>';
+                  } else if (item.seriesName.indexOf('MA') !== -1 && item.data !== '-') {
+                    res += item.marker + item.seriesName + ': ' + item.data + '<br/>';
+                  }
+                });
+                return res;
+              }
+            },
+            grid: [
+              { left: 50, right: 30, top: 25, height: '62%' },
+              { left: 50, right: 30, top: '75%', height: '17%' }
+            ],
+            xAxis: [
+              {
+                type: 'category',
+                data: dates,
+                boundaryGap: true,
+                axisLine: { lineStyle: { color: '#30363d' } },
+                axisLabel: { color: '#8b949e', fontSize: 10 }
+              },
+              {
+                type: 'category',
+                gridIndex: 1,
+                data: dates,
+                boundaryGap: true,
+                axisLine: { lineStyle: { color: '#30363d' } },
+                axisLabel: { show: false }
+              }
+            ],
+            yAxis: [
+              {
+                scale: true,
+                splitLine: { lineStyle: { color: '#161b22' } },
+                axisLabel: { color: '#8b949e', fontSize: 10 }
+              },
+              {
+                gridIndex: 1,
+                splitLine: { show: false },
+                axisLabel: { color: '#8b949e', fontSize: 10 }
+              }
+            ],
+            dataZoom: [
+              { type: 'inside', xAxisIndex: [0, 1], start: 30, end: 100 },
+              { type: 'slider', xAxisIndex: [0, 1], top: '93%', height: 14, borderColor: '#30363d', fillerColor: 'rgba(88, 166, 255, 0.2)' }
+            ],
+            series: [
+              {
+                name: 'K线',
+                type: 'candlestick',
+                data: ohlc,
+                itemStyle: {
+                  color: '#f85149',
+                  color0: '#3fb950',
+                  borderColor: '#f85149',
+                  borderColor0: '#3fb950'
+                },
+                markArea: { data: markAreaData },
+                markPoint: {
+                  data: markPoints,
+                  symbolSize: 45,
+                  label: { fontSize: 10, fontWeight: 700, color: '#fff' }
+                },
+                markLine: {
+                  symbol: 'none',
+                  data: [
+                    { yAxis: 3.65, lineStyle: { color: '#f85149', type: 'dashed' }, label: { formatter: '阻力 3.65', position: 'end', color: '#f85149', fontSize: 10 } },
+                    { yAxis: 3.84, lineStyle: { color: '#ff7b72', type: 'dotted' }, label: { formatter: '目标 3.84', position: 'end', color: '#ff7b72', fontSize: 10 } },
+                    { yAxis: 3.3, lineStyle: { color: '#e3b341', type: 'dashed' }, label: { formatter: '支撑 3.30', position: 'end', color: '#e3b341', fontSize: 10 } },
+                    { yAxis: 3.2, lineStyle: { color: '#da3633', type: 'solid', width: 1.5 }, label: { formatter: '止损 3.20', position: 'end', color: '#da3633', fontSize: 10 } }
+                  ]
+                }
+              },
+              {
+                name: 'MA5',
+                type: 'line',
+                data: ma5,
+                smooth: true,
+                showSymbol: false,
+                lineStyle: { color: '#f1e05a', width: 1.2 }
+              },
+              {
+                name: 'MA20',
+                type: 'line',
+                data: ma20,
+                smooth: true,
+                showSymbol: false,
+                lineStyle: { color: '#bc8cff', width: 1.2 }
+              },
+              {
+                name: '缠论笔',
+                type: 'line',
+                data: biPts,
+                showSymbol: true,
+                symbol: 'circle',
+                symbolSize: 6,
+                itemStyle: { color: '#00f0ff' },
+                lineStyle: { color: '#00f0ff', width: 2, type: 'solid' }
+              },
+              {
+                name: '成交量',
+                type: 'bar',
+                xAxisIndex: 1,
+                yAxisIndex: 1,
+                data: vol,
+                itemStyle: {
+                  color: function(params) {
+                    var i = params.dataIndex;
+                    var c = ohlc[i];
+                    return (c && c[1] >= c[0]) ? '#f85149' : '#3fb950';
+                  }
+                }
+              }
+            ]
+          };
+
+          myChart.setOption(option);
+          window.addEventListener('resize', function() { myChart.resize(); });
+        })();
+        
+
+        (function() {
+          var chartDom = document.getElementById('chart_000612');
+          if (!chartDom || !window.echarts) return;
+          var myChart = echarts.init(chartDom, 'dark');
+
+          var dates = ["2026-04-17", "2026-04-20", "2026-04-21", "2026-04-22", "2026-04-23", "2026-04-24", "2026-04-27", "2026-04-28", "2026-04-29", "2026-04-30", "2026-05-06", "2026-05-07", "2026-05-08", "2026-05-11", "2026-05-12", "2026-05-13", "2026-05-14", "2026-05-15", "2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21", "2026-05-22", "2026-05-25", "2026-05-26", "2026-05-27", "2026-05-28", "2026-05-29", "2026-06-01", "2026-06-02", "2026-06-03", "2026-06-04", "2026-06-05", "2026-06-08", "2026-06-09", "2026-06-10", "2026-06-11", "2026-06-12", "2026-06-15", "2026-06-16", "2026-06-17", "2026-06-18", "2026-06-22", "2026-06-23", "2026-06-24", "2026-06-25", "2026-06-26", "2026-06-29", "2026-06-30", "2026-07-01", "2026-07-02", "2026-07-03", "2026-07-06", "2026-07-07", "2026-07-08", "2026-07-09", "2026-07-10", "2026-07-13", "2026-07-14", "2026-07-15", "2026-07-16", "2026-07-17", "2026-07-20", "2026-07-21", "2026-07-22", "2026-07-23", "2026-07-24", "2026-07-27", "2026-07-28", "2026-07-29", "2026-07-30", "2026-07-31", "2026-08-03", "2026-08-04", "2026-08-05", "2026-08-06", "2026-08-07", "2026-08-10", "2026-08-11", "2026-08-12", "2026-08-13", "2026-08-14", "2026-08-17", "2026-08-18", "2026-08-19", "2026-08-20", "2026-08-21", "2026-08-24", "2026-08-25", "2026-08-26", "2026-08-27", "2026-08-28", "2026-08-31", "2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04", "2026-09-07", "2026-09-08", "2026-09-09", "2026-09-10", "2026-09-11", "2026-09-14", "2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18", "2026-09-21", "2026-09-22", "2026-09-23", "2026-09-24", "2026-09-28", "2026-09-29", "2026-09-30", "2026-10-08", "2026-10-09", "2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15"];
+          var ohlc = [[13.295, 13.475, 13.275, 13.575], [13.325, 13.155, 13.075, 13.365], [13.175, 13.065, 12.975, 13.235], [13.025, 13.165, 13.015, 13.305], [13.175, 12.805, 12.685, 13.245], [12.865, 12.865, 12.575, 12.965], [12.825, 12.845, 12.725, 12.935], [12.875, 12.555, 12.495, 12.875], [12.555, 13.095, 12.475, 13.105], [12.975, 12.965, 12.805, 13.325], [13.135, 13.365, 12.975, 13.465], [13.345, 13.215, 13.025, 13.425], [13.095, 12.905, 12.795, 13.155], [13.055, 12.805, 12.685, 13.235], [12.905, 12.595, 12.475, 13.005], [12.585, 12.695, 12.465, 12.835], [12.675, 12.335, 12.335, 12.875], [12.235, 11.585, 11.485, 12.325], [11.365, 11.445, 11.225, 11.555], [11.545, 11.655, 11.285, 11.715], [11.575, 11.915, 11.555, 12.295], [12.065, 11.525, 11.485, 12.225], [11.635, 12.145, 11.515, 12.275], [12.225, 11.955, 11.865, 12.275], [12.08, 12.49, 11.75, 12.57], [12.33, 12.1, 12.04, 12.53], [11.99, 11.82, 11.55, 12.1], [11.98, 11.56, 11.51, 12.26], [11.57, 11.78, 11.54, 11.9], [11.84, 12.22, 11.75, 12.28], [12.1, 12.1, 11.94, 12.37], [11.94, 11.45, 11.4, 11.94], [11.43, 11.16, 11.09, 11.51], [10.76, 10.43, 10.32, 10.95], [10.56, 10.62, 10.18, 10.66], [10.46, 10.55, 10.29, 10.62], [10.51, 10.58, 10.45, 10.74], [10.75, 11.43, 10.71, 11.64], [11.48, 11.59, 11.39, 11.75], [11.36, 11.03, 10.99, 11.47], [10.96, 10.97, 10.83, 11.25], [11.0, 11.03, 10.8, 11.32], [11.04, 12.13, 10.97, 12.13], [12.47, 11.54, 11.51, 12.55], [11.59, 12.0, 11.46, 12.28], [11.68, 11.4, 11.31, 11.84], [11.35, 10.87, 10.76, 11.44], [10.86, 10.93, 10.6, 11.05], [10.63, 10.59, 10.4, 10.77], [10.49, 10.57, 10.24, 10.69], [10.65, 10.57, 10.47, 10.81], [10.7, 10.75, 10.64, 10.9], [10.8, 10.57, 10.53, 11.0], [10.48, 10.36, 10.3, 10.59], [10.35, 10.08, 10.07, 10.41], [10.01, 9.8, 9.48, 10.1], [9.86, 10.01, 9.72, 10.25], [10.6, 10.32, 10.32, 10.62], [10.36, 10.87, 10.23, 10.95], [10.8, 10.84, 10.66, 11.08], [10.76, 10.58, 10.54, 10.88], [10.53, 10.29, 10.19, 10.58], [10.35, 10.73, 10.35, 10.86], [10.63, 10.73, 10.43, 10.74], [10.63, 10.64, 10.56, 10.94], [10.64, 11.04, 10.57, 11.2], [10.83, 10.41, 10.4, 10.86], [10.46, 10.62, 10.41, 10.64], [10.47, 10.53, 10.38, 10.58], [10.58, 11.01, 10.57, 11.1], [11.06, 10.96, 10.85, 11.27], [10.93, 11.09, 10.93, 11.25], [11.09, 11.06, 10.97, 11.24], [11.15, 11.38, 11.09, 11.47], [11.32, 11.5, 11.21, 11.58], [11.56, 11.42, 11.29, 11.65], [11.42, 11.5, 11.38, 11.63], [11.69, 11.68, 11.51, 11.73], [11.74, 11.54, 11.5, 12.05], [11.67, 11.68, 11.61, 12.0], [11.56, 11.11, 11.07, 11.59], [11.03, 11.13, 10.87, 11.17], [11.24, 11.35, 11.13, 11.37], [11.28, 11.23, 11.11, 11.38], [11.1, 10.94, 10.89, 11.16], [11.1, 10.86, 10.86, 11.34], [10.88, 11.13, 10.83, 11.16], [11.17, 11.11, 10.88, 11.2], [11.06, 10.94, 10.8, 11.15], [10.98, 11.15, 10.97, 11.28], [11.07, 11.27, 11.03, 11.27], [11.3, 11.46, 11.17, 11.52], [11.3, 11.3, 10.9, 11.32], [11.36, 11.41, 11.36, 11.59], [11.32, 11.1, 10.98, 11.38], [11.25, 11.28, 11.22, 11.4], [11.39, 11.03, 10.98, 11.42], [11.01, 10.8, 10.77, 11.02], [10.85, 10.99, 10.84, 11.08], [11.03, 11.39, 11.01, 11.39], [11.33, 11.19, 11.17, 11.38], [10.82, 10.61, 10.33, 10.82], [10.46, 10.52, 10.43, 10.57], [10.73, 10.88, 10.27, 11.21], [10.8, 11.47, 10.8, 11.48], [11.53, 11.34, 11.14, 11.66], [11.45, 11.4, 11.34, 11.55], [11.36, 11.32, 11.18, 11.45], [11.32, 11.18, 11.16, 11.39], [11.18, 10.94, 10.9, 11.25], [10.88, 10.71, 10.7, 11.07], [10.54, 10.19, 10.09, 10.66], [10.23, 10.63, 10.15, 10.67], [10.55, 10.44, 10.42, 10.61], [10.39, 10.33, 10.3, 10.51], [10.23, 10.46, 10.18, 10.52], [10.51, 10.11, 10.08, 10.56], [10.01, 10.18, 9.92, 10.29], [10.12, 10.06, 10.01, 10.26], [9.86, 9.62, 9.57, 9.86]];
+          var vol = [47.0, 46.0, 28.9, 39.0, 42.8, 37.3, 25.1, 37.5, 51.2, 41.1, 66.4, 49.4, 46.7, 53.5, 41.8, 39.0, 41.8, 58.6, 29.3, 32.1, 48.9, 44.8, 49.1, 37.0, 84.4, 54.0, 41.9, 44.0, 35.4, 44.8, 45.2, 49.6, 40.7, 39.0, 28.2, 24.1, 24.6, 74.9, 56.3, 51.9, 36.3, 39.8, 88.4, 92.1, 70.1, 55.2, 40.4, 33.1, 40.0, 34.2, 35.4, 38.4, 38.7, 23.8, 26.4, 41.4, 33.2, 53.7, 59.0, 51.5, 33.2, 32.0, 49.3, 37.9, 41.3, 49.1, 41.8, 23.9, 23.3, 49.4, 33.6, 33.3, 24.7, 41.6, 36.5, 37.4, 33.1, 35.4, 49.1, 42.8, 47.9, 32.8, 31.1, 23.0, 25.2, 37.1, 30.8, 28.0, 25.6, 34.9, 29.5, 40.0, 38.4, 41.6, 33.5, 32.7, 35.9, 32.3, 35.0, 53.3, 30.6, 59.2, 19.6, 74.3, 75.1, 56.9, 33.9, 38.1, 32.0, 32.7, 30.8, 44.3, 40.1, 25.7, 20.3, 30.7, 32.2, 27.3, 21.3, 32.8];
+          var ma5 = [13.23, 13.22, 13.19, 13.25, 13.13, 13.01, 12.95, 12.85, 12.83, 12.87, 12.96, 13.04, 13.11, 13.05, 12.98, 12.84, 12.67, 12.4, 12.13, 11.94, 11.79, 11.62, 11.74, 11.84, 12.01, 12.04, 12.1, 11.98, 11.95, 11.9, 11.9, 11.82, 11.74, 11.47, 11.15, 10.84, 10.67, 10.72, 10.95, 11.04, 11.12, 11.21, 11.35, 11.34, 11.53, 11.62, 11.59, 11.35, 11.16, 10.87, 10.71, 10.68, 10.61, 10.56, 10.47, 10.31, 10.16, 10.11, 10.22, 10.37, 10.52, 10.58, 10.66, 10.63, 10.59, 10.69, 10.71, 10.69, 10.65, 10.72, 10.71, 10.84, 10.93, 11.1, 11.2, 11.29, 11.37, 11.5, 11.53, 11.56, 11.5, 11.43, 11.36, 11.3, 11.15, 11.1, 11.1, 11.05, 11.0, 11.04, 11.12, 11.19, 11.22, 11.32, 11.31, 11.31, 11.22, 11.12, 11.04, 11.1, 11.08, 11.0, 10.94, 10.92, 10.93, 10.96, 11.12, 11.28, 11.34, 11.24, 11.11, 10.87, 10.73, 10.58, 10.46, 10.41, 10.39, 10.3, 10.23, 10.09];
+          var ma20 = [11.86, 11.95, 12.08, 12.19, 12.28, 12.38, 12.45, 12.48, 12.55, 12.62, 12.71, 12.82, 12.91, 12.95, 12.97, 13.01, 12.97, 12.89, 12.82, 12.73, 12.65, 12.57, 12.52, 12.46, 12.45, 12.41, 12.36, 12.31, 12.24, 12.21, 12.14, 12.05, 11.97, 11.85, 11.75, 11.64, 11.55, 11.55, 11.55, 11.52, 11.48, 11.45, 11.45, 11.43, 11.4, 11.37, 11.32, 11.29, 11.23, 11.15, 11.07, 11.04, 11.01, 11.0, 10.98, 10.94, 10.91, 10.86, 10.82, 10.81, 10.79, 10.75, 10.68, 10.64, 10.57, 10.56, 10.53, 10.52, 10.52, 10.54, 10.56, 10.57, 10.6, 10.65, 10.72, 10.8, 10.88, 10.94, 10.98, 11.02, 11.05, 11.09, 11.12, 11.14, 11.16, 11.15, 11.19, 11.21, 11.23, 11.24, 11.25, 11.27, 11.28, 11.29, 11.27, 11.26, 11.23, 11.19, 11.16, 11.15, 11.15, 11.13, 11.09, 11.07, 11.09, 11.12, 11.13, 11.14, 11.15, 11.14, 11.12, 11.05, 11.02, 10.97, 10.93, 10.89, 10.85, 10.81, 10.77, 10.68];
+          var biPts = [["2026-04-17", 13.575], ["2026-05-18", 11.225], ["2026-05-26", 12.57], ["2026-06-09", 10.18], ["2026-06-23", 12.55], ["2026-07-09", 9.48], ["2026-08-11", 12.05], ["2026-08-25", 10.8], ["2026-09-01", 11.59]];
+          var zsBoxes = [{"x0": "2026-04-17", "x1": "2026-07-10", "zd": 12.235, "zg": 15.165, "name": "\u65e5\u7ebf\u4e2d\u67a2 [12.23~15.16] (9\u7b14)"}, {"x0": "2026-07-08", "x1": "2026-09-02", "zd": 10.8, "zg": 11.59, "name": "\u65e5\u7ebf\u4e2d\u67a2 [10.80~11.59] (3\u7b14)"}];
+          var markPoints = [];
+
+          // 中枢 markArea 数据结构
+          var markAreaData = zsBoxes.map(function(z) {
+            return [
+              { name: z.name, xAxis: z.x0, yAxis: z.zd, itemStyle: { color: 'rgba(227, 179, 65, 0.12)', borderColor: 'rgba(227, 179, 65, 0.45)', borderWidth: 1 } },
+              { xAxis: z.x1, yAxis: z.zg }
+            ];
+          });
+
+          var option = {
+            backgroundColor: '#0d1117',
+            animation: false,
+            tooltip: {
+              trigger: 'axis',
+              axisPointer: { type: 'cross' },
+              backgroundColor: 'rgba(22, 27, 34, 0.95)',
+              borderColor: '#30363d',
+              textStyle: { color: '#e6edf3', fontSize: 12 },
+              formatter: function(params) {
+                var d = params[0].name;
+                var res = '<div style="font-weight:700;margin-bottom:4px;">' + d + '</div>';
+                params.forEach(function(item) {
+                  if (item.seriesName === 'K线' && item.data) {
+                    res += '开盘: ' + item.data[1] + ' | 收盘: ' + item.data[2] + '<br/>';
+                    res += '最低: ' + item.data[3] + ' | 最高: ' + item.data[4] + '<br/>';
+                  } else if (item.seriesName === '成交量') {
+                    res += '成交量: ' + item.data + ' 万手<br/>';
+                  } else if (item.seriesName.indexOf('MA') !== -1 && item.data !== '-') {
+                    res += item.marker + item.seriesName + ': ' + item.data + '<br/>';
+                  }
+                });
+                return res;
+              }
+            },
+            grid: [
+              { left: 50, right: 30, top: 25, height: '62%' },
+              { left: 50, right: 30, top: '75%', height: '17%' }
+            ],
+            xAxis: [
+              {
+                type: 'category',
+                data: dates,
+                boundaryGap: true,
+                axisLine: { lineStyle: { color: '#30363d' } },
+                axisLabel: { color: '#8b949e', fontSize: 10 }
+              },
+              {
+                type: 'category',
+                gridIndex: 1,
+                data: dates,
+                boundaryGap: true,
+                axisLine: { lineStyle: { color: '#30363d' } },
+                axisLabel: { show: false }
+              }
+            ],
+            yAxis: [
+              {
+                scale: true,
+                splitLine: { lineStyle: { color: '#161b22' } },
+                axisLabel: { color: '#8b949e', fontSize: 10 }
+              },
+              {
+                gridIndex: 1,
+                splitLine: { show: false },
+                axisLabel: { color: '#8b949e', fontSize: 10 }
+              }
+            ],
+            dataZoom: [
+              { type: 'inside', xAxisIndex: [0, 1], start: 30, end: 100 },
+              { type: 'slider', xAxisIndex: [0, 1], top: '93%', height: 14, borderColor: '#30363d', fillerColor: 'rgba(88, 166, 255, 0.2)' }
+            ],
+            series: [
+              {
+                name: 'K线',
+                type: 'candlestick',
+                data: ohlc,
+                itemStyle: {
+                  color: '#f85149',
+                  color0: '#3fb950',
+                  borderColor: '#f85149',
+                  borderColor0: '#3fb950'
+                },
+                markArea: { data: markAreaData },
+                markPoint: {
+                  data: markPoints,
+                  symbolSize: 45,
+                  label: { fontSize: 10, fontWeight: 700, color: '#fff' }
+                },
+                markLine: {
+                  symbol: 'none',
+                  data: [
+                    { yAxis: 11.2, lineStyle: { color: '#f85149', type: 'dashed' }, label: { formatter: '阻力 11.20', position: 'end', color: '#f85149', fontSize: 10 } },
+                    { yAxis: 11.6, lineStyle: { color: '#ff7b72', type: 'dotted' }, label: { formatter: '目标 11.60', position: 'end', color: '#ff7b72', fontSize: 10 } },
+                    { yAxis: 10.2, lineStyle: { color: '#e3b341', type: 'dashed' }, label: { formatter: '支撑 10.20', position: 'end', color: '#e3b341', fontSize: 10 } },
+                    { yAxis: 9.85, lineStyle: { color: '#da3633', type: 'solid', width: 1.5 }, label: { formatter: '止损 9.85', position: 'end', color: '#da3633', fontSize: 10 } }
+                  ]
+                }
+              },
+              {
+                name: 'MA5',
+                type: 'line',
+                data: ma5,
+                smooth: true,
+                showSymbol: false,
+                lineStyle: { color: '#f1e05a', width: 1.2 }
+              },
+              {
+                name: 'MA20',
+                type: 'line',
+                data: ma20,
+                smooth: true,
+                showSymbol: false,
+                lineStyle: { color: '#bc8cff', width: 1.2 }
+              },
+              {
+                name: '缠论笔',
+                type: 'line',
+                data: biPts,
+                showSymbol: true,
+                symbol: 'circle',
+                symbolSize: 6,
+                itemStyle: { color: '#00f0ff' },
+                lineStyle: { color: '#00f0ff', width: 2, type: 'solid' }
+              },
+              {
+                name: '成交量',
+                type: 'bar',
+                xAxisIndex: 1,
+                yAxisIndex: 1,
+                data: vol,
+                itemStyle: {
+                  color: function(params) {
+                    var i = params.dataIndex;
+                    var c = ohlc[i];
+                    return (c && c[1] >= c[0]) ? '#f85149' : '#3fb950';
+                  }
+                }
+              }
+            ]
+          };
+
+          myChart.setOption(option);
+          window.addEventListener('resize', function() { myChart.resize(); });
+        })();
+        
+
+        (function() {
+          var chartDom = document.getElementById('chart_601139');
+          if (!chartDom || !window.echarts) return;
+          var myChart = echarts.init(chartDom, 'dark');
+
+          var dates = ["2026-04-17", "2026-04-20", "2026-04-21", "2026-04-22", "2026-04-23", "2026-04-24", "2026-04-27", "2026-04-28", "2026-04-29", "2026-04-30", "2026-05-06", "2026-05-07", "2026-05-08", "2026-05-11", "2026-05-12", "2026-05-13", "2026-05-14", "2026-05-15", "2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21", "2026-05-22", "2026-05-25", "2026-05-26", "2026-05-27", "2026-05-28", "2026-05-29", "2026-06-01", "2026-06-02", "2026-06-03", "2026-06-04", "2026-06-05", "2026-06-08", "2026-06-09", "2026-06-10", "2026-06-11", "2026-06-12", "2026-06-15", "2026-06-16", "2026-06-17", "2026-06-18", "2026-06-22", "2026-06-23", "2026-06-24", "2026-06-25", "2026-06-26", "2026-06-29", "2026-06-30", "2026-07-01", "2026-07-02", "2026-07-03", "2026-07-06", "2026-07-07", "2026-07-08", "2026-07-09", "2026-07-10", "2026-07-13", "2026-07-14", "2026-07-15", "2026-07-16", "2026-07-17", "2026-07-20", "2026-07-21", "2026-07-22", "2026-07-23", "2026-07-24", "2026-07-27", "2026-07-28", "2026-07-29", "2026-07-30", "2026-07-31", "2026-08-03", "2026-08-04", "2026-08-05", "2026-08-06", "2026-08-07", "2026-08-10", "2026-08-11", "2026-08-12", "2026-08-13", "2026-08-14", "2026-08-17", "2026-08-18", "2026-08-19", "2026-08-20", "2026-08-21", "2026-08-24", "2026-08-25", "2026-08-26", "2026-08-27", "2026-08-28", "2026-08-31", "2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04", "2026-09-07", "2026-09-08", "2026-09-09", "2026-09-10", "2026-09-11", "2026-09-14", "2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18", "2026-09-21", "2026-09-22", "2026-09-23", "2026-09-24", "2026-09-28", "2026-09-29", "2026-09-30", "2026-10-08", "2026-10-09", "2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15"];
+          var ohlc = [[6.71, 6.64, 6.63, 6.77], [6.64, 6.7, 6.6, 6.72], [6.66, 6.82, 6.66, 6.86], [6.75, 6.78, 6.75, 6.83], [6.76, 6.94, 6.76, 6.97], [6.94, 6.9, 6.85, 6.99], [6.85, 6.85, 6.77, 6.94], [6.85, 6.92, 6.81, 6.94], [6.89, 6.89, 6.78, 6.93], [6.85, 6.77, 6.69, 6.88], [6.75, 6.73, 6.61, 6.76], [6.68, 6.59, 6.57, 6.7], [6.58, 6.6, 6.53, 6.64], [6.59, 6.61, 6.55, 6.64], [6.61, 6.5, 6.47, 6.64], [6.5, 6.45, 6.4, 6.54], [6.51, 6.45, 6.45, 6.6], [6.46, 6.37, 6.31, 6.47], [6.35, 6.44, 6.28, 6.46], [6.44, 6.54, 6.41, 6.56], [6.52, 6.55, 6.5, 6.62], [6.53, 6.35, 6.34, 6.54], [6.38, 6.39, 6.28, 6.4], [6.39, 6.3, 6.25, 6.41], [6.27, 6.33, 6.23, 6.34], [6.29, 6.28, 6.24, 6.37], [6.27, 6.25, 6.22, 6.35], [6.25, 6.32, 6.24, 6.38], [6.38, 6.57, 6.32, 6.59], [6.55, 6.47, 6.45, 6.58], [6.5, 6.44, 6.33, 6.51], [6.4, 6.34, 6.3, 6.44], [6.35, 6.27, 6.24, 6.4], [6.19, 6.11, 6.05, 6.22], [6.09, 6.04, 6.01, 6.12], [6.01, 5.98, 5.94, 6.03], [5.99, 6.04, 5.95, 6.05], [5.98, 6.11, 5.95, 6.12], [6.09, 6.15, 6.06, 6.17], [6.14, 6.06, 6.04, 6.15], [6.06, 6.04, 5.98, 6.06], [6.08, 5.96, 5.94, 6.09], [5.97, 5.9, 5.79, 5.97], [5.89, 5.94, 5.88, 6.02], [5.94, 5.81, 5.8, 5.94], [5.77, 5.72, 5.68, 5.8], [5.71, 5.63, 5.58, 5.74], [5.65, 5.66, 5.49, 5.7], [5.7, 5.66, 5.59, 5.86], [5.63, 5.77, 5.61, 5.83], [5.81, 5.82, 5.75, 5.87], [5.81, 5.9, 5.8, 5.91], [5.87, 6.0, 5.82, 6.03], [5.99, 5.87, 5.86, 5.99], [5.88, 5.92, 5.84, 6.0], [5.95, 5.89, 5.84, 5.95], [5.87, 5.86, 5.77, 5.89], [5.98, 6.06, 5.96, 6.11], [6.04, 6.13, 5.92, 6.16], [6.12, 6.22, 6.09, 6.25], [6.23, 6.19, 6.13, 6.25], [6.19, 6.21, 6.17, 6.31], [6.2, 6.37, 6.19, 6.38], [6.33, 6.38, 6.31, 6.53], [6.36, 6.41, 6.27, 6.43], [6.38, 6.5, 6.38, 6.53], [6.51, 6.43, 6.41, 6.59], [6.32, 6.45, 6.32, 6.47], [6.42, 6.34, 6.31, 6.43], [6.39, 6.48, 6.35, 6.52], [6.5, 6.54, 6.43, 6.55], [6.51, 6.55, 6.45, 6.56], [6.55, 6.64, 6.53, 6.65], [6.64, 6.49, 6.48, 6.66], [6.49, 6.45, 6.4, 6.49], [6.44, 6.41, 6.35, 6.46], [6.44, 6.34, 6.31, 6.47], [6.31, 6.4, 6.3, 6.46], [6.41, 6.32, 6.32, 6.46], [6.31, 6.28, 6.27, 6.37], [6.28, 6.23, 6.22, 6.3], [6.23, 6.21, 6.17, 6.25], [6.25, 6.23, 6.18, 6.29], [6.25, 6.28, 6.21, 6.33], [6.27, 6.35, 6.25, 6.35], [6.32, 6.33, 6.27, 6.39], [6.34, 6.28, 6.25, 6.36], [6.26, 6.29, 6.24, 6.33], [6.3, 6.32, 6.29, 6.38], [6.3, 6.3, 6.29, 6.38], [6.29, 6.35, 6.19, 6.35], [6.33, 6.38, 6.29, 6.41], [6.39, 6.43, 6.35, 6.47], [6.4, 6.56, 6.4, 6.6], [6.6, 6.52, 6.49, 6.61], [6.48, 6.47, 6.46, 6.56], [6.45, 6.45, 6.42, 6.51], [6.45, 6.41, 6.37, 6.47], [6.41, 6.52, 6.39, 6.54], [6.54, 6.59, 6.49, 6.61], [6.58, 6.5, 6.5, 6.64], [6.5, 6.44, 6.42, 6.53], [6.42, 6.5, 6.4, 6.52], [6.48, 6.45, 6.41, 6.51], [6.47, 6.45, 6.41, 6.5], [6.46, 6.34, 6.29, 6.46], [6.34, 6.34, 6.33, 6.39], [6.34, 6.32, 6.3, 6.37], [6.32, 6.28, 6.26, 6.34], [6.28, 6.23, 6.21, 6.29], [6.26, 6.19, 6.18, 6.28], [6.2, 6.24, 6.19, 6.25], [6.25, 6.18, 6.17, 6.27], [6.18, 6.25, 6.17, 6.26], [6.26, 6.51, 6.26, 6.51], [6.54, 6.49, 6.49, 6.63], [6.5, 6.45, 6.42, 6.6], [6.52, 6.38, 6.36, 6.54], [6.37, 6.57, 6.37, 6.59], [6.54, 6.28, 6.25, 6.54]];
+          var vol = [17.8, 27.3, 27.3, 17.2, 29.9, 23.1, 18.8, 23.0, 23.2, 28.9, 36.2, 35.8, 26.7, 22.1, 35.7, 45.8, 54.2, 43.9, 32.5, 35.3, 31.2, 32.1, 20.0, 29.2, 19.6, 18.2, 18.1, 22.3, 49.6, 27.0, 23.1, 17.3, 24.5, 29.8, 18.3, 17.6, 16.3, 22.1, 19.4, 18.0, 11.5, 16.9, 18.5, 16.7, 14.8, 18.8, 20.3, 18.5, 20.7, 21.0, 19.4, 15.8, 17.3, 13.5, 14.0, 12.9, 16.9, 39.9, 30.4, 29.9, 20.1, 29.7, 36.8, 42.6, 30.7, 29.0, 26.2, 29.2, 26.2, 28.7, 24.6, 23.1, 27.6, 23.4, 21.6, 20.0, 19.9, 21.4, 16.7, 18.4, 18.6, 14.4, 14.9, 16.7, 20.9, 15.5, 13.4, 13.8, 12.7, 19.0, 26.8, 15.9, 21.3, 32.8, 17.5, 15.5, 12.9, 14.2, 14.4, 17.1, 18.6, 18.1, 17.3, 12.6, 14.3, 16.6, 10.2, 12.7, 10.4, 10.7, 15.0, 12.9, 13.0, 11.5, 31.8, 32.2, 22.2, 19.0, 28.8, 29.5];
+          var ma5 = [6.82, 6.74, 6.71, 6.73, 6.78, 6.83, 6.86, 6.88, 6.9, 6.87, 6.83, 6.78, 6.72, 6.66, 6.61, 6.55, 6.52, 6.48, 6.44, 6.45, 6.47, 6.45, 6.45, 6.43, 6.38, 6.33, 6.31, 6.3, 6.35, 6.38, 6.41, 6.43, 6.42, 6.33, 6.24, 6.15, 6.09, 6.06, 6.06, 6.07, 6.08, 6.06, 6.02, 5.98, 5.93, 5.87, 5.8, 5.75, 5.7, 5.69, 5.71, 5.76, 5.83, 5.87, 5.9, 5.92, 5.91, 5.92, 5.97, 6.03, 6.09, 6.16, 6.22, 6.27, 6.31, 6.37, 6.42, 6.43, 6.43, 6.44, 6.45, 6.47, 6.51, 6.54, 6.53, 6.51, 6.47, 6.42, 6.38, 6.35, 6.31, 6.29, 6.25, 6.25, 6.26, 6.28, 6.29, 6.31, 6.31, 6.3, 6.31, 6.33, 6.36, 6.4, 6.45, 6.47, 6.49, 6.48, 6.47, 6.49, 6.49, 6.49, 6.51, 6.5, 6.47, 6.44, 6.42, 6.38, 6.35, 6.3, 6.27, 6.25, 6.22, 6.22, 6.27, 6.33, 6.38, 6.42, 6.48, 6.43];
+          var ma20 = [7.07, 7.02, 6.98, 6.96, 6.94, 6.93, 6.91, 6.9, 6.9, 6.89, 6.87, 6.86, 6.84, 6.82, 6.79, 6.76, 6.72, 6.7, 6.68, 6.67, 6.67, 6.65, 6.63, 6.61, 6.58, 6.55, 6.52, 6.49, 6.47, 6.45, 6.44, 6.43, 6.41, 6.39, 6.36, 6.34, 6.32, 6.31, 6.29, 6.27, 6.24, 6.22, 6.2, 6.18, 6.15, 6.13, 6.1, 6.06, 6.02, 5.98, 5.95, 5.93, 5.92, 5.9, 5.9, 5.89, 5.88, 5.88, 5.88, 5.89, 5.9, 5.91, 5.93, 5.95, 5.98, 6.02, 6.06, 6.1, 6.14, 6.17, 6.21, 6.24, 6.27, 6.3, 6.33, 6.36, 6.38, 6.4, 6.41, 6.41, 6.41, 6.41, 6.4, 6.4, 6.4, 6.39, 6.38, 6.37, 6.37, 6.36, 6.35, 6.34, 6.33, 6.34, 6.34, 6.34, 6.35, 6.35, 6.36, 6.38, 6.39, 6.4, 6.41, 6.42, 6.43, 6.43, 6.43, 6.43, 6.43, 6.43, 6.42, 6.41, 6.4, 6.38, 6.38, 6.38, 6.38, 6.38, 6.38, 6.37];
+          var biPts = [["2026-04-20", 6.6], ["2026-04-24", 6.99], ["2026-06-29", 5.49], ["2026-08-04", 6.66], ["2026-08-14", 6.17], ["2026-08-20", 6.39], ["2026-08-27", 6.19], ["2026-09-02", 6.61], ["2026-09-07", 6.37], ["2026-09-10", 6.64], ["2026-09-30", 6.17]];
+          var zsBoxes = [{"x0": "2026-04-17", "x1": "2026-08-17", "zd": 6.6, "zg": 6.99, "name": "\u65e5\u7ebf\u4e2d\u67a2 [6.60~6.99] (5\u7b14)"}, {"x0": "2026-08-13", "x1": "2026-10-08", "zd": 6.19, "zg": 6.39, "name": "\u65e5\u7ebf\u4e2d\u67a2 [6.19~6.39] (6\u7b14)"}];
+          var markPoints = [{"name": "\u4e00\u4e70\u00b7\u5e95\u80cc\u9a70", "coord": ["2026-09-30", 6.17], "value": "\u4e00\u4e70", "itemStyle": {"color": "#bc8cff"}}];
+
+          // 中枢 markArea 数据结构
+          var markAreaData = zsBoxes.map(function(z) {
+            return [
+              { name: z.name, xAxis: z.x0, yAxis: z.zd, itemStyle: { color: 'rgba(227, 179, 65, 0.12)', borderColor: 'rgba(227, 179, 65, 0.45)', borderWidth: 1 } },
+              { xAxis: z.x1, yAxis: z.zg }
+            ];
+          });
+
+          var option = {
+            backgroundColor: '#0d1117',
+            animation: false,
+            tooltip: {
+              trigger: 'axis',
+              axisPointer: { type: 'cross' },
+              backgroundColor: 'rgba(22, 27, 34, 0.95)',
+              borderColor: '#30363d',
+              textStyle: { color: '#e6edf3', fontSize: 12 },
+              formatter: function(params) {
+                var d = params[0].name;
+                var res = '<div style="font-weight:700;margin-bottom:4px;">' + d + '</div>';
+                params.forEach(function(item) {
+                  if (item.seriesName === 'K线' && item.data) {
+                    res += '开盘: ' + item.data[1] + ' | 收盘: ' + item.data[2] + '<br/>';
+                    res += '最低: ' + item.data[3] + ' | 最高: ' + item.data[4] + '<br/>';
+                  } else if (item.seriesName === '成交量') {
+                    res += '成交量: ' + item.data + ' 万手<br/>';
+                  } else if (item.seriesName.indexOf('MA') !== -1 && item.data !== '-') {
+                    res += item.marker + item.seriesName + ': ' + item.data + '<br/>';
+                  }
+                });
+                return res;
+              }
+            },
+            grid: [
+              { left: 50, right: 30, top: 25, height: '62%' },
+              { left: 50, right: 30, top: '75%', height: '17%' }
+            ],
+            xAxis: [
+              {
+                type: 'category',
+                data: dates,
+                boundaryGap: true,
+                axisLine: { lineStyle: { color: '#30363d' } },
+                axisLabel: { color: '#8b949e', fontSize: 10 }
+              },
+              {
+                type: 'category',
+                gridIndex: 1,
+                data: dates,
+                boundaryGap: true,
+                axisLine: { lineStyle: { color: '#30363d' } },
+                axisLabel: { show: false }
+              }
+            ],
+            yAxis: [
+              {
+                scale: true,
+                splitLine: { lineStyle: { color: '#161b22' } },
+                axisLabel: { color: '#8b949e', fontSize: 10 }
+              },
+              {
+                gridIndex: 1,
+                splitLine: { show: false },
+                axisLabel: { color: '#8b949e', fontSize: 10 }
+              }
+            ],
+            dataZoom: [
+              { type: 'inside', xAxisIndex: [0, 1], start: 30, end: 100 },
+              { type: 'slider', xAxisIndex: [0, 1], top: '93%', height: 14, borderColor: '#30363d', fillerColor: 'rgba(88, 166, 255, 0.2)' }
+            ],
+            series: [
+              {
+                name: 'K线',
+                type: 'candlestick',
+                data: ohlc,
+                itemStyle: {
+                  color: '#f85149',
+                  color0: '#3fb950',
+                  borderColor: '#f85149',
+                  borderColor0: '#3fb950'
+                },
+                markArea: { data: markAreaData },
+                markPoint: {
+                  data: markPoints,
+                  symbolSize: 45,
+                  label: { fontSize: 10, fontWeight: 700, color: '#fff' }
+                },
+                markLine: {
+                  symbol: 'none',
+                  data: [
+                    { yAxis: 6.38, lineStyle: { color: '#f85149', type: 'dashed' }, label: { formatter: '阻力 6.38', position: 'end', color: '#f85149', fontSize: 10 } },
+                    { yAxis: 6.5, lineStyle: { color: '#ff7b72', type: 'dotted' }, label: { formatter: '目标 6.50', position: 'end', color: '#ff7b72', fontSize: 10 } },
+                    { yAxis: 6.18, lineStyle: { color: '#e3b341', type: 'dashed' }, label: { formatter: '支撑 6.18', position: 'end', color: '#e3b341', fontSize: 10 } },
+                    { yAxis: 6.1, lineStyle: { color: '#da3633', type: 'solid', width: 1.5 }, label: { formatter: '止损 6.10', position: 'end', color: '#da3633', fontSize: 10 } }
+                  ]
+                }
+              },
+              {
+                name: 'MA5',
+                type: 'line',
+                data: ma5,
+                smooth: true,
+                showSymbol: false,
+                lineStyle: { color: '#f1e05a', width: 1.2 }
+              },
+              {
+                name: 'MA20',
+                type: 'line',
+                data: ma20,
+                smooth: true,
+                showSymbol: false,
+                lineStyle: { color: '#bc8cff', width: 1.2 }
+              },
+              {
+                name: '缠论笔',
+                type: 'line',
+                data: biPts,
+                showSymbol: true,
+                symbol: 'circle',
+                symbolSize: 6,
+                itemStyle: { color: '#00f0ff' },
+                lineStyle: { color: '#00f0ff', width: 2, type: 'solid' }
+              },
+              {
+                name: '成交量',
+                type: 'bar',
+                xAxisIndex: 1,
+                yAxisIndex: 1,
+                data: vol,
+                itemStyle: {
+                  color: function(params) {
+                    var i = params.dataIndex;
+                    var c = ohlc[i];
+                    return (c && c[1] >= c[0]) ? '#f85149' : '#3fb950';
+                  }
+                }
+              }
+            ]
+          };
+
+          myChart.setOption(option);
+          window.addEventListener('resize', function() { myChart.resize(); });
+        })();
+        
+
+        (function() {
+          var chartDom = document.getElementById('chart_002826');
+          if (!chartDom || !window.echarts) return;
+          var myChart = echarts.init(chartDom, 'dark');
+
+          var dates = ["2026-04-17", "2026-04-20", "2026-04-21", "2026-04-22", "2026-04-23", "2026-04-24", "2026-04-27", "2026-04-28", "2026-04-29", "2026-04-30", "2026-05-06", "2026-05-07", "2026-05-08", "2026-05-11", "2026-05-12", "2026-05-13", "2026-05-14", "2026-05-15", "2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21", "2026-05-22", "2026-05-25", "2026-05-26", "2026-05-27", "2026-05-28", "2026-05-29", "2026-06-01", "2026-06-02", "2026-06-03", "2026-06-04", "2026-06-05", "2026-06-08", "2026-06-09", "2026-06-10", "2026-06-11", "2026-06-12", "2026-06-15", "2026-06-16", "2026-06-17", "2026-06-18", "2026-06-22", "2026-06-23", "2026-06-24", "2026-06-25", "2026-06-26", "2026-06-29", "2026-06-30", "2026-07-01", "2026-07-02", "2026-07-03", "2026-07-06", "2026-07-07", "2026-07-08", "2026-07-09", "2026-07-10", "2026-07-13", "2026-07-14", "2026-07-15", "2026-07-16", "2026-07-17", "2026-07-20", "2026-07-21", "2026-07-22", "2026-07-23", "2026-07-24", "2026-07-27", "2026-07-28", "2026-07-29", "2026-07-30", "2026-07-31", "2026-08-03", "2026-08-04", "2026-08-05", "2026-08-06", "2026-08-07", "2026-08-10", "2026-08-11", "2026-08-12", "2026-08-13", "2026-08-14", "2026-08-17", "2026-08-18", "2026-08-19", "2026-08-20", "2026-08-21", "2026-08-24", "2026-08-25", "2026-08-26", "2026-08-27", "2026-08-28", "2026-08-31", "2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04", "2026-09-07", "2026-09-08", "2026-09-09", "2026-09-10", "2026-09-11", "2026-09-14", "2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18", "2026-09-21", "2026-09-22", "2026-09-23", "2026-09-24", "2026-09-28", "2026-09-29", "2026-09-30", "2026-10-08", "2026-10-09", "2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15"];
+          var ohlc = [[21.221, 20.981, 20.671, 21.301], [20.971, 21.001, 20.761, 21.241], [21.021, 20.951, 20.601, 21.131], [20.871, 20.501, 20.431, 20.931], [20.501, 20.391, 19.771, 20.571], [20.361, 20.141, 19.971, 20.751], [20.141, 19.611, 19.021, 20.181], [19.661, 19.671, 19.371, 19.961], [19.731, 19.371, 19.361, 19.981], [19.391, 19.351, 19.011, 19.641], [19.351, 19.611, 19.331, 20.161], [19.491, 19.111, 18.831, 19.601], [19.041, 19.021, 18.601, 19.201], [18.961, 19.481, 18.651, 19.521], [19.481, 19.251, 19.171, 19.611], [19.301, 18.761, 18.651, 19.301], [18.771, 18.411, 18.391, 18.831], [18.421, 18.251, 18.061, 18.521], [18.521, 18.581, 18.041, 18.921], [18.621, 18.561, 18.281, 18.701], [18.481, 18.181, 17.921, 18.491], [18.181, 17.661, 17.651, 18.421], [17.741, 19.441, 17.401, 19.441], [19.801, 18.931, 18.881, 19.841], [19.051, 18.391, 18.251, 19.051], [18.581, 18.161, 18.111, 18.901], [18.161, 17.931, 17.511, 18.161], [17.901, 17.661, 17.511, 18.061], [17.801, 17.631, 17.531, 18.011], [17.701, 16.701, 16.381, 17.701], [16.721, 16.531, 16.381, 16.901], [16.421, 16.221, 16.001, 16.451], [16.221, 16.261, 16.071, 16.531], [16.231, 15.401, 15.131, 16.291], [15.69, 15.61, 15.35, 15.8], [15.6, 15.17, 14.9, 15.6], [15.16, 15.01, 14.65, 15.16], [15.2, 15.35, 15.03, 15.43], [15.51, 16.7, 15.33, 16.87], [16.75, 17.07, 16.4, 17.28], [17.0, 16.51, 16.44, 17.07], [16.51, 16.83, 16.23, 16.95], [16.78, 16.44, 16.18, 16.8], [16.36, 17.2, 16.24, 17.75], [17.12, 16.34, 16.3, 17.2], [16.18, 15.75, 15.63, 16.34], [15.75, 15.3, 15.23, 15.88], [15.5, 15.69, 14.81, 15.92], [15.58, 15.03, 14.93, 15.59], [14.96, 16.53, 14.85, 16.53], [16.5, 18.18, 16.42, 18.18], [19.79, 18.1, 17.81, 19.8], [17.92, 18.3, 17.57, 19.0], [18.47, 17.23, 17.2, 18.49], [17.25, 16.73, 16.73, 17.49], [16.53, 16.77, 16.35, 17.38], [16.77, 16.7, 16.55, 17.2], [16.68, 16.09, 16.07, 16.96], [16.3, 16.94, 15.96, 17.09], [16.78, 17.18, 16.62, 17.58], [17.18, 17.17, 16.68, 17.59], [17.1, 16.07, 15.9, 17.4], [16.07, 15.8, 15.51, 16.53], [15.8, 15.62, 14.99, 16.24], [15.48, 15.43, 15.3, 15.98], [15.3, 16.03, 15.29, 16.2], [15.86, 15.8, 15.55, 16.15], [15.83, 16.19, 15.65, 16.38], [16.16, 15.9, 15.82, 16.45], [15.91, 15.99, 15.85, 16.22], [15.96, 15.51, 15.41, 16.07], [15.7, 16.11, 15.61, 16.39], [16.11, 16.12, 16.03, 16.29], [16.25, 16.45, 16.25, 16.59], [16.17, 16.5, 16.17, 16.99], [16.52, 18.15, 16.39, 18.15], [18.05, 17.84, 17.13, 18.05], [18.11, 17.79, 17.69, 18.11], [17.5, 17.51, 17.46, 17.85], [17.5, 17.66, 17.41, 17.85], [17.67, 17.63, 17.49, 17.95], [17.71, 17.67, 17.28, 18.4], [17.79, 17.84, 17.25, 18.03], [17.94, 18.06, 17.89, 18.29], [17.71, 17.25, 17.22, 18.05], [17.6, 17.78, 17.6, 18.18], [17.49, 17.34, 17.11, 17.69], [17.37, 17.07, 16.96, 17.89], [16.97, 17.5, 16.82, 17.6], [17.35, 17.29, 17.1, 17.65], [17.29, 17.35, 17.22, 17.57], [17.39, 17.2, 17.12, 17.43], [17.2, 17.43, 17.0, 17.55], [17.27, 17.51, 17.27, 17.57], [17.34, 17.96, 17.33, 18.36], [18.29, 17.76, 17.75, 18.99], [17.88, 17.71, 17.58, 18.06], [17.83, 17.93, 17.67, 18.0], [17.93, 18.03, 17.75, 18.07], [17.88, 18.09, 17.8, 18.1], [18.14, 17.7, 17.52, 18.14], [17.51, 17.12, 16.93, 17.55], [17.15, 17.2, 17.03, 17.4], [17.22, 16.56, 16.53, 17.22], [16.57, 17.06, 16.41, 17.34], [17.05, 17.01, 16.76, 17.24], [17.15, 17.03, 16.94, 17.3], [17.12, 17.45, 17.07, 17.52], [17.6, 17.39, 17.3, 17.6], [17.3, 17.15, 17.11, 17.44], [17.06, 17.68, 17.05, 18.38], [17.77, 17.54, 17.4, 17.96], [17.5, 17.66, 17.26, 17.85], [17.66, 17.59, 17.58, 18.04], [17.53, 17.39, 17.24, 17.79], [17.39, 17.68, 16.99, 17.68], [17.6, 16.79, 16.74, 17.62], [16.7, 16.89, 16.08, 16.95], [16.91, 16.74, 16.53, 16.98], [16.44, 16.48, 16.31, 16.99]];
+          var vol = [4.6, 4.3, 3.4, 3.6, 4.5, 3.3, 9.1, 6.0, 5.9, 7.1, 7.6, 6.5, 5.9, 7.3, 4.6, 5.2, 3.8, 3.3, 4.8, 3.1, 3.6, 3.4, 12.9, 12.0, 6.8, 5.9, 4.2, 3.5, 3.3, 7.0, 3.9, 3.0, 3.7, 5.2, 3.2, 4.1, 2.9, 3.8, 7.9, 6.0, 4.5, 4.3, 4.0, 7.0, 4.4, 4.4, 3.0, 4.9, 5.4, 8.1, 7.1, 20.0, 10.8, 7.7, 4.6, 5.6, 4.5, 4.5, 8.4, 8.2, 6.8, 6.4, 6.0, 5.5, 4.0, 4.1, 2.9, 3.2, 2.8, 2.4, 2.9, 3.7, 2.2, 3.3, 3.7, 6.2, 14.3, 9.5, 5.6, 4.8, 4.7, 5.5, 4.9, 6.5, 4.6, 5.9, 4.0, 4.2, 3.8, 2.4, 2.7, 2.5, 4.0, 2.7, 7.4, 7.2, 4.3, 3.6, 3.2, 2.8, 3.6, 3.4, 2.2, 2.9, 3.2, 2.7, 2.2, 2.9, 2.2, 1.7, 7.8, 5.0, 3.5, 3.2, 3.0, 3.5, 3.4, 3.2, 2.0, 2.3];
+          var ma5 = [20.37, 20.6, 20.81, 20.93, 20.77, 20.6, 20.32, 20.06, 19.84, 19.63, 19.52, 19.42, 19.29, 19.32, 19.3, 19.12, 18.98, 18.83, 18.65, 18.51, 18.4, 18.25, 18.48, 18.55, 18.52, 18.52, 18.57, 18.21, 17.96, 17.62, 17.29, 16.95, 16.67, 16.22, 16.0, 15.73, 15.49, 15.31, 15.57, 15.86, 16.13, 16.49, 16.71, 16.81, 16.66, 16.51, 16.21, 16.06, 15.62, 15.66, 16.15, 16.71, 17.23, 17.67, 17.71, 17.43, 17.15, 16.7, 16.65, 16.74, 16.82, 16.69, 16.63, 16.37, 16.02, 15.79, 15.74, 15.81, 15.87, 15.98, 15.88, 15.94, 15.93, 16.04, 16.14, 16.67, 17.01, 17.35, 17.56, 17.79, 17.69, 17.65, 17.66, 17.77, 17.69, 17.72, 17.65, 17.5, 17.39, 17.4, 17.31, 17.28, 17.35, 17.36, 17.49, 17.57, 17.67, 17.77, 17.88, 17.9, 17.89, 17.77, 17.63, 17.33, 17.13, 16.99, 16.97, 17.02, 17.19, 17.21, 17.34, 17.44, 17.48, 17.52, 17.57, 17.57, 17.42, 17.27, 17.1, 16.92];
+          var ma20 = [19.94, 20.02, 20.17, 20.25, 20.28, 20.32, 20.3, 20.28, 20.26, 20.2, 20.16, 20.12, 20.08, 20.03, 19.98, 19.9, 19.83, 19.75, 19.68, 19.55, 19.41, 19.24, 19.17, 19.09, 18.99, 18.89, 18.81, 18.71, 18.62, 18.49, 18.33, 18.19, 18.05, 17.85, 17.66, 17.48, 17.31, 17.17, 17.08, 17.0, 16.92, 16.88, 16.73, 16.64, 16.54, 16.42, 16.28, 16.19, 16.06, 16.05, 16.13, 16.22, 16.33, 16.42, 16.47, 16.55, 16.64, 16.67, 16.69, 16.69, 16.73, 16.69, 16.65, 16.58, 16.53, 16.54, 16.57, 16.59, 16.64, 16.61, 16.48, 16.38, 16.27, 16.23, 16.22, 16.29, 16.34, 16.43, 16.46, 16.48, 16.51, 16.59, 16.69, 16.81, 16.9, 16.99, 17.06, 17.11, 17.19, 17.25, 17.35, 17.4, 17.47, 17.52, 17.59, 17.57, 17.57, 17.57, 17.6, 17.62, 17.62, 17.6, 17.56, 17.49, 17.48, 17.44, 17.43, 17.44, 17.44, 17.43, 17.45, 17.47, 17.48, 17.48, 17.45, 17.45, 17.4, 17.35, 17.29, 17.21];
+          var biPts = [["2026-06-11", 14.65], ["2026-07-03", 19.8], ["2026-07-21", 14.99], ["2026-08-14", 18.4], ["2026-08-25", 16.82], ["2026-09-03", 18.99], ["2026-09-16", 16.41], ["2026-09-30", 18.04], ["2026-10-13", 16.08]];
+          var zsBoxes = [{"x0": "2026-04-17", "x1": "2026-07-23", "zd": 19.651, "zg": 21.891, "name": "\u65e5\u7ebf\u4e2d\u67a2 [19.65~21.89] (7\u7b14)"}, {"x0": "2026-07-20", "x1": "2026-10-14", "zd": 16.82, "zg": 18.4, "name": "\u65e5\u7ebf\u4e2d\u67a2 [16.82~18.40] (6\u7b14)"}];
+          var markPoints = [];
+
+          // 中枢 markArea 数据结构
+          var markAreaData = zsBoxes.map(function(z) {
+            return [
+              { name: z.name, xAxis: z.x0, yAxis: z.zd, itemStyle: { color: 'rgba(227, 179, 65, 0.12)', borderColor: 'rgba(227, 179, 65, 0.45)', borderWidth: 1 } },
+              { xAxis: z.x1, yAxis: z.zg }
+            ];
+          });
+
+          var option = {
+            backgroundColor: '#0d1117',
+            animation: false,
+            tooltip: {
+              trigger: 'axis',
+              axisPointer: { type: 'cross' },
+              backgroundColor: 'rgba(22, 27, 34, 0.95)',
+              borderColor: '#30363d',
+              textStyle: { color: '#e6edf3', fontSize: 12 },
+              formatter: function(params) {
+                var d = params[0].name;
+                var res = '<div style="font-weight:700;margin-bottom:4px;">' + d + '</div>';
+                params.forEach(function(item) {
+                  if (item.seriesName === 'K线' && item.data) {
+                    res += '开盘: ' + item.data[1] + ' | 收盘: ' + item.data[2] + '<br/>';
+                    res += '最低: ' + item.data[3] + ' | 最高: ' + item.data[4] + '<br/>';
+                  } else if (item.seriesName === '成交量') {
+                    res += '成交量: ' + item.data + ' 万手<br/>';
+                  } else if (item.seriesName.indexOf('MA') !== -1 && item.data !== '-') {
+                    res += item.marker + item.seriesName + ': ' + item.data + '<br/>';
+                  }
+                });
+                return res;
+              }
+            },
+            grid: [
+              { left: 50, right: 30, top: 25, height: '62%' },
+              { left: 50, right: 30, top: '75%', height: '17%' }
+            ],
+            xAxis: [
+              {
+                type: 'category',
+                data: dates,
+                boundaryGap: true,
+                axisLine: { lineStyle: { color: '#30363d' } },
+                axisLabel: { color: '#8b949e', fontSize: 10 }
+              },
+              {
+                type: 'category',
+                gridIndex: 1,
+                data: dates,
+                boundaryGap: true,
+                axisLine: { lineStyle: { color: '#30363d' } },
+                axisLabel: { show: false }
+              }
+            ],
+            yAxis: [
+              {
+                scale: true,
+                splitLine: { lineStyle: { color: '#161b22' } },
+                axisLabel: { color: '#8b949e', fontSize: 10 }
+              },
+              {
+                gridIndex: 1,
+                splitLine: { show: false },
+                axisLabel: { color: '#8b949e', fontSize: 10 }
+              }
+            ],
+            dataZoom: [
+              { type: 'inside', xAxisIndex: [0, 1], start: 30, end: 100 },
+              { type: 'slider', xAxisIndex: [0, 1], top: '93%', height: 14, borderColor: '#30363d', fillerColor: 'rgba(88, 166, 255, 0.2)' }
+            ],
+            series: [
+              {
+                name: 'K线',
+                type: 'candlestick',
+                data: ohlc,
+                itemStyle: {
+                  color: '#f85149',
+                  color0: '#3fb950',
+                  borderColor: '#f85149',
+                  borderColor0: '#3fb950'
+                },
+                markArea: { data: markAreaData },
+                markPoint: {
+                  data: markPoints,
+                  symbolSize: 45,
+                  label: { fontSize: 10, fontWeight: 700, color: '#fff' }
+                },
+                markLine: {
+                  symbol: 'none',
+                  data: [
+                    { yAxis: 18.2, lineStyle: { color: '#f85149', type: 'dashed' }, label: { formatter: '阻力 18.20', position: 'end', color: '#f85149', fontSize: 10 } },
+                    { yAxis: 19.0, lineStyle: { color: '#ff7b72', type: 'dotted' }, label: { formatter: '目标 19.00', position: 'end', color: '#ff7b72', fontSize: 10 } },
+                    { yAxis: 17.2, lineStyle: { color: '#e3b341', type: 'dashed' }, label: { formatter: '支撑 17.20', position: 'end', color: '#e3b341', fontSize: 10 } },
+                    { yAxis: 16.8, lineStyle: { color: '#da3633', type: 'solid', width: 1.5 }, label: { formatter: '止损 16.80', position: 'end', color: '#da3633', fontSize: 10 } }
+                  ]
+                }
+              },
+              {
+                name: 'MA5',
+                type: 'line',
+                data: ma5,
+                smooth: true,
+                showSymbol: false,
+                lineStyle: { color: '#f1e05a', width: 1.2 }
+              },
+              {
+                name: 'MA20',
+                type: 'line',
+                data: ma20,
+                smooth: true,
+                showSymbol: false,
+                lineStyle: { color: '#bc8cff', width: 1.2 }
+              },
+              {
+                name: '缠论笔',
+                type: 'line',
+                data: biPts,
+                showSymbol: true,
+                symbol: 'circle',
+                symbolSize: 6,
+                itemStyle: { color: '#00f0ff' },
+                lineStyle: { color: '#00f0ff', width: 2, type: 'solid' }
+              },
+              {
+                name: '成交量',
+                type: 'bar',
+                xAxisIndex: 1,
+                yAxisIndex: 1,
+                data: vol,
+                itemStyle: {
+                  color: function(params) {
+                    var i = params.dataIndex;
+                    var c = ohlc[i];
+                    return (c && c[1] >= c[0]) ? '#f85149' : '#3fb950';
+                  }
+                }
+              }
+            ]
+          };
+
+          myChart.setOption(option);
+          window.addEventListener('resize', function() { myChart.resize(); });
+        })();
+        
+
+        (function() {
+          var chartDom = document.getElementById('chart_300798');
+          if (!chartDom || !window.echarts) return;
+          var myChart = echarts.init(chartDom, 'dark');
+
+          var dates = ["2026-04-17", "2026-04-20", "2026-04-21", "2026-04-22", "2026-04-23", "2026-04-24", "2026-04-27", "2026-04-28", "2026-04-29", "2026-04-30", "2026-05-06", "2026-05-07", "2026-05-08", "2026-05-11", "2026-05-12", "2026-05-13", "2026-05-14", "2026-05-15", "2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21", "2026-05-22", "2026-05-25", "2026-05-26", "2026-05-27", "2026-05-28", "2026-05-29", "2026-06-01", "2026-06-02", "2026-06-03", "2026-06-04", "2026-06-05", "2026-06-08", "2026-06-09", "2026-06-10", "2026-06-11", "2026-06-12", "2026-06-15", "2026-06-16", "2026-06-17", "2026-06-18", "2026-06-22", "2026-06-23", "2026-06-24", "2026-06-25", "2026-06-26", "2026-06-29", "2026-06-30", "2026-07-01", "2026-07-02", "2026-07-03", "2026-07-06", "2026-07-07", "2026-07-08", "2026-07-09", "2026-07-10", "2026-07-13", "2026-07-14", "2026-07-15", "2026-07-16", "2026-07-17", "2026-07-20", "2026-07-21", "2026-07-22", "2026-07-23", "2026-07-24", "2026-07-27", "2026-07-28", "2026-07-29", "2026-07-30", "2026-07-31", "2026-08-03", "2026-08-04", "2026-08-05", "2026-08-06", "2026-08-07", "2026-08-10", "2026-08-11", "2026-08-12", "2026-08-13", "2026-08-14", "2026-08-17", "2026-08-18", "2026-08-19", "2026-08-20", "2026-08-21", "2026-08-24", "2026-08-25", "2026-08-26", "2026-08-27", "2026-08-28", "2026-08-31", "2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04", "2026-09-07", "2026-09-08", "2026-09-09", "2026-09-10", "2026-09-11", "2026-09-14", "2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18", "2026-09-21", "2026-09-22", "2026-09-23", "2026-09-24", "2026-09-28", "2026-09-29", "2026-09-30", "2026-10-08", "2026-10-09", "2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15"];
+          var ohlc = [[12.96, 11.95, 11.84, 13.1], [11.88, 11.65, 11.41, 12.08], [11.88, 11.41, 10.91, 12.01], [11.11, 11.7, 11.05, 11.88], [11.41, 11.38, 11.31, 11.77], [11.25, 10.82, 10.5, 11.25], [10.5, 10.56, 9.93, 10.65], [10.44, 10.68, 10.31, 10.96], [10.41, 10.62, 10.24, 10.98], [10.66, 10.19, 10.11, 10.7], [10.13, 11.34, 10.05, 11.38], [11.32, 11.11, 11.04, 11.76], [11.05, 10.84, 10.6, 11.11], [11.06, 11.07, 10.75, 11.28], [10.99, 10.68, 10.44, 11.32], [10.63, 11.17, 10.5, 11.45], [11.18, 10.39, 10.37, 11.2], [10.42, 10.03, 9.93, 10.85], [9.94, 9.62, 9.5, 10.28], [9.56, 9.9, 9.31, 9.98], [9.88, 9.6, 9.45, 9.88], [9.55, 8.7, 8.65, 9.6], [8.78, 8.97, 8.59, 9.05], [8.96, 8.7, 8.53, 9.03], [8.7, 8.41, 8.25, 8.7], [8.38, 8.09, 8.02, 8.41], [8.11, 8.24, 8.07, 8.32], [8.25, 7.88, 7.84, 8.38], [7.86, 8.0, 7.82, 8.18], [8.01, 7.83, 7.66, 8.03], [7.83, 7.77, 7.7, 7.94], [7.7, 7.51, 7.43, 7.73], [7.55, 7.59, 7.31, 7.74], [7.4, 7.27, 7.14, 7.58], [7.35, 7.37, 7.23, 7.48], [7.34, 7.3, 7.16, 7.52], [7.2, 7.12, 7.02, 7.34], [7.25, 7.28, 7.07, 7.4], [7.33, 7.42, 7.31, 7.98], [7.38, 7.51, 7.28, 7.58], [7.49, 7.28, 7.21, 7.53], [7.22, 7.1, 7.08, 7.33], [7.06, 7.42, 7.02, 7.44], [7.35, 7.38, 7.31, 7.59], [7.37, 7.15, 7.0, 7.39], [7.13, 6.88, 6.84, 7.22], [6.82, 6.62, 6.6, 6.88], [6.62, 6.48, 6.36, 6.64], [6.5, 6.53, 6.36, 6.64], [6.49, 6.77, 6.41, 6.88], [6.75, 6.71, 6.65, 6.9], [6.73, 6.65, 6.54, 6.77], [6.64, 6.41, 6.39, 6.75], [6.42, 6.19, 6.13, 6.46], [6.21, 6.19, 6.12, 6.31], [6.17, 6.28, 5.96, 6.31], [6.2, 6.44, 6.2, 6.62], [6.47, 6.1, 6.09, 6.61], [6.09, 6.26, 6.0, 6.27], [6.21, 6.28, 6.19, 6.41], [6.25, 6.28, 6.2, 6.44], [6.28, 5.99, 5.94, 6.4], [6.03, 6.03, 5.9, 6.3], [6.04, 6.1, 5.62, 6.14], [6.0, 5.99, 5.92, 6.16], [5.97, 6.29, 5.97, 6.33], [6.25, 5.98, 5.98, 6.3], [5.93, 6.3, 5.92, 6.32], [6.25, 7.0, 6.25, 7.34], [6.9, 7.16, 6.89, 7.58], [6.97, 7.35, 6.9, 7.78], [7.2, 7.3, 7.2, 7.51], [7.32, 7.96, 7.32, 8.24], [7.92, 7.93, 7.72, 8.3], [7.82, 7.69, 7.56, 7.85], [7.59, 7.38, 7.25, 7.71], [7.47, 7.45, 7.17, 7.6], [7.39, 7.78, 7.25, 7.81], [7.65, 7.66, 7.62, 7.88], [7.69, 7.87, 7.63, 8.13], [7.93, 7.62, 7.54, 8.02], [7.62, 7.63, 7.39, 7.69], [7.57, 7.68, 7.5, 7.8], [7.63, 7.39, 7.29, 7.63], [7.31, 7.05, 7.01, 7.31], [7.12, 7.16, 7.01, 7.21], [7.1, 7.13, 6.94, 7.14], [7.27, 7.15, 7.03, 7.47], [7.08, 7.31, 7.0, 7.34], [7.26, 7.52, 7.12, 7.78], [7.5, 7.88, 7.44, 8.04], [8.22, 8.55, 8.17, 8.73], [8.73, 8.89, 8.73, 9.7], [9.66, 9.47, 9.16, 10.05], [9.39, 8.99, 8.68, 9.59], [9.08, 9.01, 8.45, 9.3], [8.92, 8.9, 8.75, 9.36], [8.86, 8.73, 8.46, 8.91], [8.65, 8.66, 8.4, 8.79], [8.67, 8.7, 8.53, 8.93], [8.57, 8.47, 8.34, 8.61], [8.3, 8.12, 7.85, 8.46], [8.08, 8.28, 8.05, 8.34], [8.2, 7.91, 7.87, 8.28], [7.85, 7.89, 7.66, 8.02], [7.83, 7.91, 7.77, 8.04], [7.9, 8.28, 7.9, 8.4], [8.6, 8.78, 8.4, 8.9], [8.8, 9.03, 8.55, 9.15], [8.98, 8.73, 8.7, 9.12], [8.77, 8.38, 8.35, 8.77], [8.31, 8.26, 8.01, 8.4], [8.2, 8.42, 8.11, 8.56], [8.43, 8.62, 8.43, 9.1], [8.63, 8.34, 8.23, 8.77], [8.38, 8.3, 7.92, 8.4], [8.33, 8.3, 7.95, 8.72], [8.07, 8.84, 7.99, 9.03], [9.02, 8.33, 8.3, 9.1], [8.2, 7.8, 7.73, 8.75]];
+          var vol = [97.8, 67.0, 64.7, 67.4, 41.8, 44.6, 40.1, 32.6, 28.7, 27.3, 57.3, 38.5, 30.8, 41.1, 38.9, 40.3, 38.5, 32.5, 28.9, 27.7, 20.5, 35.5, 22.1, 21.5, 16.7, 15.0, 14.6, 15.1, 13.0, 11.6, 10.8, 16.4, 16.3, 14.4, 10.2, 12.7, 11.9, 13.8, 27.7, 17.0, 15.7, 13.5, 20.6, 17.4, 16.6, 15.9, 12.2, 14.8, 14.0, 17.3, 16.7, 14.0, 11.8, 12.5, 13.1, 15.7, 16.0, 13.0, 13.9, 12.6, 10.5, 15.0, 20.8, 19.9, 10.8, 16.9, 13.4, 14.4, 51.4, 66.7, 65.3, 45.0, 62.5, 58.3, 49.7, 42.7, 31.4, 40.8, 27.5, 32.3, 26.1, 20.6, 16.4, 17.7, 14.7, 11.2, 9.4, 19.7, 22.2, 39.9, 52.4, 59.3, 72.9, 82.1, 60.9, 70.5, 47.8, 42.0, 36.6, 32.7, 29.3, 29.6, 23.3, 27.0, 17.1, 16.1, 26.1, 39.5, 41.2, 27.0, 16.8, 22.6, 21.8, 32.7, 25.1, 24.4, 26.0, 42.8, 43.4, 42.0];
+          var ma5 = [11.32, 11.64, 11.92, 12.03, 11.62, 11.39, 11.17, 11.03, 10.81, 10.57, 10.68, 10.79, 10.82, 10.91, 11.01, 10.97, 10.83, 10.67, 10.38, 10.22, 9.91, 9.57, 9.36, 9.17, 8.88, 8.57, 8.48, 8.26, 8.12, 8.01, 7.94, 7.8, 7.74, 7.59, 7.5, 7.41, 7.33, 7.27, 7.3, 7.33, 7.32, 7.32, 7.35, 7.34, 7.27, 7.19, 7.09, 6.9, 6.73, 6.66, 6.62, 6.63, 6.61, 6.55, 6.43, 6.34, 6.3, 6.24, 6.25, 6.27, 6.27, 6.18, 6.17, 6.14, 6.08, 6.08, 6.08, 6.13, 6.31, 6.55, 6.76, 7.02, 7.35, 7.54, 7.65, 7.65, 7.68, 7.65, 7.59, 7.63, 7.68, 7.71, 7.69, 7.64, 7.47, 7.38, 7.28, 7.18, 7.16, 7.25, 7.4, 7.68, 8.03, 8.46, 8.76, 8.98, 9.05, 9.02, 8.86, 8.8, 8.69, 8.54, 8.45, 8.3, 8.13, 8.02, 8.05, 8.15, 8.38, 8.55, 8.64, 8.64, 8.56, 8.48, 8.4, 8.39, 8.4, 8.48, 8.42, 8.31];
+          var ma20 = [10.08, 10.18, 10.28, 10.38, 10.45, 10.52, 10.59, 10.63, 10.68, 10.69, 10.79, 10.89, 10.96, 11.02, 11.05, 11.09, 11.11, 11.11, 11.03, 10.86, 10.74, 10.59, 10.47, 10.32, 10.17, 10.03, 9.92, 9.78, 9.65, 9.53, 9.35, 9.17, 9.01, 8.82, 8.65, 8.46, 8.29, 8.16, 8.05, 7.93, 7.81, 7.73, 7.65, 7.59, 7.53, 7.46, 7.38, 7.31, 7.24, 7.19, 7.13, 7.09, 7.03, 6.98, 6.92, 6.87, 6.83, 6.78, 6.72, 6.66, 6.61, 6.55, 6.48, 6.42, 6.36, 6.33, 6.3, 6.29, 6.31, 6.33, 6.36, 6.4, 6.47, 6.56, 6.64, 6.69, 6.74, 6.83, 6.89, 6.97, 7.04, 7.12, 7.21, 7.27, 7.32, 7.37, 7.42, 7.47, 7.48, 7.5, 7.53, 7.59, 7.64, 7.71, 7.78, 7.86, 7.93, 7.98, 8.03, 8.07, 8.11, 8.14, 8.17, 8.19, 8.24, 8.27, 8.33, 8.41, 8.5, 8.56, 8.58, 8.57, 8.55, 8.5, 8.47, 8.44, 8.41, 8.41, 8.39, 8.35];
+          var biPts = [["2026-04-27", 9.93], ["2026-05-07", 11.76], ["2026-07-21", 5.62], ["2026-08-04", 8.3], ["2026-08-07", 7.17], ["2026-08-12", 8.13], ["2026-08-21", 6.94], ["2026-09-01", 10.05], ["2026-09-16", 7.66], ["2026-09-22", 9.15], ["2026-10-09", 7.92], ["2026-10-14", 9.1]];
+          var zsBoxes = [{"x0": "2026-04-17", "x1": "2026-07-22", "zd": 8.79, "zg": 10.06, "name": "\u65e5\u7ebf\u4e2d\u67a2 [8.79~10.06] (9\u7b14)"}, {"x0": "2026-07-20", "x1": "2026-10-15", "zd": 7.17, "zg": 8.13, "name": "\u65e5\u7ebf\u4e2d\u67a2 [7.17~8.13] (9\u7b14)"}];
+          var markPoints = [];
+
+          // 中枢 markArea 数据结构
+          var markAreaData = zsBoxes.map(function(z) {
+            return [
+              { name: z.name, xAxis: z.x0, yAxis: z.zd, itemStyle: { color: 'rgba(227, 179, 65, 0.12)', borderColor: 'rgba(227, 179, 65, 0.45)', borderWidth: 1 } },
+              { xAxis: z.x1, yAxis: z.zg }
+            ];
+          });
+
+          var option = {
+            backgroundColor: '#0d1117',
+            animation: false,
+            tooltip: {
+              trigger: 'axis',
+              axisPointer: { type: 'cross' },
+              backgroundColor: 'rgba(22, 27, 34, 0.95)',
+              borderColor: '#30363d',
+              textStyle: { color: '#e6edf3', fontSize: 12 },
+              formatter: function(params) {
+                var d = params[0].name;
+                var res = '<div style="font-weight:700;margin-bottom:4px;">' + d + '</div>';
+                params.forEach(function(item) {
+                  if (item.seriesName === 'K线' && item.data) {
+                    res += '开盘: ' + item.data[1] + ' | 收盘: ' + item.data[2] + '<br/>';
+                    res += '最低: ' + item.data[3] + ' | 最高: ' + item.data[4] + '<br/>';
+                  } else if (item.seriesName === '成交量') {
+                    res += '成交量: ' + item.data + ' 万手<br/>';
+                  } else if (item.seriesName.indexOf('MA') !== -1 && item.data !== '-') {
+                    res += item.marker + item.seriesName + ': ' + item.data + '<br/>';
+                  }
+                });
+                return res;
+              }
+            },
+            grid: [
+              { left: 50, right: 30, top: 25, height: '62%' },
+              { left: 50, right: 30, top: '75%', height: '17%' }
+            ],
+            xAxis: [
+              {
+                type: 'category',
+                data: dates,
+                boundaryGap: true,
+                axisLine: { lineStyle: { color: '#30363d' } },
+                axisLabel: { color: '#8b949e', fontSize: 10 }
+              },
+              {
+                type: 'category',
+                gridIndex: 1,
+                data: dates,
+                boundaryGap: true,
+                axisLine: { lineStyle: { color: '#30363d' } },
+                axisLabel: { show: false }
+              }
+            ],
+            yAxis: [
+              {
+                scale: true,
+                splitLine: { lineStyle: { color: '#161b22' } },
+                axisLabel: { color: '#8b949e', fontSize: 10 }
+              },
+              {
+                gridIndex: 1,
+                splitLine: { show: false },
+                axisLabel: { color: '#8b949e', fontSize: 10 }
+              }
+            ],
+            dataZoom: [
+              { type: 'inside', xAxisIndex: [0, 1], start: 30, end: 100 },
+              { type: 'slider', xAxisIndex: [0, 1], top: '93%', height: 14, borderColor: '#30363d', fillerColor: 'rgba(88, 166, 255, 0.2)' }
+            ],
+            series: [
+              {
+                name: 'K线',
+                type: 'candlestick',
+                data: ohlc,
+                itemStyle: {
+                  color: '#f85149',
+                  color0: '#3fb950',
+                  borderColor: '#f85149',
+                  borderColor0: '#3fb950'
+                },
+                markArea: { data: markAreaData },
+                markPoint: {
+                  data: markPoints,
+                  symbolSize: 45,
+                  label: { fontSize: 10, fontWeight: 700, color: '#fff' }
+                },
+                markLine: {
+                  symbol: 'none',
+                  data: [
+                    { yAxis: 9.15, lineStyle: { color: '#f85149', type: 'dashed' }, label: { formatter: '阻力 9.15', position: 'end', color: '#f85149', fontSize: 10 } },
+                    { yAxis: 9.8, lineStyle: { color: '#ff7b72', type: 'dotted' }, label: { formatter: '目标 9.80', position: 'end', color: '#ff7b72', fontSize: 10 } },
+                    { yAxis: 8.3, lineStyle: { color: '#e3b341', type: 'dashed' }, label: { formatter: '支撑 8.30', position: 'end', color: '#e3b341', fontSize: 10 } },
+                    { yAxis: 8.05, lineStyle: { color: '#da3633', type: 'solid', width: 1.5 }, label: { formatter: '止损 8.05', position: 'end', color: '#da3633', fontSize: 10 } }
+                  ]
+                }
+              },
+              {
+                name: 'MA5',
+                type: 'line',
+                data: ma5,
+                smooth: true,
+                showSymbol: false,
+                lineStyle: { color: '#f1e05a', width: 1.2 }
+              },
+              {
+                name: 'MA20',
+                type: 'line',
+                data: ma20,
+                smooth: true,
+                showSymbol: false,
+                lineStyle: { color: '#bc8cff', width: 1.2 }
+              },
+              {
+                name: '缠论笔',
+                type: 'line',
+                data: biPts,
+                showSymbol: true,
+                symbol: 'circle',
+                symbolSize: 6,
+                itemStyle: { color: '#00f0ff' },
+                lineStyle: { color: '#00f0ff', width: 2, type: 'solid' }
+              },
+              {
+                name: '成交量',
+                type: 'bar',
+                xAxisIndex: 1,
+                yAxisIndex: 1,
+                data: vol,
+                itemStyle: {
+                  color: function(params) {
+                    var i = params.dataIndex;
+                    var c = ohlc[i];
+                    return (c && c[1] >= c[0]) ? '#f85149' : '#3fb950';
+                  }
+                }
+              }
+            ]
+          };
+
+          myChart.setOption(option);
+          window.addEventListener('resize', function() { myChart.resize(); });
+        })();
+        
+
+function copyMorningBrief() {
+  const brief = `【属于zhao的个股追踪·晨会实战精简操盘指令 · 20261015】\n` +
+    `1. 吉华集团(603980): 现价9.82元。主升浪类三买放量反包中军。指令: 持股锁仓不追高，冲高9.50~9.60分批减半止盈，破8.35防守减仓。\n` +
+    `2. 华映科技(000536): 现价3.12元。中枢下轨3.30支撑二买博弈。指令: 依托3.30挂单低吸，反弹冲高3.65高抛做T，跌破3.20坚决止损。\n` +
+    `3. 焦作万方(000612): 现价9.62元。大宗铝周期双底回踩底背驰。指令: 依托10.10~10.40波段低吸，反抽11.20减磅，破9.85止损。\n` +
+    `4. 深圳燃气(601139): 现价6.28元。极致地量中枢二买避险底仓。指令: 依托6.18持有不动，反弹6.38~6.45高抛，破6.10止损。\n` +
+    `5. 易明医药(002826): 现价16.48元。中枢上沿颈线突破三买回抽。指令: 回踩17.20不破低吸，冲高18.20~18.50减仓止盈，破16.80止损。\n` +
+    `6. 锦鸡股份(300798): 现价7.80元。创业板20cm染料+算力日线三买先锋。指令: 依托8.30均线持股，冲高9.20~9.60分批止盈，破8.05止损。\n` +
+    `【铁律】: 拒绝模棱两可，到位坚决执行，破位果断止损！`;
+  navigator.clipboard.writeText(brief).then(() => {
+    alert("已成功复制【属于zhao的个股追踪·晨会实战操盘指令】至剪贴板，可随时发至微信或笔记！");
+  }).catch(() => {
+    alert("复制失败，请手动选取文本复制。");
+  });
+}
+</script>
+</body>
+</html>

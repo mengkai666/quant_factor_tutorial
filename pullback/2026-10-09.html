@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="report-date" content="20261009">
+<title>强势板块·放量主升回调一笔·量化跟踪与战法结合 · 20261009</title>
+<style>
+:root {
+  --bg-primary: #0d1117;
+  --bg-card: #161b22;
+  --bg-card-sub: #0f141c;
+  --border-color: #30363d;
+  --border-hover: #58a6ff;
+  --text-primary: #f0f6fc;
+  --text-secondary: #8b949e;
+  --accent-red: #f85149;
+  --accent-green: #3fb950;
+  --accent-blue: #58a6ff;
+  --accent-yellow: #d29922;
+  --accent-purple: #bc8cff;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg-primary);
+  color: #c9d1d9;
+  font: 14px/1.65 -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  min-height: 100vh;
+}
+.wrap {
+  max-width: 1140px;
+  margin: 0 auto;
+  padding: 24px 20px 60px;
+}
+a { color: var(--accent-blue); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.top-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding: 10px 16px;
+  background: rgba(22,27,34,0.85);
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+}
+.top-nav .nav-links {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.top-nav .nav-link {
+  color: #58a6ff;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.top-nav .sep { color: #30363d; }
+.hero {
+  background: linear-gradient(135deg, rgba(56,139,253,0.14) 0%, rgba(188,140,255,0.08) 50%, rgba(22,27,34,0.95) 100%);
+  border: 1px solid rgba(88,166,255,0.35);
+  border-left: 5px solid #58a6ff;
+  border-radius: 12px;
+  padding: 24px 28px;
+  margin-bottom: 24px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+}
+.hero-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+.hero-title { font-size: 24px; font-weight: 800; color: #f0f6fc; margin-bottom: 6px; }
+.hero-sub { color: var(--text-secondary); font-size: 13.5px; }
+.pulse-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12.5px;
+  font-weight: 700;
+  background: rgba(56,139,253,0.15);
+  color: #58a6ff;
+  border: 1px solid rgba(56,139,253,0.4);
+}
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+  box-shadow: 0 3px 12px rgba(0,0,0,0.2);
+}
+table.flow-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-top: 10px;
+}
+table.flow-table th, table.flow-table td {
+  border: 1px solid #21262d;
+  padding: 9px 12px;
+  text-align: left;
+}
+table.flow-table th {
+  background: #161b22;
+  color: #8b949e;
+  font-weight: 600;
+}
+table.flow-table tr:nth-child(even) { background: rgba(255,255,255,0.015); }
+footer {
+  margin-top: 40px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: center;
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- 顶部全功能导航条 -->
+  <div class="top-nav">
+    <div class="nav-links">
+      <a href="../index.html" class="nav-link">🏠 导航门户</a>
+      <span class="sep">|</span>
+      <a href="../reports/20261009.html" class="nav-link">📊 主线追踪大报告</a>
+      <span class="sep">|</span>
+      <a href="../dashboards/latest.html" class="nav-link">📈 决策看板</a>
+      <span class="sep">|</span>
+      <a href="../plan/latest.html" class="nav-link">⚔️ 今日复盘与明日预案</a>
+      <span class="sep">|</span>
+      <a href="../dragon/latest.html" class="nav-link">🐉 龙头接替谱系</a>
+      <span class="sep">|</span>
+      <span style="color:#58a6ff;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:4px;background:rgba(56,139,253,0.18);padding:3px 10px;border-radius:12px;border:1px solid rgba(56,139,253,0.35);">
+        🌊 强势板块回调跟踪 (当前)
+      </span>
+    </div>
+    <div style="font-size:12px;color:#8b949e">数据基准日：20261009</div>
+  </div>
+
+  <!-- Hero Header -->
+  <div class="hero">
+    <div class="hero-top">
+      <div>
+        <div class="hero-title">🌊 强势板块·放量主升回调一笔·量化战法跟踪作战室</div>
+        <div class="hero-sub">
+          二波主升蓄势 × 极致缩量鉴别 × 三级健康度与游资战法结合 · 严格执行四维量化红线
+        </div>
+      </div>
+      <div class="pulse-badge">
+        <span>●</span> 定量标准固化 · 4 维红线风控
+      </div>
+    </div>
+  </div>
+
+  <!-- 核心量化作战室组件 -->
+  
+    <!-- 强势板块放量上涨后·回调一笔量化跟踪面板 -->
+    <section class="pullback-tactic-tracker" id="sec-pullback-tracker" style="margin:26px 0 32px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;">
+      
+      <!-- 标题栏 -->
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;border-bottom:1px solid #30363d;padding-bottom:10px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <h2 class="section-title" style="margin:0;font-size:18px;color:#f0f6fc;display:flex;align-items:center;gap:8px;">
+            <span>🌊 强势板块·放量主升回调一笔·量化战法跟踪作战室</span>
+          </h2>
+          <span style="font-size:11.5px;background:rgba(56,139,253,0.15);color:#58a6ff;border:1px solid rgba(56,139,253,0.3);padding:2px 8px;border-radius:12px;font-weight:600;">
+            二波蓄势 × 缩量鉴别 × 战法结合
+          </span>
+        </div>
+        <div style="font-size:12px;color:#8b949e;">基于 20261009 真实数据 · 严守四维量化红线</div>
+      </div>
+
+      <!-- 四大量化规则展示卡片 -->
+      <div style="margin-bottom:18px;">
+        <div style="font-size:13px;font-weight:700;color:#58a6ff;margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+          <span>📐 固化四大定量规则标准 (Fixed Quantitative Standards)</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:12px;">
+          
+    <div style='background:#1c2128;border:1px solid #30363d;border-left:4px solid #3fb950;border-radius:8px;padding:12px 14px;'>
+      <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;'>
+        <b style='font-size:13.5px;color:#f0f6fc;'>规则一 · 放量主升甄别规则 (Impulse Expansion)</b>
+        <span style='font-size:11px;padding:2px 8px;border-radius:10px;background:rgba(63,185,80,0.12);color:#3fb950;border:1px solid #3fb950;'>主升门槛</span>
+      </div>
+      <div style='font-size:12px;line-height:1.5;margin-bottom:6px;'><div style='margin-bottom:3px'><b style='color:#c9d1d9'>观察窗口：</b><span style='color:#8b949e'>过去 15 个交易日</span></div><div style='margin-bottom:3px'><b style='color:#c9d1d9'>超额收益：</b><span style='color:#8b949e'>相对大盘强弱比 RS ≥ 115% 且累计涨幅 ≥ +8.0%</span></div><div style='margin-bottom:3px'><b style='color:#c9d1d9'>成交量放量：</b><span style='color:#8b949e'>主升浪单日成交额突破 20 日均量的 1.30 倍以上</span></div><div style='margin-bottom:3px'><b style='color:#c9d1d9'>领涨代表：</b><span style='color:#8b949e'>出过 ≥ 3 连板前排龙头，或拥有百亿级放量大阳容量中军</span></div></div>
+      <div style='font-size:11.5px;color:#8b949e;background:rgba(0,0,0,0.25);padding:4px 8px;border-radius:4px;border-left:2px solid #3fb950;'>
+        💡 <b>核心要点：</b>主力介入深且成本清晰，放量主升后的缩量回调具备高盈亏比反弹价值。
+      </div>
+    </div>
+    
+    <div style='background:#1c2128;border:1px solid #30363d;border-left:4px solid #58a6ff;border-radius:8px;padding:12px 14px;'>
+      <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;'>
+        <b style='font-size:13.5px;color:#f0f6fc;'>规则二 · 健康缩量回调一笔规则 (Healthy Pullback)</b>
+        <span style='font-size:11px;padding:2px 8px;border-radius:10px;background:rgba(88,166,255,0.12);color:#58a6ff;border:1px solid #58a6ff;'>回调尺度</span>
+      </div>
+      <div style='font-size:12px;line-height:1.5;margin-bottom:6px;'><div style='margin-bottom:3px'><b style='color:#c9d1d9'>空间回撤：</b><span style='color:#8b949e'>从主升波段最高点回撤 3.5% ~ 11.0% (控制在 0.382~0.5 黄金分割位)</span></div><div style='margin-bottom:3px'><b style='color:#c9d1d9'>缩量特征：</b><span style='color:#8b949e'>回调日成交量较主升峰值量能萎缩 ≥ 30% (30%~60% 最佳，浮筹锁死)</span></div><div style='margin-bottom:3px'><b style='color:#c9d1d9'>支撑依托：</b><span style='color:#8b949e'>当前价格距离 10日/20日均线或前期突破颈线在 ±2.5% 范围内</span></div><div style='margin-bottom:3px'><b style='color:#c9d1d9'>形态止跌：</b><span style='color:#8b949e'>回调末端收出缩量十字星、小阴线或长下影探底企稳 K 线</span></div></div>
+      <div style='font-size:11.5px;color:#8b949e;background:rgba(0,0,0,0.25);padding:4px 8px;border-radius:4px;border-left:2px solid #58a6ff;'>
+        💡 <b>核心要点：</b>缩量表明无恐慌踩踏，属于良性洗盘；放量下杀坚决剔除。
+      </div>
+    </div>
+    
+    <div style='background:#1c2128;border:1px solid #30363d;border-left:4px solid #bc8cff;border-radius:8px;padding:12px 14px;'>
+      <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;'>
+        <b style='font-size:13.5px;color:#f0f6fc;'>规则三 · 三级健康度与量化战法匹配规则 (Tactical Mapping)</b>
+        <span style='font-size:11px;padding:2px 8px;border-radius:10px;background:rgba(188,140,255,0.12);color:#bc8cff;border:1px solid #bc8cff;'>战法匹配</span>
+      </div>
+      <div style='line-height:1.5;margin-bottom:6px;'><div style='margin-bottom:4px;font-size:11.5px;'><span style='color:#3fb950;font-weight:700;'>[Level A] 蓄势待发 · 二波主升候选</span>：<span style='color:#c9d1d9'>缩量极致(量比&lt;0.65) + 守住20日生命线 + 核心中军大单托底 + 无跌停核按钮</span></div><div style='margin-bottom:4px;font-size:11.5px;'><span style='color:#d29922;font-weight:700;'>[Level B] 中继整理 · 分时观察分支</span>：<span style='color:#c9d1d9'>正常缩量回踩，未破箱体下沿，但板块缺乏多股集群助攻，面临退潮分化或长假抽血</span></div><div style='margin-bottom:4px;font-size:11.5px;'><span style='color:#f85149;font-weight:700;'>[Level C] 破位风险 · 严格剔除雷区</span>：<span style='color:#c9d1d9'>放量跌穿 20 日生命线 / 板块内出现批量一字跌停 / 相对强度 RS 破位下行</span></div></div>
+      <div style='font-size:11.5px;color:#8b949e;background:rgba(0,0,0,0.25);padding:4px 8px;border-radius:4px;border-left:2px solid #bc8cff;'>
+        💡 <b>核心要点：</b>A级博二波、B级做套利、C级防破位A杀，严格对应不同操盘策略。
+      </div>
+    </div>
+    
+    <div style='background:#1c2128;border:1px solid #30363d;border-left:4px solid #e3b341;border-radius:8px;padding:12px 14px;'>
+      <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;'>
+        <b style='font-size:13.5px;color:#f0f6fc;'>规则四 · 分时执行与风控熔断规则 (Actionable Triggers)</b>
+        <span style='font-size:11px;padding:2px 8px;border-radius:10px;background:rgba(227,179,65,0.12);color:#e3b341;border:1px solid #e3b341;'>操盘军规</span>
+      </div>
+      <div style='font-size:12px;line-height:1.5;margin-bottom:6px;'><div style='margin-bottom:3px'><b style='color:#e3b341'>09:25 集合竞价：</b><span style='color:#c9d1d9'>观察核心标的量比是否 &gt; 1.5，红开 +1% ~ +3%，且同板块无跌停开盘</span></div><div style='margin-bottom:3px'><b style='color:#e3b341'>09:35 开盘前10分：</b><span style='color:#c9d1d9'>分时回踩均价线获得支撑，核心中军出现万手级主动性买单推升</span></div><div style='margin-bottom:3px'><b style='color:#e3b341'>10:00 盘中确认：</b><span style='color:#c9d1d9'>板块内出现至少 2 只连板或首板涨停助攻，确认板块集群共振</span></div><div style='margin-bottom:3px'><b style='color:#e3b341'>风控熔断底线：</b><span style='color:#c9d1d9'>分时放量跌穿昨日收盘价超过 2% 且 3 分钟不回升，或高标炸板跳水，立即放弃/止损离场</span></div></div>
+      <div style='font-size:11.5px;color:#8b949e;background:rgba(0,0,0,0.25);padding:4px 8px;border-radius:4px;border-left:2px solid #e3b341;'>
+        💡 <b>核心要点：</b>买点必须由分时右侧客观触发，不达标坚决空仓防守。
+      </div>
+    </div>
+    
+        </div>
+      </div>
+
+      <!-- 当前真实板块跟踪与战法结合对账 -->
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#e3b341;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">
+          <span>🎯 现状个股板块与战法结合实战对账池 (Current Market Focus &amp; Action Conclusions)</span>
+          <span style="font-size:11.5px;color:#8b949e;font-weight:normal;">严格区分【待观察】与【交易候选】· 无右侧触发绝不进场</span>
+        </div>
+        <div>
+          
+        <div style='background:#161b22;border:1px solid #30363d;border-left:4px solid #3fb950;border-radius:10px;padding:14px 16px;margin-bottom:12px;box-shadow:0 3px 10px rgba(0,0,0,0.2);'>
+          <div style='display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;'>
+            <div style='display:flex;align-items:center;gap:10px;'>
+              <b style='font-size:14.5px;color:#f0f6fc;'>AI算力硬件 / CPO / PCB</b>
+              <span style='font-size:11px;color:#3fb950;background:rgba(255,255,255,0.06);border:1px solid #3fb950;padding:2px 8px;border-radius:10px;font-weight:700;'>Level A</span>
+            </div>
+            <div style='font-size:12px;color:#8b949e;'>放量主升后缩量回调 (缩量42% · 踩20日线)</div>
+          </div>
+          
+          <div style='display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:8px;background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:9px 12px;margin-bottom:8px;font-size:12px;'>
+            <div><b style='color:#58a6ff;'>主升爆发：</b><span style='color:#c9d1d9;'>近15日前期大涨 +28.5%，RS=138%，成交额曾超百亿创新高</span></div>
+            <div><b style='color:#e3b341;'>回调一笔：</b><span style='color:#c9d1d9;'>高位回撤 -7.8%，量能萎缩 42%，当前精准依托 20 日均线支撑</span></div>
+            <div style='grid-column: 1 / -1;'><b style='color:#bc8cff;'>核心标的：</b><span style='color:#f0f6fc;font-weight:600;'>中际旭创 (300308)、新易盛 (300502)、澳弘电子 (605058)、工业富联 (601138)</span></div>
+          </div>
+
+          <div style='font-size:12px;color:#c9d1d9;margin-bottom:8px;display:flex;align-items:center;flex-wrap:wrap;gap:8px;'>
+            <div><b style='color:#3fb950;'>🎯 战法映射：</b>战法 G (严重异动监管与滑窗二波战法) · 人气容量龙趋势承接律</div>
+            <span style='color:#6e7681;'>|</span>
+            <div style='color:#8b949e;'>控速压制涨幅，等待 T+10 监管滑窗出清释放二次额度。</div>
+          </div>
+
+          <div style='background:rgba(0,0,0,0.3);border:1px solid #21262d;border-left:3px solid #3fb950;border-radius:6px;padding:8px 12px;display:flex;align-items:center;flex-wrap:wrap;gap:8px;'>
+            <b style='font-size:12.5px;color:#3fb950;white-space:nowrap;'>【节前防守观望 · 节后跟踪滑窗二波】</b>
+            <span style='font-size:12px;color:#c9d1d9;'>节前不左侧抄底；重点监控 20 日线中枢，节后放量突破再右侧启动。</span>
+          </div>
+        </div>
+        
+        <div style='background:#161b22;border:1px solid #30363d;border-left:4px solid #d29922;border-radius:10px;padding:14px 16px;margin-bottom:12px;box-shadow:0 3px 10px rgba(0,0,0,0.2);'>
+          <div style='display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;'>
+            <div style='display:flex;align-items:center;gap:10px;'>
+              <b style='font-size:14.5px;color:#f0f6fc;'>传媒 / 短剧与AI应用</b>
+              <span style='font-size:11px;color:#d29922;background:rgba(255,255,255,0.06);border:1px solid #d29922;padding:2px 8px;border-radius:10px;font-weight:700;'>Level B</span>
+            </div>
+            <div style='font-size:12px;color:#8b949e;'>高位决裂分化 (新华传媒 5板独苗 vs 新华文轩 -8.99% 断板)</div>
+          </div>
+          
+          <div style='display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:8px;background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:9px 12px;margin-bottom:8px;font-size:12px;'>
+            <div><b style='color:#58a6ff;'>主升爆发：</b><span style='color:#c9d1d9;'>近10日传媒指数放量反弹 +12.3%，走出 5 板高度空间龙</span></div>
+            <div><b style='color:#e3b341;'>回调一笔：</b><span style='color:#c9d1d9;'>高标决裂分化，败者放量单边大跌，题材内部缺乏集群梯队</span></div>
+            <div style='grid-column: 1 / -1;'><b style='color:#bc8cff;'>核心标的：</b><span style='color:#f0f6fc;font-weight:600;'>新华传媒 (600825 · 5板活口)、新华文轩 (601811 · 断板大跌)、天威视讯 (002238 · 跌停)</span></div>
+          </div>
+
+          <div style='font-size:12px;color:#c9d1d9;margin-bottom:8px;display:flex;align-items:center;flex-wrap:wrap;gap:8px;'>
+            <div><b style='color:#d29922;'>🎯 战法映射：</b>战法 A (龙头高度突破战法) vs 战法 B (断板反包幻觉律) · 双子星卡位生死律</div>
+            <span style='color:#6e7681;'>|</span>
+            <div style='color:#8b949e;'>双雄决裂：新华文轩放量大跌严禁抄底；新华传媒成为全市场唯一 5 板独苗试压。</div>
+          </div>
+
+          <div style='background:rgba(0,0,0,0.3);border:1px solid #21262d;border-left:3px solid #d29922;border-radius:6px;padding:8px 12px;display:flex;align-items:center;flex-wrap:wrap;gap:8px;'>
+            <b style='font-size:12.5px;color:#d29922;white-space:nowrap;'>【新华文轩拉黑名单 · 新华传媒极苛刻试错】</b>
+            <span style='font-size:12px;color:#c9d1d9;'>文轩断板冲高一律视为主力自救诱多拉黑；传媒仅在 9:25 竞价成交&gt;1.2亿且红开+2%~+5%轻仓试错，炸板&gt;3分钟立即止损。</span>
+          </div>
+        </div>
+        
+        <div style='background:#161b22;border:1px solid #30363d;border-left:4px solid #d29922;border-radius:10px;padding:14px 16px;margin-bottom:12px;box-shadow:0 3px 10px rgba(0,0,0,0.2);'>
+          <div style='display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;'>
+            <div style='display:flex;align-items:center;gap:10px;'>
+              <b style='font-size:14.5px;color:#f0f6fc;'>人形机器人 / 汽车零部件</b>
+              <span style='font-size:11px;color:#d29922;background:rgba(255,255,255,0.06);border:1px solid #d29922;padding:2px 8px;border-radius:10px;font-weight:700;'>Level B</span>
+            </div>
+            <div style='font-size:12px;color:#8b949e;'>低位逆市抗跌防守分支 (雪龙集团 3板 · 襄阳轴承 2板)</div>
+          </div>
+          
+          <div style='display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:8px;background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:9px 12px;margin-bottom:8px;font-size:12px;'>
+            <div><b style='color:#58a6ff;'>主升爆发：</b><span style='color:#c9d1d9;'>近5日逆市启动，机器人概念异动扩散，连板梯队走出 2 板、3 板</span></div>
+            <div><b style='color:#e3b341;'>回调一笔：</b><span style='color:#c9d1d9;'>面临 09-28 全市场 56 家跌停退潮，个股逆势分歧换手封板</span></div>
+            <div style='grid-column: 1 / -1;'><b style='color:#bc8cff;'>核心标的：</b><span style='color:#f0f6fc;font-weight:600;'>雪龙集团 (603949 · 3板)、襄阳轴承 (000678 · 2板)、大业股份 (603278 · 2板)</span></div>
+          </div>
+
+          <div style='font-size:12px;color:#c9d1d9;margin-bottom:8px;display:flex;align-items:center;flex-wrap:wrap;gap:8px;'>
+            <div><b style='color:#d29922;'>🎯 战法映射：</b>战法 C (模仿补涨与板块扩散战法) · 退潮期假冲天炮出逃律</div>
+            <span style='color:#6e7681;'>|</span>
+            <div style='color:#8b949e;'>高标退潮断层承接避险资金，但缺乏全域集群涨停共振，面临节前提现大考。</div>
+          </div>
+
+          <div style='background:rgba(0,0,0,0.3);border:1px solid #21262d;border-left:3px solid #d29922;border-radius:6px;padding:8px 12px;display:flex;align-items:center;flex-wrap:wrap;gap:8px;'>
+            <b style='font-size:12.5px;color:#d29922;white-space:nowrap;'>【身位先锋轻仓试错 · 无助攻坚决不追】</b>
+            <span style='font-size:12px;color:#c9d1d9;'>雪龙集团 3 进 4 作为身位卡位观察，前提需首板小弟助攻联动；无脑顶一字坚决不排单，仓位≤1成。</span>
+          </div>
+        </div>
+        
+        <div style='background:#161b22;border:1px solid #30363d;border-left:4px solid #f85149;border-radius:10px;padding:14px 16px;margin-bottom:12px;box-shadow:0 3px 10px rgba(0,0,0,0.2);'>
+          <div style='display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;'>
+            <div style='display:flex;align-items:center;gap:10px;'>
+              <b style='font-size:14.5px;color:#f0f6fc;'>高位破位断板踩踏群 (纺织/地产/软件)</b>
+              <span style='font-size:11px;color:#f85149;background:rgba(255,255,255,0.06);border:1px solid #f85149;padding:2px 8px;border-radius:10px;font-weight:700;'>Level C</span>
+            </div>
+            <div style='font-size:12px;color:#8b949e;'>极端退潮批量一字跌停 (泰慕士/华远控股/南威软件)</div>
+          </div>
+          
+          <div style='display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:8px;background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:9px 12px;margin-bottom:8px;font-size:12px;'>
+            <div><b style='color:#58a6ff;'>主升爆发：</b><span style='color:#c9d1d9;'>前期走出 3~4 连板中位加速，获利盘丰厚</span></div>
+            <div><b style='color:#e3b341;'>回调一笔：</b><span style='color:#c9d1d9;'>昨日连板今日竞价直接核按钮，收盘巨量大单焊死一字跌停</span></div>
+            <div style='grid-column: 1 / -1;'><b style='color:#bc8cff;'>核心标的：</b><span style='color:#f0f6fc;font-weight:600;'>泰慕士 (001234 · 跌停)、天威视讯 (002238 · 跌停)、华远控股 (600743 · 跌停)、集泰股份 (002909 · 跌停)</span></div>
+          </div>
+
+          <div style='font-size:12px;color:#c9d1d9;margin-bottom:8px;display:flex;align-items:center;flex-wrap:wrap;gap:8px;'>
+            <div><b style='color:#f85149;'>🎯 战法映射：</b>战法 E (接力换手防守与退潮空间塌陷战法) · 监管异动红线踩踏律</div>
+            <span style='color:#6e7681;'>|</span>
+            <div style='color:#8b949e;'>高标断板后中位股批量无量闷杀，情绪退潮期负反馈杀伤力极强。</div>
+          </div>
+
+          <div style='background:rgba(0,0,0,0.3);border:1px solid #21262d;border-left:3px solid #f85149;border-radius:6px;padding:8px 12px;display:flex;align-items:center;flex-wrap:wrap;gap:8px;'>
+            <b style='font-size:12.5px;color:#f85149;white-space:nowrap;'>【P-Black 绝对禁买黑名单 · 严禁接飞刀】</b>
+            <span style='font-size:12px;color:#c9d1d9;'>一字跌停标的坚决不抄底、不搏地天板；天威视讯/泰慕士等若继续大单焊死跌停，全天执行 0 仓位防守熔断！</span>
+          </div>
+        </div>
+        
+        </div>
+      </div>
+
+    </section>
+    
+
+  <!-- 实战分时量化执行与检查表 -->
+  <div class="card" style="margin-top:20px;">
+    <div style="font-size:14.5px;font-weight:700;color:#f0f6fc;margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+      <span>⏱️ 强势板块回调一笔·临盘分时触发与熔断检查表 (Execution &amp; Invalidation)</span>
+    </div>
+    <table class="flow-table">
+      <thead>
+        <tr>
+          <th style="width:120px;">时间时段</th>
+          <th style="width:240px;">监控焦点与健康信号</th>
+          <th>量化通过门槛 (Go)</th>
+          <th>熔断失效动作 (No-Go / Stop)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><b style="color:#e3b341;">09:25 集合竞价</b></td>
+          <td>板块核心标的开盘溢价、竞价量比、同板块跌停数</td>
+          <td>核心标的量比 &gt; 1.3，平开或高开 +0.5%~+3.0%，且板块内无 -5% 以上抢跑跌停盘。</td>
+          <td>竞价出现大单核按钮，或板块内出现一字跌停：<b style="color:#f85149;">取消开仓计划，全天观望。</b></td>
+        </tr>
+        <tr>
+          <td><b style="color:#58a6ff;">09:35 开盘前10分</b></td>
+          <td>回踩分时均线获得支撑，核心中军出现主动推升大单</td>
+          <td>分时线始终依托分时均线不破，分时量价齐升，未跌破前日最低点。</td>
+          <td>开盘放量单边滑落至分时均线下方且反抽无力：<b style="color:#f85149;">判定承接失败，禁止左侧买入。</b></td>
+        </tr>
+        <tr>
+          <td><b style="color:#3fb950;">10:00 梯队确认</b></td>
+          <td>板块成交占比进前三，出现首板助攻小弟，梯队共振</td>
+          <td>板块内至少走出 1~2 只涨停助攻小弟，龙头封单持续增加，板块效应扩散。</td>
+          <td>龙头冲高回落炸板超过 3 分钟未封回：<b style="color:#f85149;">立即停止跟进，底仓逢高减半防守。</b></td>
+        </tr>
+        <tr>
+          <td><b style="color:#bc8cff;">14:00 午后防守</b></td>
+          <td>20日生命线得失与大盘流动性抽血情况</td>
+          <td>日 K 线收缩量阳线或下影十字星，站稳 20 日均线支撑带。</td>
+          <td>收盘跌破 20 日均线或个股跌超 -4.0%：<b style="color:#f85149;">执行机械止损，严禁补仓被动套牢。</b></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <footer>
+    主线强度追踪系统 · 强势板块回调一笔量化规则引擎 · 数据跑批生成 · 仅供研究参考, 不构成投资建议
+  </footer>
+</div>
+</body>
+</html>
