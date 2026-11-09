@@ -205,13 +205,27 @@ def _old_core_codes(payload: dict, day: str, current: str | None) -> list[str]:
 
 
 def _stock_notes(row: dict, day: str) -> None:
-    """条件性观察说明，不将价格规则升级成直接买卖指令。"""
+    """条件性观察说明，结合个股精确均线偏离度、10日异动安全垫与角色给出针对性判断。"""
     pieces = [row["status"] or "跟踪身份未标注"]
     if row["support_streak"] is not None:
         pieces.append(f"连续支持 {row['support_streak']} 日")
     if row["ranking"] is not None:
         pieces.append(f"{row['ranking_scope']}第 {row['ranking']} 位")
-    if row["r1"] is not None and row["r1"] < 0:
+    close = row.get("close")
+    ma5 = row.get("ma5")
+    r1 = row.get("r1")
+    r10 = row.get("r10")
+    ma5_gap = ((close / ma5 - 1.0) * 100.0) if (close is not None and ma5 is not None and ma5 > 0) else None
+    safety10 = (100.0 - r10) if r10 is not None else None
+
+    if r10 is not None and r10 >= 80.0:
+        pieces.append(f"10日累计涨幅达 {r10:+.2f}%（距100%严重异动红线仅余 {safety10:.2f}%，处监管触线敏感区）")
+    elif ma5_gap is not None and abs(ma5_gap) <= 2.5:
+        pieces.append(f"收盘距 MA5 仅 {ma5_gap:+.2f}%，处 5 日均线强弱变盘临界位")
+    elif r1 is not None and r1 >= 9.5 and safety10 is not None:
+        pieces.append(f"当日涨停突破（距100%异动红线尚余 {safety10:.2f}% 安全垫）")
+
+    if r1 is not None and r1 < 0:
         pieces.append("本日收跌，多日排名靠前不等于当天承接确认")
     if row["role"] == "risk":
         pieces.append("保留旧核心/分歧样本作风险对照，非当前进攻名单")
@@ -220,13 +234,58 @@ def _stock_notes(row: dict, day: str) -> None:
         row["watch"] = "先补齐并核对同日价格证据，再定义观察条件；当前不提供观察价。"
         row["invalidation"] = "日期或价格口径不能核实时，暂停该条观察。"
         return
-    row["watch"] = f"以 {day} 收盘 {row['close']:.2f} 元作前复权研究参照"
-    if row["ma5"] is not None:
-        row["watch"] += f"，对照 MA5 {row['ma5']:.2f} 元"
-    row["watch"] += "；下一交易时点仍须验证分时承接、量能及同类跟随。"
-    row["invalidation"] = "相对强势或事先记录的承接结构失效时停止升级；缺分时证据不确认买点。"
-    if row["role"] == "risk":
-        row["invalidation"] = "反抽不能收复破位结构或再次走弱，结束修复假说，不以补仓替代验证。"
+
+    watch = f"以 {day} 收盘 {close:.2f} 元作前复权研究参照"
+    if ma5 is not None:
+        watch += f"，对照 MA5 {ma5:.2f} 元（偏离 {ma5_gap:+.2f}%）" if ma5_gap is not None else f"，对照 MA5 {ma5:.2f} 元"
+
+    if row["role"] == "risk" or (ma5_gap is not None and ma5_gap < -2.0):
+        watch += f"；当前处于均线下方弱势区，未放量收复 {ma5:.2f} 元前仅作负反馈止跌观察，严禁盲目抄底。" if ma5 is not None else "；下一交易时点仍须验证分时承接、量能及同类跟随。"
+        row["watch"] = watch
+        row["invalidation"] = (
+            f"反抽受阻于 MA5（{ma5:.2f} 元）或再次跌破 {close * 0.96:.2f} 元走弱，结束修复假说，不以补仓替代验证。"
+            if ma5 is not None
+            else "反抽不能收复破位结构或再次走弱，结束修复假说，不以补仓替代验证。"
+        )
+        return
+
+    if r10 is not None and r10 >= 85.0:
+        trigger_ceil = close * (1.0 + max(0.01, safety10 / 200.0)) if safety10 is not None else close * 1.03
+        watch += (
+            f"；⚠️10日涨幅已达 {r10:+.2f}%（距100%严重异动红线仅剩 {safety10:.2f}%），"
+            f"次日盘中拉升触及 {trigger_ceil:.2f} 元附近极易引发兑现避险，严禁追高打板，仅观察回踩 {ma5:.2f} 元承接。"
+            if ma5 is not None
+            else f"；⚠️10日涨幅已达 {r10:+.2f}%，严防触及100%异动红线冲高回落，不追高。"
+        )
+        row["invalidation"] = (
+            f"冲高异动临界位滞涨破分时均线，或放量跌破 {close * 0.95:.2f} 元 / MA5（{ma5:.2f} 元）时停止升级。"
+            if ma5 is not None
+            else "相对强势或事先记录的承接结构失效时停止升级；缺分时证据不确认买点。"
+        )
+    elif ma5 is not None and abs(ma5_gap or 0.0) <= 2.5:
+        watch += (
+            f"；当前精准回踩 MA5 支撑带（{ma5 * 0.992:.2f}~{ma5 * 1.008:.2f} 元），"
+            f"次日重点核验早盘回踩 {ma5:.2f} 元不破且分时放量拐头站稳均线的低吸反包信号。"
+        )
+        row["invalidation"] = f"放量跌破 {ma5 * 0.98:.2f} 元（有效跌破 MA5 超 2%）且 15 分钟不收回时确认均线破位失效。"
+    elif r1 is not None and r1 >= 9.5:
+        watch += (
+            f"；当日涨停加速，次日核验竞价高开 +2%~+6%（{close * 1.02:.2f}~{close * 1.06:.2f} 元）"
+            f"及分时回踩 {close * 0.975:.2f} 元不破的换手晋级动能。"
+        )
+        row["invalidation"] = (
+            f"竞价核按钮低开或盘中炸板跌破 {close * 0.95:.2f} 元（中期防守 MA5 {ma5:.2f} 元）时停止升级。"
+            if ma5 is not None
+            else "相对强势或事先记录的承接结构失效时停止升级；缺分时证据不确认买点。"
+        )
+    else:
+        watch += "；下一交易时点仍须验证分时承接、量能及同类跟随。"
+        row["invalidation"] = (
+            f"跌破前复权支撑 {ma5:.2f} 元（MA5）或相对强势承接结构失效时停止升级；缺分时证据不确认买点。"
+            if ma5 is not None
+            else "相对强势或事先记录的承接结构失效时停止升级；缺分时证据不确认买点。"
+        )
+    row["watch"] = watch
 
 
 def _stocks(payload: dict | None, source: dict, day: str) -> dict:
@@ -390,13 +449,39 @@ def _sectors(payload: dict | None, source: dict, day: str, output: Path, data: P
                  f"最高 {values['max_height']} 板" if values["max_height"] is not None else "高度缺失"]
         if values["change"] is not None:
             facts.append(f"来源记录较前一交易日 {values['change']:+d} 家")
-        reference = "、".join(r["name"] for r in reps[:3]) or "有同日证据的代表股"
+        rep_with_h = [
+            f"{r['name']}({r['current_height']}板)" if isinstance(r.get("current_height"), int) and r["current_height"] > 0 else r["name"]
+            for r in reps[:3]
+        ]
+        reference = "、".join(rep_with_h) or "有同日证据的代表股"
+        zt_cnt = values.get("limit_up_count") or 0
+        st_cnt = values.get("streak_count") or 0
+        chg_val = values.get("change") or 0
+        lead_rep = rep_with_h[0] if rep_with_h else "代表高标"
+        sub_reps = "、".join(rep_with_h[1:]) if len(rep_with_h) > 1 else ""
+
+        if zt_cnt >= 10 and st_cnt >= 3:
+            facts.append(f"板块梯队结构完整（高标 {lead_rep} 领衔）")
+            watch_txt = (
+                f"核心盯盘 {lead_rep} 的竞价承接与空间突破，同时核验中位梯队 {sub_reps} 的换手卡位及首板扩散；一字封板须另验可成交性。"
+                if sub_reps
+                else f"重点盯盘 {reference} 的竞价承接、连板晋级和新增涨停扩散；一字封板须另验可成交性。"
+            )
+            inv_txt = f"若龙头 {lead_rep} 炸板大面且中位梯队（{sub_reps or '同题材跟风'}）批量掉队、涨停样本收缩至 5 家以下时降低优先级。"
+        elif chg_val <= -6 and st_cnt <= 1:
+            facts.append(f"涨停大幅退潮收缩（连板仅剩 {lead_rep} 独苗）")
+            watch_txt = f"板块后排大幅收缩，仅观察独苗高标 {lead_rep} 能否吸引题材资金回流及 {sub_reps or '前排股'} 止跌承接，严禁盲目接力后排跟风。"
+            inv_txt = f"若高标 {lead_rep} 竞价转弱或冲高断板、板块无首板助攻回流，确认退潮延续并放弃该方向。"
+        else:
+            watch_txt = f"比较 {reference} 的分时换手承接、同身位卡位晋级和新增首板扩散；一字封板须另验可成交性。"
+            inv_txt = f"代表股（{reference}）同步走弱且板块涨停样本继续收缩时降低观察优先级；单股脉冲拉升不能确认整个方向。"
+
         rows.append({"name": name, "as_of": day, "rank": _integer(raw.get("rank")), **values,
                      "streak_count_label": "连板家数", "scope": "项目题材归类/涨停样本",
                      "history": series, "stocks": reps[:3],
                      "subsectors": _unique([str(r["sub_sector"]) for r in reps if r.get("sub_sector")]),
-                     "reason": "；".join(facts) + "。", "watch": f"比较{reference}的承接、连板晋级和新增涨停扩散；一字封板须另验可成交性。",
-                     "invalidation": "代表股同步转弱且涨停样本收缩时降低观察优先级；单股拉升不能确认整个方向。",
+                     "reason": "；".join(facts) + "。", "watch": watch_txt,
+                     "invalidation": inv_txt,
                      "warnings": _unique(row_warnings)})
         warnings.extend(row_warnings)
     if not candidates:

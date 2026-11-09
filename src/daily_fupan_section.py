@@ -602,17 +602,18 @@ def generate_daily_fupan_html(
 <section id="sec-daily-fupan" class="daily-fupan-section" style="margin: 20px 0 28px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif;">
     <style>
         .fupan-clean-card {{
-            background: #11141a;
-            border: 1px solid #262c36;
-            border-radius: 8px;
+            background: rgba(22, 27, 34, 0.85);
+            border: 1px solid #30363d;
+            border-radius: 12px;
             padding: 20px 22px;
-            color: #d1d5db;
+            color: #c9d1d9;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
         }}
         .f-top-bar {{
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 1px solid #202632;
+            border-bottom: 1px solid #21262d;
             padding-bottom: 14px;
             margin-bottom: 16px;
             flex-wrap: wrap;
@@ -620,12 +621,14 @@ def generate_daily_fupan_html(
         }}
         .f-top-bar h2 {{
             margin: 0;
-            font-size: 18px;
+            font-size: 1.25rem;
             font-weight: 700;
-            color: #f3f4f6;
+            color: #f0f6fc;
             display: flex;
             align-items: center;
             gap: 8px;
+            border-left: 4px solid #f85149;
+            padding-left: 12px;
         }}
         .f-tag-row {{
             display: flex;
@@ -635,14 +638,14 @@ def generate_daily_fupan_html(
         .f-tag {{
             font-size: 11.5px;
             font-weight: 600;
-            padding: 3px 8px;
-            border-radius: 4px;
+            padding: 3px 9px;
+            border-radius: 6px;
             border: 1px solid transparent;
         }}
-        .f-tag.red {{ background: rgba(239, 68, 68, 0.1); color: #f87171; border-color: rgba(239, 68, 68, 0.25); }}
-        .f-tag.blue {{ background: rgba(59, 130, 246, 0.1); color: #60a5fa; border-color: rgba(59, 130, 246, 0.25); }}
-        .f-tag.amber {{ background: rgba(245, 158, 11, 0.1); color: #fbbf24; border-color: rgba(245, 158, 11, 0.25); }}
-        .f-tag.gray {{ background: #1a202c; color: #9ca3af; border-color: #2d3748; }}
+        .f-tag.red {{ background: rgba(248, 81, 73, 0.12); color: #f85149; border-color: rgba(248, 81, 73, 0.3); }}
+        .f-tag.blue {{ background: rgba(88, 166, 255, 0.12); color: #58a6ff; border-color: rgba(88, 166, 255, 0.3); }}
+        .f-tag.amber {{ background: rgba(210, 153, 34, 0.12); color: #e3b341; border-color: rgba(210, 153, 34, 0.3); }}
+        .f-tag.gray {{ background: #0d1117; color: #8b949e; border-color: #30363d; }}
 
         .f-metrics-strip {{
             display: grid;
@@ -651,27 +654,29 @@ def generate_daily_fupan_html(
             margin-bottom: 18px;
         }}
         .f-m-item {{
-            background: #171b24;
-            border: 1px solid #232936;
-            border-radius: 6px;
-            padding: 10px 14px;
+            background: #0d1117;
+            border: 1px solid #21262d;
+            border-radius: 8px;
+            padding: 12px 14px;
         }}
-        .f-m-item .label {{ font-size: 11.5px; color: #8590a2; margin-bottom: 2px; }}
+        .f-m-item .label {{ font-size: 11.5px; color: #8b949e; margin-bottom: 4px; }}
         .f-m-item .val {{ font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }}
-        .f-m-item .sub {{ font-size: 11px; color: #6b7280; margin-top: 2px; }}
+        .f-m-item .sub {{ font-size: 11px; color: #8b949e; margin-top: 3px; }}
 
         .f-block {{
-            background: #151922;
-            border: 1px solid #202633;
-            border-radius: 6px;
+            background: #0d1117;
+            border: 1px solid #21262d;
+            border-radius: 8px;
             padding: 14px 16px;
             margin-bottom: 12px;
         }}
         .f-block-title {{
             font-size: 13.5px;
             font-weight: 700;
-            color: #e5e7eb;
-            margin-bottom: 8px;
+            color: #f0f6fc;
+            margin-bottom: 10px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #21262d;
             display: flex;
             align-items: center;
             gap: 6px;
@@ -685,7 +690,7 @@ def generate_daily_fupan_html(
             color: #c9d1d9;
         }}
         .f-list li {{ margin-bottom: 4px; }}
-        .f-list b {{ color: #f3f4f6; }}
+        .f-list b {{ color: #f0f6fc; }}
 
         .f-simple-table {{
             width: 100%;
@@ -695,22 +700,22 @@ def generate_daily_fupan_html(
         }}
         .f-simple-table th {{
             text-align: left;
-            padding: 7px 10px;
-            background: #1a202c;
+            padding: 8px 10px;
+            background: #1c2128;
             color: #8b949e;
             font-weight: 600;
-            border-bottom: 1px solid #2d3748;
+            border-bottom: 1px solid #30363d;
         }}
         .f-simple-table td {{
-            padding: 7px 10px;
-            border-bottom: 1px solid #1e2530;
-            color: #d1d5db;
+            padding: 8px 10px;
+            border-bottom: 1px solid #21262d;
+            color: #c9d1d9;
         }}
         .f-simple-table tr:last-child td {{ border-bottom: none; }}
         .f-num {{ text-align: right; font-variant-numeric: tabular-nums; font-family: monospace; }}
-        .f-up {{ color: #f87171; font-weight: 600; }}
-        .f-down {{ color: #4ade80; font-weight: 600; }}
-        .f-muted {{ color: #6b7280; }}
+        .f-up {{ color: #f85149; font-weight: 600; }}
+        .f-down {{ color: #3fb950; font-weight: 600; }}
+        .f-muted {{ color: #8b949e; }}
 
         .ladder-compact {{
             display: flex;
@@ -723,24 +728,26 @@ def generate_daily_fupan_html(
             align-items: baseline;
             gap: 10px;
             font-size: 12.5px;
-            background: #171b24;
-            padding: 6px 10px;
-            border-radius: 4px;
-            border-left: 3px solid #3b82f6;
+            background: #161b22;
+            padding: 7px 12px;
+            border-radius: 6px;
+            border: 1px solid #21262d;
+            border-left: 3px solid #58a6ff;
         }}
-        .ladder-tier {{ font-weight: 700; color: #f3f4f6; width: 68px; flex-shrink: 0; }}
-        .ladder-stocks {{ flex: 1; color: #9ca3af; }}
-        .ladder-stocks b {{ color: #e5e7eb; }}
+        .ladder-tier {{ font-weight: 700; color: #f0f6fc; width: 68px; flex-shrink: 0; }}
+        .ladder-stocks {{ flex: 1; color: #8b949e; }}
+        .ladder-stocks b {{ color: #f0f6fc; }}
 
         .f-note {{
-            background: rgba(59, 130, 246, 0.05);
-            border-left: 3px solid #3b82f6;
-            padding: 8px 12px;
+            background: rgba(88, 166, 255, 0.08);
+            border: 1px solid rgba(88, 166, 255, 0.2);
+            border-left: 3px solid #58a6ff;
+            padding: 10px 14px;
             font-size: 12.5px;
-            line-height: 1.6;
-            color: #cbd5e1;
+            line-height: 1.65;
+            color: #c9d1d9;
             margin-top: 8px;
-            border-radius: 0 4px 4px 0;
+            border-radius: 6px;
         }}
     </style>
 

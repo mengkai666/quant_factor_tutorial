@@ -4928,6 +4928,20 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     except Exception as e:
         print(f"  [警告] 可转债抱团与新周期追踪 teaser 生成失败 (不影响主流程): {e}")
 
+    # 重点抱团个股与重点抱团可转债深度实战分析专栏 (核心重点)
+    baotuan_deep_section_html = ''
+    trusted_baotuan_deep_html = ''
+    baotuan_deep_sanitize_marker = '<!-- trusted-baotuan-deep-analysis -->'
+    try:
+        from baotuan_fusion_section import build_baotuan_deep_analysis_section
+        _bt_dt = dates[-1] if dates else '2026-11-09'
+        _baotuan_deep_rendered = build_baotuan_deep_analysis_section(_bt_dt, echelon=echelon, is_site_mode=False)
+        if _baotuan_deep_rendered:
+            trusted_baotuan_deep_html = _baotuan_deep_rendered
+            baotuan_deep_section_html = baotuan_deep_sanitize_marker
+    except Exception as e:
+        print(f"  [警告] 抱团个股与转债深度分析专栏生成失败 (不影响主流程): {e}")
+
     # 动态生成量化择时模块：必须服从统一三态发布策略。
     timing_res = dict(timing_result or generate_timing_signal(sentiment_df, advance_decline, echelon))
     timing_res = _publication_timing(timing_res, market_state)
@@ -5012,16 +5026,6 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
         )
     except Exception as _fupan_err:
         print(f"  [警告] 连续展示复盘报告生成失败: {_fupan_err}")
-
-    # 复盘与独立预案共用同日事实和执行资格，避免两套交易结论。
-    crowding_plan_marker = '<!-- trusted-crowding-plan -->'
-    trusted_crowding_plan_html = ''
-    try:
-        from crowding_next_day_plan import build_next_day_plan, render_plan_panel_html
-        _shared_plan = build_next_day_plan(unified_context, echelon=echelon, price_df=price_df)
-        trusted_crowding_plan_html = render_plan_panel_html(_shared_plan, is_site_mode=False)
-    except Exception as _plan_err:
-        print(f"  [警告] 抱团操作预案生成失败: {_plan_err}")
 
     # 内嵌看板已包含择时状态、情绪温度和质量门禁；成功生成后隐藏旧版雷达，
     # 避免首屏连续出现两套“发布状态”表达。看板失败时仍保留旧版雷达兜底。
@@ -5355,7 +5359,6 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     {tactics_panel_html}
 
     {fupan_sanitize_marker}
-    {crowding_plan_marker}
 
     {legacy_decision_block_html}
 
@@ -5399,6 +5402,8 @@ def generate_html(ml_strength, sub_strength, ml_ma, sub_ma, ml_thresh, sub_thres
     {chan_html}
 
     {dragon_teaser_html}
+
+    {baotuan_deep_section_html}
 
     {baotuan_teaser_html}
 
@@ -5474,11 +5479,12 @@ window.addEventListener('resize',function(){{c.resize();}});}})();
         html = html.replace(trend_sanitize_marker, trusted_trend_html)
     if trusted_dragon_html:
         html = html.replace(dragon_sanitize_marker, trusted_dragon_html)
+    if trusted_baotuan_deep_html:
+        html = html.replace(baotuan_deep_sanitize_marker, trusted_baotuan_deep_html)
     if trusted_baotuan_html:
         html = html.replace(baotuan_sanitize_marker, trusted_baotuan_html)
     if trusted_fupan_html:
         html = html.replace(fupan_sanitize_marker, trusted_fupan_html)
-    html = html.replace(crowding_plan_marker, trusted_crowding_plan_html)
     research_link = unified_context.get('research_subpage')
     if isinstance(research_link, dict) and research_link.get('href'):
         from research_subpages import add_research_entry
@@ -7075,8 +7081,21 @@ def _main_impl():
         # === 明日预案: 独立子页归档到 site/plan/，同时在 output/ 生成本地专属报告 ===
         _plan_html = None
         try:
-            from paths import OUTPUT_DIR
-            from crowding_next_day_plan import build_next_day_plan, generate_plan_html, export_plan_standalone_reports
+            from paths import DATA_DIR, OUTPUT_DIR
+            from pathlib import Path as _Path
+            import sys as _sys
+            _cb_snap_file = _Path(DATA_DIR) / "cb_daily_snapshots" / f"{latest_date}.json"
+            if not _cb_snap_file.exists():
+                try:
+                    _tools_p = str(_Path(__file__).resolve().parent.parent / "tools")
+                    if _tools_p not in _sys.path:
+                        _sys.path.insert(0, _tools_p)
+                    from refresh_cb_plan_data import refresh_cb_snapshot
+                    refresh_cb_snapshot(latest_date, data_dir=DATA_DIR)
+                    print(f"  → 已自动同步 {latest_date} 同日可转债收盘快照")
+                except Exception as _cb_e:
+                    print(f"  [提示] 同日可转债快照自动刷新跳过: {_cb_e}")
+            from next_day_plan import build_next_day_plan, generate_plan_html, export_plan_standalone_reports
             _plan_data = build_next_day_plan(_report_context, echelon, price_df)
             _plan_res = export_plan_standalone_reports(latest_date, output_dir=OUTPUT_DIR, site_dir=SITE_DIR, plan_data=_plan_data)
             _plan_html = generate_plan_html(_plan_data, is_site_mode=True)
@@ -7168,6 +7187,31 @@ def _main_impl():
         print("  ⚠️ 主报告已生成，但站点发布未完成；未标记为同步成功。")
     print(f"  → 本地报告: {OUTPUT_HTML}")
     print(f"{'='*60}")
+
+    # === 移动端 APP 数据包构建、研报清单同步与云端 OTA 自动热更新 ===
+    if os.environ.get("SKIP_MOBILE_APP_SYNC") != "1":
+        try:
+            print(f"\n{'='*60}")
+            print("  📱 正在自动更新移动端 APP 数据包并推送云端 OTA 热更新...")
+            import sys as _sys
+            from pathlib import Path as _Path
+            _repo_root = _Path(__file__).resolve().parent.parent
+            _tools_dir = str(_repo_root / "tools")
+            if _tools_dir not in _sys.path:
+                _sys.path.insert(0, _tools_dir)
+            from sync_all_reports_manifest import main as _sync_reports_manifest
+            _sync_reports_manifest()
+            from mobile_service import MobileDataAggregator
+            MobileDataAggregator().build_full_bundle()
+            from sync_mobile_assets import sync as _sync_mobile_assets
+            _sync_mobile_assets()
+            if not IS_GITHUB_ACTIONS and os.environ.get("SKIP_MOBILE_OTA_PUSH") != "1":
+                from publish_to_github_io import sync_and_publish as _publish_mobile_ota
+                _publish_mobile_ota()
+            print("  ✅ 移动端 APP 数据与云端 OTA 热更新已完成！")
+            print(f"{'='*60}")
+        except Exception as _app_err:
+            print(f"  [警告] 移动端 APP 自动热更新未完全执行 (不影响主报告): {_app_err}")
 
     # 8. 自动发送邮件；发布完整性门禁失败时禁止分发。
     if _should_send_report_email(publish_succeeded=publish_succeeded):

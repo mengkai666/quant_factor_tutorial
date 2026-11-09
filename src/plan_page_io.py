@@ -89,6 +89,7 @@ def export_plan_standalone_reports(report_date, output_dir=None, site_dir=None, 
     if ndp._iso(plan_data.get('report_date')) != day:
         raise ValueError('预案内容日期与导出日期不一致')
     local_latest = base / '今日复盘与明日预案_最新.html'
+    standalone_page = base / '抱团研究与明日预案.html'
     site_latest = site / 'latest.html'
     local_dated = base / f'今日复盘与明日预案_{day}.html'
     site_dated = site / f'{day}.html'
@@ -103,7 +104,9 @@ def export_plan_standalone_reports(report_date, output_dir=None, site_dir=None, 
     (site / f'{day.replace("-", "")}.html').write_text(site_html, encoding='utf-8')
     if local_update:
         local_latest.write_text(local_html, encoding='utf-8')
+        standalone_page.write_text(local_html, encoding='utf-8')
     if site_update:
         site_latest.write_text(site_html, encoding='utf-8')
     return {'local_latest': str(local_latest), 'local_dated': str(local_dated), 'site_latest': str(site_latest),
-            'site_dated': str(site_dated), 'latest_updated': local_update and site_update}
+            'site_dated': str(site_dated), 'standalone_page': str(standalone_page),
+            'latest_updated': local_update and site_update}

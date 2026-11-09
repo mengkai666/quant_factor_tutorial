@@ -78,6 +78,8 @@ def ensure_20261016_reports():
 def sync_all_reports():
     """同步所有研报到 mobile_app/reports/"""
     MOBILE_REPORTS.mkdir(parents=True, exist_ok=True)
+    mobile_cb_dir = PROJECT_ROOT / "mobile_app" / "cb_baotuan"
+    mobile_cb_dir.mkdir(parents=True, exist_ok=True)
     
     # 1. 主线追踪报告 output/site/reports/*.html -> mobile_app/reports/mainline_*.html
     site_htmls = glob.glob(str(SITE_REPORTS / "2026-*.html"))
@@ -90,7 +92,11 @@ def sync_all_reports():
             shutil.copy2(sh, dst)
 
     # 2. 预案报告 output/今日复盘与明日预案_*.html -> mobile_app/reports/plan_*.html
-    plan_htmls = glob.glob(str(OUTPUT_DIR / "今日复盘与明日预案_*.html"))
+    # 优先排序：非连字符旧版先排，带连字符新版（YYYY-MM-DD）后排覆盖，或者按修改时间取最新
+    plan_htmls = sorted(
+        glob.glob(str(OUTPUT_DIR / "今日复盘与明日预案_*.html")),
+        key=lambda p: ("-" in Path(p).name, os.path.getmtime(p))
+    )
     for ph in plan_htmls:
         fname = Path(ph).name
         m = re.search(r"(\d{4}-?\d{2}-?\d{2})", fname)
@@ -101,7 +107,10 @@ def sync_all_reports():
             shutil.copy2(ph, dst)
 
     # 3. 抱团报告 output/抱团周期*.html -> mobile_app/reports/crowd_*.html
-    crowd_htmls = glob.glob(str(OUTPUT_DIR / "抱团周期*.html"))
+    crowd_htmls = sorted(
+        glob.glob(str(OUTPUT_DIR / "抱团周期*.html")),
+        key=lambda p: ("-" in Path(p).name, os.path.getmtime(p))
+    )
     for ch in crowd_htmls:
         fname = Path(ch).name
         m = re.search(r"(\d{4}-?\d{2}-?\d{2})", fname)
@@ -109,9 +118,32 @@ def sync_all_reports():
             raw_d = m.group(1)
             d = f"{raw_d[:4]}-{raw_d[4:6]}-{raw_d[6:]}" if len(raw_d) == 8 else raw_d
             dst = MOBILE_REPORTS / f"crowd_{d}.html"
-            # 优先使用包含“试错分析”的全面版本
-            if not dst.exists() or "新周期试错分析" in fname:
+            # 优先使用包含“试错分析”的全面版本或更新版本
+            if not dst.exists() or "新周期试错分析" in fname or "-" in fname:
                 shutil.copy2(ch, dst)
+
+    # 4. 可转债报告 output/可转债抱团复盘与追踪_*.html & output/site/cb_baotuan/*.html -> mobile_app/reports/cb_*.html
+    cb_sources = sorted(
+        glob.glob(str(OUTPUT_DIR / "可转债抱团复盘与追踪_*.html"))
+        + glob.glob(str(OUTPUT_DIR / "site" / "cb_baotuan" / "2026*.html")),
+        key=lambda p: ("-" in Path(p).name, os.path.getmtime(p))
+    )
+    for cbh in cb_sources:
+        fname = Path(cbh).name
+        m = re.search(r"(\d{4}-?\d{2}-?\d{2})", fname)
+        if m:
+            raw_d = m.group(1)
+            d = f"{raw_d[:4]}-{raw_d[4:6]}-{raw_d[6:]}" if len(raw_d) == 8 else raw_d
+            d_digits = d.replace("-", "")
+            dst = MOBILE_REPORTS / f"cb_{d}.html"
+            shutil.copy2(cbh, dst)
+            shutil.copy2(cbh, MOBILE_REPORTS / f"可转债抱团复盘与追踪_{d_digits}.html")
+            shutil.copy2(cbh, mobile_cb_dir / f"{d}.html")
+            shutil.copy2(cbh, mobile_cb_dir / f"{d_digits}.html")
+    site_cb_latest = OUTPUT_DIR / "site" / "cb_baotuan" / "latest.html"
+    if site_cb_latest.exists():
+        shutil.copy2(site_cb_latest, mobile_cb_dir / "latest.html")
+        shutil.copy2(site_cb_latest, MOBILE_REPORTS / "可转债抱团复盘与追踪.html")
 
     print("✅ 研报全量同步完成")
 
@@ -120,6 +152,7 @@ def build_and_save_manifest():
     mainline_dates = set()
     plan_dates = set()
     crowd_dates = set()
+    cb_dates = set()
 
     for p in MOBILE_REPORTS.glob("mainline_*.html"):
         m = re.search(r"mainline_(\d{4}-\d{2}-\d{2})\.html", p.name)
@@ -133,15 +166,21 @@ def build_and_save_manifest():
         m = re.search(r"crowd_(\d{4}-\d{2}-\d{2})\.html", p.name)
         if m: crowd_dates.add(m.group(1))
 
-    all_dates = sorted(mainline_dates | plan_dates | crowd_dates, reverse=True)
+    for p in MOBILE_REPORTS.glob("cb_*.html"):
+        m = re.search(r"cb_(\d{4}-\d{2}-\d{2})\.html", p.name)
+        if m: cb_dates.add(m.group(1))
+
+    all_dates = sorted(mainline_dates | plan_dates | crowd_dates | cb_dates, reverse=True)
     sorted_mainline = sorted(mainline_dates, reverse=True)
     sorted_plan = sorted(plan_dates, reverse=True)
     sorted_crowd = sorted(crowd_dates, reverse=True)
+    sorted_cb = sorted(cb_dates, reverse=True)
 
     manifest = {
         "all_dates": all_dates,
         "plan": sorted_plan,
         "crowd": sorted_crowd,
+        "cb": sorted_cb,
         "mainline": sorted_mainline,
         "meta": {
             "total_dates": len(all_dates),
@@ -166,7 +205,7 @@ def build_and_save_manifest():
     shutil.copy2(out_json, site_manifest_json)
 
     print(f"✅ 生成 Manifest 成功！总计包含 {len(all_dates)} 个历史交易日，最新日期: {manifest['meta']['latest_date']}")
-    print(f"   主线报告: {len(sorted_mainline)} 篇 | 预案报告: {len(sorted_plan)} 篇 | 抱团报告: {len(sorted_crowd)} 篇")
+    print(f"   主线报告: {len(sorted_mainline)} 篇 | 预案报告: {len(sorted_plan)} 篇 | 抱团报告: {len(sorted_crowd)} 篇 | 转债报告: {len(sorted_cb)} 篇")
     return manifest
 
 def update_index_html(manifest):
@@ -178,6 +217,7 @@ def update_index_html(manifest):
         "all_dates": manifest["all_dates"],
         "plan": manifest["plan"],
         "crowd": manifest["crowd"],
+        "cb": manifest.get("cb", []),
         "mainline": manifest["mainline"]
     }, ensure_ascii=False)
 

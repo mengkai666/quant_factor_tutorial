@@ -32,11 +32,11 @@ def lines(values):
 
 
 CSS = """
-.np-plan{--np-bg:#0d1117;--np-card:#161b22;--np-line:#30363d;--np-muted:#9da7b3;color:#e6edf3;background:var(--np-bg);font:14px/1.7 'Microsoft YaHei','PingFang SC',sans-serif;max-width:1220px;margin:24px auto;padding:28px;border:1px solid var(--np-line);border-radius:14px;box-sizing:border-box;overflow-wrap:anywhere}
-.np-plan *{box-sizing:border-box}.np-plan h1,.np-plan h2,.np-plan h3,.np-plan p{margin:0}.np-plan h1{font-size:30px;line-height:1.3;letter-spacing:.02em}.np-plan h2{font-size:21px;margin:0 0 12px}.np-plan h3{font-size:16px;margin-bottom:8px}.np-plan a{color:#79b8ff;text-decoration:none}.np-plan a:hover{text-decoration:underline}.np-plan .np-topline{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:20px;font-size:12px;color:var(--np-muted)}
-.np-plan .np-muted{color:var(--np-muted);font-size:12px}.np-plan .np-eyebrow{color:#79b8ff;font-size:12px;letter-spacing:.12em;margin-bottom:9px}.np-plan .np-lead{font-size:17px;margin-top:12px;max-width:940px}.np-plan .np-status{margin-top:18px;border-left:3px solid #d29922;background:#d2992210;padding:14px 16px}.np-plan .np-status strong{color:#e3b341}.np-plan .np-section{border-top:1px solid var(--np-line);padding-top:24px;margin-top:28px}.np-plan .np-section-title{display:flex;align-items:baseline;justify-content:space-between;gap:14px;flex-wrap:wrap}.np-plan .np-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.np-plan .np-card{background:var(--np-card);border:1px solid var(--np-line);border-radius:9px;padding:16px;min-width:0}.np-plan .np-card p+p{margin-top:7px}.np-plan .np-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:20px}.np-plan .np-kpi{border-top:2px solid #384657;padding:12px;background:var(--np-card)}.np-plan .np-kpi b{font-size:27px;font-variant-numeric:tabular-nums;display:block;font-weight:600}.np-plan .np-kpi span{font-size:12px;color:var(--np-muted)}
-.np-plan .np-scroll{overflow-x:auto;margin-top:12px;border:1px solid var(--np-line);border-radius:8px}.np-plan table{width:100%;border-collapse:collapse;margin:0;font-size:12px;line-height:1.65}.np-plan th{background:#1b2330;text-align:left;color:#b8c5d6;font-weight:500;white-space:nowrap}.np-plan td,.np-plan th{padding:12px 13px;border-bottom:1px solid #283240;vertical-align:top}.np-plan tr:last-child td{border-bottom:none}.np-plan td.np-num{font-variant-numeric:tabular-nums;white-space:nowrap}.np-plan .np-wide{min-width:810px}.np-plan .np-sector-table{min-width:640px}.np-plan .np-code{font-size:11px;color:var(--np-muted);white-space:nowrap}.np-plan .np-pill{display:inline-block;font-size:11px;padding:1px 7px;border:1px solid #435366;border-radius:4px;color:#b8c5d6;margin:5px 0}.np-plan .np-up{color:#ff8f88}.np-plan .np-down{color:#7bd694}.np-plan .np-neutral{color:var(--np-muted)}.np-plan .np-watch{border-left:2px solid #58a6ff;padding-left:10px;margin-top:10px}.np-plan .np-invalid{border-left:2px solid #d29922;padding-left:10px;margin-top:8px;color:#d2b883}.np-plan ul{padding-left:18px;margin:8px 0}.np-plan li{margin:5px 0}.np-plan details{background:var(--np-card);border:1px solid var(--np-line);padding:12px 16px;border-radius:8px;margin-top:12px}.np-plan summary{cursor:pointer;color:#b8c5d6}.np-plan details[open]>summary{margin-bottom:12px}.np-plan .np-time{color:#79b8ff;font-weight:600}.np-plan .np-footer{font-size:12px;color:var(--np-muted);margin-top:22px}.np-plan .np-nav{display:flex;gap:16px;flex-wrap:wrap;margin-top:14px;font-size:12px}.np-plan .np-empty{padding:18px;background:#d2992210;border:1px dashed #705c32;color:#d2b883;border-radius:8px}.np-plan .np-timeline{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.np-plan .np-tagline{padding:10px 0;color:#b8c5d6}.np-plan .np-summary{font-size:13px;color:#b8c5d6;margin-bottom:12px}
-@media(max-width:760px){.np-plan{margin:12px auto;padding:18px 14px;border-radius:10px}.np-plan h1{font-size:24px}.np-plan h2{font-size:19px}.np-plan .np-grid{grid-template-columns:1fr}.np-plan .np-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.np-plan .np-timeline{grid-template-columns:repeat(2,minmax(0,1fr))}.np-plan .np-lead{font-size:15px}.np-plan .np-section{margin-top:24px;padding-top:20px}}
+.np-plan{--np-bg:#161b22;--np-card:#0d1117;--np-line:#30363d;--np-muted:#8b949e;color:#f0f6fc;background:rgba(22,27,34,0.88);font:14px/1.7 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Microsoft YaHei','PingFang SC',sans-serif;max-width:1280px;margin:20px auto;padding:24px 26px;border:1px solid var(--np-line);border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,0.3);box-sizing:border-box;overflow-wrap:anywhere}
+.np-plan *{box-sizing:border-box}.np-plan h1,.np-plan h2,.np-plan h3,.np-plan p{margin:0}.np-plan h1{font-size:26px;line-height:1.3;letter-spacing:.02em;color:#f0f6fc;font-weight:800}.np-plan h2{font-size:18px;margin:0 0 12px;color:#f0f6fc;border-left:4px solid #f85149;padding-left:10px;font-weight:700}.np-plan h3{font-size:15px;margin-bottom:8px;color:#f0f6fc;font-weight:700}.np-plan a{color:#58a6ff;text-decoration:none}.np-plan a:hover{text-decoration:underline}.np-plan .np-topline{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #21262d;font-size:12px;color:var(--np-muted)}
+.np-plan .np-muted{color:var(--np-muted);font-size:12px}.np-plan .np-eyebrow{color:#58a6ff;font-size:12px;font-weight:600;letter-spacing:.1em;margin-bottom:6px}.np-plan .np-lead{font-size:15px;margin-top:8px;max-width:940px;color:#c9d1d9}.np-plan .np-status{margin-top:16px;border:1px solid rgba(210,153,34,0.35);border-left:4px solid #d29922;background:rgba(210,153,34,0.08);border-radius:8px;padding:12px 16px}.np-plan .np-status strong{color:#e3b341;font-size:14px}.np-plan .np-section{border-top:1px solid #21262d;padding-top:22px;margin-top:24px}.np-plan .np-section-title{display:flex;align-items:baseline;justify-content:space-between;gap:14px;flex-wrap:wrap}.np-plan .np-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.np-plan .np-card{background:var(--np-card);border:1px solid #21262d;border-radius:10px;padding:14px 16px;min-width:0}.np-plan .np-card p+p{margin-top:7px}.np-plan .np-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:16px}.np-plan .np-kpi{border:1px solid #21262d;border-top:3px solid #58a6ff;border-radius:8px;padding:12px 14px;background:var(--np-card)}.np-plan .np-kpi b{font-size:24px;font-variant-numeric:tabular-nums;display:block;font-weight:700;color:#f0f6fc}.np-plan .np-kpi span{font-size:12px;color:var(--np-muted)}
+.np-plan .np-scroll{overflow-x:auto;margin-top:12px;border:1px solid var(--np-line);border-radius:8px;background:var(--np-card)}.np-plan table{width:100%;border-collapse:collapse;margin:0;font-size:12.5px;line-height:1.6}.np-plan th{background:#1c2128;text-align:left;color:#8b949e;font-weight:600;white-space:nowrap;border-bottom:1px solid var(--np-line)}.np-plan td,.np-plan th{padding:10px 12px;border-bottom:1px solid #21262d;vertical-align:top}.np-plan tr:last-child td{border-bottom:none}.np-plan td.np-num{font-variant-numeric:tabular-nums;white-space:nowrap;font-family:monospace}.np-plan .np-wide{min-width:810px}.np-plan .np-sector-table{min-width:640px}.np-plan .np-code{font-size:11px;color:var(--np-muted);white-space:nowrap;font-family:monospace}.np-plan .np-pill{display:inline-block;font-size:11px;padding:1px 8px;border:1px solid rgba(88,166,255,0.3);background:rgba(88,166,255,0.1);border-radius:12px;color:#58a6ff;font-weight:600;margin:4px 0}.np-plan .np-up{color:#f85149;font-weight:600}.np-plan .np-down{color:#3fb950;font-weight:600}.np-plan .np-neutral{color:var(--np-muted)}.np-plan .np-watch{border-left:3px solid #58a6ff;background:rgba(88,166,255,0.06);padding:6px 10px;border-radius:0 6px 6px 0;margin-top:8px;color:#c9d1d9}.np-plan .np-invalid{border-left:3px solid #f85149;background:rgba(248,81,73,0.06);padding:6px 10px;border-radius:0 6px 6px 0;margin-top:6px;color:#ffa198}.np-plan ul{padding-left:18px;margin:8px 0}.np-plan li{margin:5px 0}.np-plan details{background:var(--np-card);border:1px solid #21262d;padding:12px 16px;border-radius:8px;margin-top:12px}.np-plan summary{cursor:pointer;color:#c9d1d9;font-weight:600}.np-plan details[open]>summary{margin-bottom:12px}.np-plan .np-time{color:#58a6ff;font-weight:700}.np-plan .np-footer{font-size:12px;color:var(--np-muted);margin-top:22px}.np-plan .np-nav{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;font-size:12px}.np-plan .np-nav a{background:#0d1117;border:1px solid #30363d;padding:4px 12px;border-radius:6px;color:#58a6ff;font-weight:600}.np-plan .np-empty{padding:16px;background:rgba(210,153,34,0.08);border:1px dashed rgba(210,153,34,0.4);color:#e3b341;border-radius:8px}.np-plan .np-timeline{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.np-plan .np-tagline{padding:10px 0;color:#c9d1d9}.np-plan .np-summary{font-size:13px;color:#c9d1d9;margin-bottom:12px;background:#0d1117;border:1px solid #21262d;padding:8px 12px;border-radius:6px}
+@media(max-width:760px){.np-plan{margin:10px auto;padding:16px 14px;border-radius:10px}.np-plan h1{font-size:22px}.np-plan h2{font-size:17px}.np-plan .np-grid{grid-template-columns:1fr}.np-plan .np-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.np-plan .np-timeline{grid-template-columns:repeat(2,minmax(0,1fr))}.np-plan .np-lead{font-size:14px}.np-plan .np-section{margin-top:20px;padding-top:18px}}
 @media print{.np-plan{max-width:none;background:white;color:#111;border:0}.np-plan .np-card,.np-plan th,.np-plan details{background:#f6f6f6;color:#111}.np-plan .np-muted{color:#555}.np-plan .np-scroll{overflow:visible}.np-plan .np-nav{display:none}}
 """
 
@@ -57,7 +57,26 @@ def _block_status(block):
 
 
 def _empty(block):
-    return f'<div class="np-empty">{e(block.get("summary") or "缺少同日证据，本期不形成观察名单。")}</div>'
+    summary_txt = block.get("summary") if isinstance(block.get("summary"), str) else ""
+    return f'<div class="np-empty">{e(summary_txt or "缺少同日证据，本期不形成观察名单。")}</div>'
+
+
+def _summary_html(summary):
+    if isinstance(summary, str):
+        txt = summary.strip()
+        return f'<p class="np-summary">{e(txt)}</p>' if txt else ''
+    if isinstance(summary, dict) and summary:
+        parts = []
+        if summary.get('dated_active_nonzero') is not None:
+            parts.append(f'活跃样本 {number(summary.get("dated_active_nonzero"), 0)} 只')
+        if summary.get('total_amount_yi') is not None:
+            parts.append(f'总成交 {number(summary.get("total_amount_yi"), 2)} 亿')
+        if summary.get('top15_share_pct') is not None:
+            parts.append(f'前15成交占比 {number(summary.get("top15_share_pct"), 1, "%")}')
+        if summary.get('up') is not None or summary.get('down') is not None:
+            parts.append(f'上涨 {number(summary.get("up"), 0)} / 下跌 {number(summary.get("down"), 0)}')
+        return f'<p class="np-summary">{e(" · ".join(parts))}</p>' if parts else ''
+    return ''
 
 
 def _sectors(block, mainline):
@@ -128,12 +147,78 @@ def _bonds(block):
         '<p class="np-muted">成交额是交易活跃度，不能代替净流入；余额与发行规模分开。未进入转股期时，理论转股溢价不代表即时套利空间。</p>')
 
 
+def _observation_beacons(plan):
+    crowding = plan.get('crowding') or {}
+    sector_rows = (crowding.get('sectors') or {}).get('rows') or []
+    stock_rows = (crowding.get('stocks') or {}).get('rows') or []
+    avoid_rows = plan.get('avoid') or []
+    mainline = (plan.get('decision') or {}).get('mainline') or ''
+    cards = []
+    lead_sector = next((r for r in sector_rows if r.get('name') == mainline), None) or (sector_rows[0] if sector_rows else None)
+    if lead_sector:
+        rep_items = []
+        for s in (lead_sector.get('stocks') or [])[:4]:
+            s_name = str(s.get('name') or '').strip()
+            s_code = str(s.get('code') or '').strip()
+            s_h = s.get('current_height')
+            if s_name:
+                tag = f'{s_h}板' if isinstance(s_h, int) and s_h > 0 else ''
+                suffix = ' · '.join(x for x in (s_code, tag) if x)
+                rep_items.append(f'{s_name}（{suffix}）' if suffix else s_name)
+        rep_text = '、'.join(rep_items) or '待同日涨停代表股补齐'
+        cards.append(
+            f'<article class="np-card"><h3>主线板块风向标 · {e(lead_sector.get("name"))}</h3>'
+            f'<p class="np-muted">仅作强弱锚点，未获新开仓许可 · 涨停 {number(lead_sector.get("limit_up_count"),0)} 家 / 最高 {number(lead_sector.get("max_height"),0)} 板</p>'
+            f'<p>代表标的：{e(rep_text)}</p>'
+            f'<div class="np-watch">核验：{e(lead_sector.get("watch") or "比较代表股承接与梯队扩散")}</div>'
+            f'<div class="np-invalid">失效：{e(lead_sector.get("invalidation") or "代表股同步转弱且样本收缩")}</div></article>'
+        )
+    watch_stocks = [r for r in stock_rows if r.get('role') != 'risk'][:3]
+    if watch_stocks:
+        s_items = []
+        watch_notes = []
+        for r in watch_stocks:
+            nm = str(r.get('name') or '').strip()
+            cd = str(r.get('code') or '').strip()
+            cl = number(r.get('close'))
+            ma = number(r.get('ma5'))
+            r10 = r.get('r10')
+            ref = f'收 {cl} / MA5 {ma}' if cl != '—' and ma != '—' else (f'收 {cl}' if cl != '—' else '')
+            if isinstance(r10, (int, float)) and r10 >= 80:
+                ref += f' · 10日{pct(r10)}临近100%异动线'
+            meta = ' · '.join(x for x in (cd, ref) if x)
+            s_items.append(f'{nm}（{meta}）' if meta else nm)
+            if r.get('watch'):
+                watch_notes.append(f'{nm}：{r["watch"]}')
+        cards.append(
+            f'<article class="np-card"><h3>抱团趋势观察锚</h3>'
+            f'<p class="np-muted">研究跟踪对象，不自动补位为交易候选</p>'
+            f'<p>重点跟踪：{e("、".join(s_items))}</p>'
+            f'<div class="np-watch">核验：{e(watch_notes[0] if watch_notes else "对照前复权研究收盘价与 MA5 观察分时回踩承接及同类跟随。")}</div>'
+            f'<div class="np-invalid">失效：有效跌破均线承接区、触及100%异动红线滞涨回落或放量转弱时停止持续性跟踪。</div></article>'
+        )
+    if avoid_rows:
+        av_items = '、'.join(f'{r.get("name")}（昨{r.get("height")}板）' for r in avoid_rows[:5] if r.get('name'))
+        if av_items:
+            cards.append(
+                f'<article class="np-card"><h3>断板负反馈风险锚</h3>'
+                f'<p class="np-muted">不追名单 · 仅作亏钱效应收敛核验</p>'
+                f'<p>重点回避：{e(av_items)}</p>'
+                f'<div class="np-watch">核验：9:25–9:35 观察断板高标与跌停家数是否止跌收敛。</div>'
+                f'<div class="np-invalid">失效：断板股继续大面积跌停或负反馈向中位传导时维持空仓观察。</div></article>'
+            )
+    if not cards:
+        return ''
+    return ('<h3 style="margin-top:16px">盘面风向标锚点 · 仅观察不开新仓</h3>'
+            '<div class="np-grid">' + ''.join(cards) + '</div>')
+
+
 def _candidates(plan):
     decision = plan.get('decision') or {}
     selected = [c for c in decision.get('candidates',[]) if c.get('candidate_eligible') is True
                 and c.get('scenario_candidate_eligible') is True and c.get('mainline_match') is True]
     if not selected:
-        return '<p class="np-muted">当前无通过候选筛选的规则观察标的，抱团研究榜单不自动补位。</p>'
+        return '<p class="np-muted">当前无通过候选筛选的规则观察标的，抱团研究榜单不自动补位。</p>' + _observation_beacons(plan)
     cards = []
     for c in selected[:3]:
         x = c.get('execution') or {}
@@ -146,23 +231,51 @@ def _candidates(plan):
 
 def _conditional_matrix(plan):
     mainline = (plan.get('decision') or {}).get('mainline') or '候选主线'
+    sector_rows = ((plan.get('crowding') or {}).get('sectors') or {}).get('rows') or []
     stock_rows = ((plan.get('crowding') or {}).get('stocks') or {}).get('rows') or []
-    anchors = '、'.join(str(r.get('name')) for r in stock_rows if r.get('role') != 'risk')
-    anchors = '、'.join(anchors.split('、')[:2]) or '同日股票观察对象'
+    bond_rows = ((plan.get('cb') or {}).get('rows')) or []
+    avoid_rows = plan.get('avoid') or []
+
+    lead_sec = next((r for r in sector_rows if r.get('name') == mainline), None) or (sector_rows[0] if sector_rows else {})
+    sec_reps = [str(s.get('name')) for s in (lead_sec.get('stocks') or []) if s.get('name')]
+    top_dragon = sec_reps[0] if sec_reps else f'{mainline}龙头'
+    sub_echelon = '、'.join(sec_reps[1:3]) if len(sec_reps) > 1 else '同题材第二梯队'
+
+    active_stocks = [r for r in stock_rows if r.get('role') != 'risk']
+    s_refs = []
+    high_reg_names = []
+    for r in active_stocks[:3]:
+        nm = str(r.get('name') or '')
+        cl = number(r.get('close'))
+        ma = number(r.get('ma5'))
+        r10 = r.get('r10')
+        if nm:
+            s_refs.append(f'{nm}(收{cl}/MA5 {ma})' if cl != '—' and ma != '—' else nm)
+            if isinstance(r10, (int, float)) and r10 >= 80:
+                high_reg_names.append(f'{nm}(10日{pct(r10)})')
+    anchors = '、'.join(s_refs[:2]) or '同日股票观察对象'
+    reg_warn = f'；其中 {"、".join(high_reg_names)} 临近100%异动红线严禁追高' if high_reg_names else ''
+
+    top_bonds = '、'.join(f'{b.get("name")}(收{number(b.get("close"),2)})' for b in bond_rows[:2] if b.get('name')) or '活跃可转债'
+    avoid_names = '、'.join(str(a.get('name')) for a in avoid_rows[:3] if a.get('name')) or '高位断板股'
+
     permission = '仅记录条件，保持不开新仓；资格通过后再复核信号。' if not (plan.get('decision') or {}).get('execution_allowed') else '仅对已获许可的候选核验入场条件，放弃无成交把握的追价。'
     cases = [
-        ('强势延续', f'{mainline}核心承接稳定，第二梯队同步转强，避免只有单股高开。',
-         f'{anchors}回落后保持承接；实际下单仅考虑规则筛选候选。',
-         '债价与正股同步走强，溢价未继续单边放大；急拉后先观察回落承接。',
-         '板块跟随消失、核心跌破早盘承接区，取消延续判断。'),
-        ('分歧修复', '先观察回落，再等主线核心首次有效回封与至少两只同题材保持红盘。',
-         '新候选须同时满足个股触发和市场、主线、风险开关；仅有拉升不算确认。',
-         '正股先止跌，转债再重回盘中成交均价附近并站稳；只记录可验证的共振。',
-         '10:00仍无扩散、回封再开或正股继续走弱，取消修复判断。'),
-        ('转弱防守', '主线中位股连续负反馈、核心承接破坏或跌停反馈扩大。',
-         '取消新开仓观察触发。已有可卖持仓按原风险规则评估，新买股票受T+1约束。',
-         '债强股弱、溢价扩张或流动性转差时停止追价；已有仓位按预设日内风险限额处理。',
-         '只有风险锚止跌、主线扩散恢复并重新通过资格核验，才转回观察。'),
+        ('强势延续',
+         f'{mainline}高标 {top_dragon} 竞价高开承接稳定，第二梯队（{sub_echelon}）同步换手转强，避免单股独苗硬顶。',
+         f'{anchors} 守稳均线承接区{reg_warn}；实际下单仅考虑规则筛选候选。',
+         f'{top_bonds} 与正股同步走强且站稳日内均价线，溢价未单边急剧放大；急拉后先看回踩承接。',
+         f'板块跟随消失、{top_dragon} 炸板大面或核心跌破早盘承接区，取消延续判断。'),
+        ('分歧修复',
+         f'早盘分歧回落后，等待 {top_dragon} 或卡位先锋（{sub_echelon}）9:35 首次放量有效回封，且同题材至少 2 只红盘助攻。',
+         f'核验 {anchors} 回踩 MA5 支撑带缩量止跌并放量拐头{reg_warn}；新候选须同时满足三道开关。',
+         f'正股率先止跌翻红，{top_bonds} 重回盘中分时均价线上方站稳；只记录可验证的股债共振信号。',
+         f'10:00 仍无首板扩散、{top_dragon} 回封再开或正股继续破位走弱，取消修复判断。'),
+        ('转弱防守',
+         f'{mainline}中位梯队（{sub_echelon}）连续掉队大跌、{avoid_names} 等断板负反馈扩大。',
+         f'取消新开仓观察触发，严禁抄底断板股（{avoid_names}）。已有可卖持仓按原风险规则评估，新买股票受T+1约束。',
+         f'{top_bonds} 出现债强股弱背离、高溢价主动压缩或跌破均价线时停止追价；按日内风控限额处理。',
+         '只有断板风险锚止跌、主线扩散恢复并重新通过资格核验，才转回观察。'),
     ]
     body = ''.join(f'<tr><td><b>{e(a)}</b></td><td>{e(b)}</td><td>{e(c)}</td><td>{e(d)}</td><td>{e(f)}</td></tr>' for a,b,c,d,f in cases)
     return f'<p class="np-summary">以下是根据当前证据制定的条件预案，盘中结果尚未发生。{e(permission)}</p><div class="np-scroll"><table class="np-wide"><thead><tr><th>情景</th><th>板块确认</th><th>股票应对</th><th>转债应对</th><th>失效 / 切换</th></tr></thead><tbody>{body}</tbody></table></div>'
@@ -194,16 +307,29 @@ def _research_judgments(plan):
     main = next((r for r in sectors if r.get('name') == mainline), None)
     sector_text = '缺少同日板块样本，主线持续性待核验。'
     if main:
-        sector_text = f'{mainline}涨停 {number(main.get("limit_up_count"),0)} 家，较前日 {number(main.get("change"),0,signed=True)} 家。'
-        sector_text += '扩散能否延续，需要核心与第二梯队共同承接。'
+        reps_str = '、'.join(
+            f'{s.get("name")}({s.get("current_height")}板)' if isinstance(s.get('current_height'), int) and s.get('current_height') > 0 else str(s.get('name') or '')
+            for s in (main.get('stocks') or [])[:3] if s.get('name')
+        )
+        sector_text = f'{mainline}涨停 {number(main.get("limit_up_count"),0)} 家（连板 {number(main.get("streak_count"),0)} 家），较前日 {number(main.get("change"),0,signed=True)} 家。'
+        if reps_str:
+            sector_text += f'梯队代表：{reps_str}，需核心与第二梯队共同换手承接。'
+        else:
+            sector_text += '扩散能否延续，需要核心与第二梯队共同承接。'
     shrinking = [r for r in sectors if isinstance(r.get('change'), (int,float)) and r['change'] < 0]
     if shrinking:
         weak = min(shrinking, key=lambda r:r['change'])
-        sector_text += f'{weak["name"]}样本减少 {abs(weak["change"])} 家，先按收缩后的修复观察。'
+        sector_text += f'{weak["name"]}样本减少 {abs(weak["change"])} 家（连板仅 {number(weak.get("streak_count"),0)} 家），后排明显收缩，严防独苗高标补跌。'
     core = next((r for r in stocks if r.get('role') == 'core'), None)
     stock_text = '缺少同日持续性证据，不确认抱团核心。'
     if core:
-        stock_text = f'{core["name"]}连续支持 {number(core.get("support_streak"),0)} 日，5日 {pct(core.get("r5"))}，保留为持续性观察锚。'
+        c_cl, c_ma = core.get('close'), core.get('ma5')
+        gap_s = f'（收 {number(c_cl)} vs MA5 {number(c_ma)}，偏离 {pct((c_cl/c_ma - 1)*100)}）' if isinstance(c_cl, (int, float)) and isinstance(c_ma, (int, float)) and c_ma > 0 else ''
+        stock_text = f'{core["name"]}连续支持 {number(core.get("support_streak"),0)} 日，5日 {pct(core.get("r5"))}{gap_s}，保留为持续性观察锚。'
+    high_r10 = [r for r in stocks if r.get('role') != 'risk' and isinstance(r.get('r10'), (int, float)) and r['r10'] >= 80]
+    if high_r10:
+        hr = max(high_r10, key=lambda r: r['r10'])
+        stock_text += f'⚠️{hr["name"]} 10日累计 {pct(hr["r10"])}（距100%异动线仅余 {number(100-hr["r10"],2,"%")}），谨防触线前兑现。'
     risk = next((r for r in stocks if r.get('role') == 'risk'), None)
     if risk:
         stock_text += f'{risk["name"]}当日 {pct(risk.get("r1"))}，连续支持仍为 {number(risk.get("support_streak"),0)} 日；价格反弹与跟踪资格恢复分开判断。'
@@ -211,7 +337,7 @@ def _research_judgments(plan):
     bond_text = '缺少同日转债及正股数据，暂不判断联动。'
     if known:
         leader = max(known,key=lambda r:r['r1'])
-        bond_text = f'{leader["name"]}单日 {pct(leader.get("r1"))}、5日 {pct(leader.get("r5"))}；继续观察正股承接与溢价变化。'
+        bond_text = f'{leader["name"]}（正股 {leader.get("stock_name") or "待核"}）单日 {pct(leader.get("r1"))}、5日 {pct(leader.get("r5"))}，溢价 {number(leader.get("premium_pct"),2,"%")}；继续观察正股承接与分时均价支撑。'
         bounce = next((r for r in known if r['r1']>0 and isinstance(r.get('r5'),(int,float)) and r['r5']<0),None)
         if bounce:
             bond_text += f'{bounce["name"]}日涨但5日仍 {pct(bounce["r5"])}，按反弹延续待验证。'
@@ -261,9 +387,9 @@ def render_panel(plan, *, is_site_mode=False):
       <div class="np-status"><strong>{state}</strong><p>{e(reason)}</p><p class="np-muted">行情：{e((readiness.get('data') or {}).get('label') or '待核验')} · 策略：{e((readiness.get('strategy') or {}).get('label') or '待核验')} · 盘中：{e((readiness.get('signal') or {}).get('label') or '等待次日数据')}。研究对象不自动成为交易候选。</p></div>
       <nav class="np-nav"><a href="#np-sectors">看板块强弱</a><a href="#np-stocks">看抱团个股</a><a href="#np-bonds">看抱团转债</a><a href="#np-execution">看操作条件</a></nav>
       <div class="np-section"><h2>今日盘面事实</h2><p class="np-muted">{e(day)} 收盘快照 · {e(plan.get('micro_cycle'))} · 未知字段显示为 —</p><div class="np-kpis">{''.join(kpis)}</div>{_research_judgments(plan)}<p class="np-muted">以上是收盘研究判断。抱团个股可能跨题材，不能把它们统一归入规则主线。</p></div>
-      <div class="np-section" id="np-sectors"><div class="np-section-title"><h2>01 / 抱团板块 · 扩散与收缩</h2><span class="np-muted">{_block_status(sectors)}</span></div><p class="np-summary">{e(sectors.get('summary'))}</p>{_sectors(sectors,mainline)}</div>
-      <div class="np-section" id="np-stocks"><div class="np-section-title"><h2>02 / 抱团个股 · 延续与分歧</h2><span class="np-muted">{_block_status(stocks)}</span></div><p class="np-summary">{e(stocks.get('summary'))}</p>{_stocks(stocks)}</div>
-      <div class="np-section" id="np-bonds"><div class="np-section-title"><h2>03 / 抱团转债 · 债股与溢价</h2><span class="np-muted">{_block_status(bonds)}</span></div><p class="np-summary">{e(bonds.get('summary'))}</p>{_bonds(bonds)}</div>
+      <div class="np-section" id="np-sectors"><div class="np-section-title"><h2>01 / 抱团板块 · 扩散与收缩</h2><span class="np-muted">{_block_status(sectors)}</span></div>{_summary_html(sectors.get('summary'))}{_sectors(sectors,mainline)}</div>
+      <div class="np-section" id="np-stocks"><div class="np-section-title"><h2>02 / 抱团个股 · 延续与分歧</h2><span class="np-muted">{_block_status(stocks)}</span></div>{_summary_html(stocks.get('summary'))}{_stocks(stocks)}</div>
+      <div class="np-section" id="np-bonds"><div class="np-section-title"><h2>03 / 抱团转债 · 债股与溢价</h2><span class="np-muted">{_block_status(bonds)}</span></div>{_summary_html(bonds.get('summary'))}{_bonds(bonds)}</div>
       <div class="np-section" id="np-execution"><h2>04 / 明日三道开关</h2>{gates_html}<h3 style="margin-top:20px">规则候选 · 等待确认</h3>{_candidates(plan)}</div>
       <div class="np-section"><h2>05 / 情景推演 · {e(target)}</h2>{_conditional_matrix(plan)}{_rules(plan)}</div>
       <div class="np-section"><h2>盘中执行顺序</h2>{timeline_html}<p class="np-tagline">股票 T+1：新买股票当日不能卖出。转债可日内回转，但需考虑价差、滑点与流动性；隔夜是否持有应由策略风险约束决定。</p></div>

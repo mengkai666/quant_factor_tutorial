@@ -1,0 +1,102 @@
+{
+  "rows": [
+    {
+      "symbol": "sh605058",
+      "date": "2026-11-06",
+      "time": "15:34:59",
+      "name": "澳弘电子",
+      "close": 50.22,
+      "previous_close": 55.8
+    },
+    {
+      "symbol": "sh605488",
+      "date": "2026-11-06",
+      "time": "15:34:59",
+      "name": "福莱新材",
+      "close": 48.91,
+      "previous_close": 49.27
+    },
+    {
+      "symbol": "sh688002",
+      "date": "2026-11-06",
+      "time": "15:34:59",
+      "name": "睿创微纳",
+      "close": 123.74,
+      "previous_close": 129.4
+    },
+    {
+      "symbol": "sh688147",
+      "date": "2026-11-06",
+      "time": "15:34:59",
+      "name": "微导纳米",
+      "close": 58.68,
+      "previous_close": 61.57
+    },
+    {
+      "symbol": "sh688150",
+      "date": "2026-11-06",
+      "time": "15:00:02",
+      "name": "莱特光电",
+      "close": 29.41,
+      "previous_close": 31.2
+    },
+    {
+      "symbol": "sh688200",
+      "date": "2026-11-06",
+      "time": "15:34:59",
+      "name": "华峰测控",
+      "close": 227.8,
+      "previous_close": 236.0
+    },
+    {
+      "symbol": "sh688300",
+      "date": "2026-11-06",
+      "time": "15:34:59",
+      "name": "联瑞新材",
+      "close": 79.9,
+      "previous_close": 84.32
+    },
+    {
+      "symbol": "sh688686",
+      "date": "2026-11-06",
+      "time": "15:34:59",
+      "name": "奥普特",
+      "close": 161.5,
+      "previous_close": 174.18
+    },
+    {
+      "symbol": "sz300567",
+      "date": "2026-11-06",
+      "time": "16:29:30",
+      "name": "精测电子",
+      "close": 114.49,
+      "previous_close": 119.99
+    },
+    {
+      "symbol": "sz300779",
+      "date": "2026-11-06",
+      "time": "16:29:45",
+      "name": "惠城环保",
+      "close": 45.25,
+      "previous_close": 45.55
+    },
+    {
+      "symbol": "sz300870",
+      "date": "2026-11-06",
+      "time": "16:29:00",
+      "name": "欧陆通",
+      "close": 98.54,
+      "previous_close": 105.3
+    },
+    {
+      "symbol": "sz301059",
+      "date": "2026-11-06",
+      "time": "16:29:30",
+      "name": "金三江",
+      "close": 11.0,
+      "previous_close": 11.21
+    }
+  ],
+  "retrieved_at": "2026-11-08T16:24:37.824041+00:00",
+  "source": "https://hq.sinajs.cn/list="
+}

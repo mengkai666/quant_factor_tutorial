@@ -433,11 +433,16 @@ def build_baotuan_cycle(report_date: Optional[str] = None, *, research_report: O
 
 def render_baotuan_teaser_html(result: Optional[Dict[str, Any]] = None) -> str:
     result = result if result is not None else build_baotuan_cycle()
-    return f'''<section class="baotuan-teaser" style="margin:18px 0;padding:18px;border:1px solid #796bb7;border-radius:10px;background:#172132;color:#e6edf3">
-      <strong>抱团周期演进与新周期试错雷达 · 证据核验版</strong>
-      <p>操盘心法与定性：历史案例不覆盖当日判断；缺价未知，核心可失效，旧团可修复。</p>
-      <p>截止 {_e(result['report_date_fmt'])} · {_e(result['current_stage'])} · 研究观察，不是买卖信号</p>
-      <a href="baotuan/latest.html" style="color:#c9b9ff">进入抱团周期研究 →</a></section>'''
+    return f'''<section class="baotuan-teaser" style="margin:20px 0;padding:18px 20px;border:1px solid #30363d;border-left:4px solid #a371f7;border-radius:12px;background:rgba(22,27,34,0.85);color:#f0f6fc;box-shadow:0 4px 12px rgba(0,0,0,0.25);">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px;">
+        <strong style="font-size:15px;color:#f0f6fc;">🛡️ 抱团周期演进与新周期试错雷达 · 证据核验版</strong>
+        <span style="font-size:11.5px;color:#a371f7;background:rgba(163,113,247,0.12);border:1px solid rgba(163,113,247,0.3);padding:2px 9px;border-radius:12px;font-weight:600;">截止 {_e(result['report_date_fmt'])} · {_e(result['current_stage'])}</span>
+      </div>
+      <p style="margin:6px 0;font-size:12.5px;color:#c9d1d9;line-height:1.6;">操盘心法与定性：历史案例不覆盖当日判断；缺价未知，核心可失效，旧团可修复。</p>
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid #21262d;">
+        <span style="font-size:12px;color:#8b949e;">截止 {_e(result['report_date_fmt'])} · {_e(result['current_stage'])} · 研究观察，不是买卖信号</span>
+        <a href="baotuan/latest.html" style="color:#58a6ff;font-size:12.5px;font-weight:600;text-decoration:none;">进入抱团周期研究 →</a>
+      </div></section>'''
 
 
 def generate_baotuan_html(result: Optional[Dict[str, Any]] = None, is_site_mode: bool = True) -> str:

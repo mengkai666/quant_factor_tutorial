@@ -127,3 +127,31 @@ def test_scorecard_rejects_future_rows_inside_current_slice(isolated,monkeypatch
 def test_missing_report_date_is_rejected(isolated):
     with pytest.raises(ValueError,match='有效的收盘报告日期'):
         ndp.build_next_day_plan({'target_trade_date':'2026-11-06'})
+
+
+def test_defensive_plan_renders_concrete_observation_beacons_and_clean_bond_summary(isolated):
+    p = ndp.build_next_day_plan({
+        "report_date": "2026-11-06",
+        "target_trade_date": "2026-11-09",
+        "today_decision": {"report_date": "2026-11-06", "execution_allowed": False, "position_mode": "不开新仓"},
+    })
+    p["crowding"]["sectors"] = {
+        "status": "ok",
+        "rows": [{"name": "新能源电网", "role": "唯一主线", "limit_up_count": 13, "combo_count": 5, "max_height": 5, "stocks": [{"name": "闽发铝业"}, {"name": "鲁阳节能"}]}],
+    }
+    p["crowding"]["stocks"] = {
+        "status": "ok",
+        "rows": [{"name": "奥雅股份", "code": "sz300949", "close": 56.99, "ma5": 47.68, "r1": 12.52, "role": "active"}],
+    }
+    p["cb"] = {
+        "status": "ok",
+        "summary": {"dated_active_nonzero": 311, "total_amount_yi": 688.17, "top15_share_pct": 48.1, "up": 63, "down": 247},
+        "rows": [],
+    }
+    html = ndp.generate_plan_html(p, is_site_mode=False)
+    assert "盘面风向标锚点 · 仅观察不开新仓" in html
+    assert "新能源电网" in html
+    assert "闽发铝业" in html
+    assert "奥雅股份" in html
+    assert ">{}</p>" not in html
+    assert "活跃样本 311 只" in html

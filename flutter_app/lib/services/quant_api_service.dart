@@ -7,11 +7,14 @@ import '../models/bundle_model.dart';
 class QuantApiService {
   static const String _cacheKey = 'cached_quant_bundle_v1';
 
-  // 预置默认候选端点列表
+  static const String _customServerKey = 'user_custom_server_endpoint';
+
+  // 预置默认候选端点列表 (支持官方公网云端镜像兜底，外网朋友直连秒开)
   static final List<String> defaultEndpoints = [
-    'http://192.168.1.7:8088/mobile_app/bundle.json', // 本地 WiFi 局域网真机
-    'http://10.0.2.2:8088/mobile_app/bundle.json',    // Android 模拟器回环
-    'http://localhost:8088/mobile_app/bundle.json',   // Windows / iOS 模拟器
+    'https://mengkai666.github.io/app/bundle.json',                       // 官方公网云端镜像
+    'http://192.168.1.7:8088/mobile_app/bundle.json',                    // 本地 WiFi 局域网真机
+    'http://10.0.2.2:8088/mobile_app/bundle.json',                       // Android 模拟器回环
+    'http://localhost:8088/mobile_app/bundle.json',                      // Windows / iOS 模拟器
   ];
 
   /// 获取最新数据 (优先从远端拉取，失败时回退至本地缓存)

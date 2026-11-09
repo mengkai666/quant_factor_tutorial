@@ -7,12 +7,17 @@
 
 import os
 import re
+import sys
 import glob
 import json
 import logging
 from pathlib import Path
 from bs4 import BeautifulSoup
 from datetime import datetime
+
+_SRC_DIR = Path(__file__).resolve().parent.parent / "src"
+if str(_SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(_SRC_DIR))
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("HistoryBundles")
@@ -195,7 +200,7 @@ def parse_report_html(html_path: Path):
     # 组装完整 bundle
     bundle = {
         "meta": {
-            "version": "1.2.0",
+            "version": "1.3.0",
             "updated_at": f"{date_str} 15:30:00",
             "date": date_str,
             "sources": ["量化投研归档", "开盘啦", "财联社"],
@@ -287,7 +292,23 @@ def generate_all_history_bundles():
                 ldate = lb.get("meta", {}).get("date")
                 if ldate:
                     mood = lb.get("tab_mood", {})
-                    top_s = mood.get("tianti_stocks", [{}])[0].get("name", "海航控股") if mood.get("tianti_stocks") else "自选核心"
+                    # 重新提取最新预案，确保使用最新提炼的精简指令与价格锚
+                    try:
+                        from plan_parser import get_plan_for_date
+                        new_strat = get_plan_for_date(
+                            PROJECT_ROOT,
+                            ldate,
+                            mood.get("degree", 50),
+                            mood.get("status_text", "观察"),
+                            mood.get("tianti_stocks", []),
+                            mood.get("dt_count", 0),
+                        )
+                        if new_strat and (new_strat.get("baotuan_stock_targets") or new_strat.get("priority_matrix")):
+                            lb["tab_strategy"] = new_strat
+                    except Exception as err:
+                        logger.warning(f"Error refreshing latest strategy: {err}")
+
+                    top_s = mood.get("tianti_stocks", [{}])[0].get("name", "自选核心") if mood.get("tianti_stocks") else "自选核心"
                     history_index.append({
                         "date": ldate,
                         "degree": mood.get("degree", 63),
@@ -298,13 +319,17 @@ def generate_all_history_bundles():
                         "dt_count": mood.get("dt_count", 6),
                         "top_stock": top_s,
                         "max_height": "5板",
-                        "position": lb.get("tab_strategy", {}).get("recommended_position", "4 ~ 6 成仓"),
+                        "position": lb.get("tab_strategy", {}).get("recommended_position", "1 ~ 3 成仓"),
                         "is_latest": True
                     })
-                    # 同时也归档一份到 history
+                    # 归档到各目录并写回 latest bundle
                     for d in target_dirs:
                         with open(d / f"bundle_{ldate}.json", "w", encoding="utf-8") as out_f:
                             json.dump(lb, out_f, ensure_ascii=False, indent=2)
+                    with open(latest_bundle_file, "w", encoding="utf-8") as out_f:
+                        json.dump(lb, out_f, ensure_ascii=False, indent=2)
+                    with open(PROJECT_ROOT / "mobile_app" / "bundle.json", "w", encoding="utf-8") as out_f:
+                        json.dump(lb, out_f, ensure_ascii=False, indent=2)
         except Exception as e:
             logger.warning(f"Error reading latest bundle: {e}")
 

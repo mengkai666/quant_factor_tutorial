@@ -746,8 +746,12 @@ def build_tactics_data_from_report(
             c_pct = int(ceiling * 100) if isinstance(ceiling, (int, float)) else 20
 
             trig = p.get("trigger_condition") or p.get("trigger")
-            # 释放实操细节，赋予具体竞价时段、分时承接与量化底线
-            if any(k in t_title or k in t_id for k in ["repair", "修复", "弱转强", "接力弱"]):
+            # 释放实操细节，赋予具体竞价时段、分时承接与量化底线（优先匹配退潮/防守分支，避免被“接力弱”误判为修复）
+            if any(k in t_title or k in t_id for k in ["retreat", "退潮", "杀跌", "不可追", "防守", "风险"]):
+                if not trig or "前提：" in str(trig):
+                    trig = "高位核心竞价大幅低开或跌停，09:25 跌停家数快速扩张 (>5 家)，或高位连板快速炸板跳水"
+                act = f"{ceil_str}；高位退潮风险释放期，严禁盲目追高开新仓；手中持仓冲高分批减仓落袋，若 9:35 跌停家数继续扩大则执行 0 仓位绝对防守"
+            elif any(k in t_title or k in t_id for k in ["repair", "修复", "弱转强", "接力弱"]):
                 if not trig or "前提：" in str(trig):
                     trig = "09:25 集合竞价跌停 ≤ 3 家，09:35 前全市场上涨家数占比维持 > 55%，中位连板梯队出现主动抢筹回封"
                 act = f"{ceil_str}；若 9:35 前晋级率回升且中位龙头换手回封，动用 {min(20, c_pct)}% 仓位低吸/打板中位换手活口；若跌停 > 5 家或高位连续负反馈则彻底放弃开仓"
@@ -755,10 +759,6 @@ def build_tactics_data_from_report(
                 if not trig or "前提：" in str(trig):
                     trig = "高位连板分歧滞涨，但 09:25 低位首板/二板竞价主动性增强，主线题材出现 2 只以上首板助攻"
                 act = f"{ceil_str}；放弃高位加速追涨，动用 {min(15, c_pct)}% 仓位轻仓试错新梯队前排换手板；若开盘跌破分时均线且不回封坚决止损"
-            elif any(k in t_title or k in t_id for k in ["retreat", "退潮", "杀跌", "不可追", "防守", "风险"]):
-                if not trig or "前提：" in str(trig):
-                    trig = "高位核心竞价大幅低开或跌停，09:25 跌停家数快速扩张 (>5 家)，或高位连板快速炸板跳水"
-                act = f"{ceil_str}；高位退潮风险释放期，严禁盲目追高开新仓；手中持仓冲高分批减仓落袋，若 9:35 跌停家数继续扩大则执行 0 仓位绝对防守"
             elif any(k in t_title or k in t_id for k in ["breakout", "突破", "延续", "顺势", "加速"]):
                 if not trig or "前提：" in str(trig):
                     trig = "09:25 空间总龙高开 > +3% 且放量秒板，连板晋级率 > 50%，全市场跌停 ≤ 2 家"
@@ -887,10 +887,20 @@ def build_tactics_data_from_report(
         else:
             pos = str(c.get("position") or ("15% - 20%" if is_zhongjun else "10% - 15%"))
 
+        _role_cn_map = {
+            "attack": "进攻先锋 / 空间核心",
+            "attack_card": "双子星卡位 / 梯队先锋",
+            "confirm": "确认观察 / 中位晋级",
+            "risk": "风险锚定 / 防守观察",
+            "capacity_core": "容量大中军 / 趋势锚",
+            "zhongjun": "容量大中军 / 趋势锚",
+            "midcore": "容量大中军 / 趋势锚",
+        }
+        c_role_display = _role_cn_map.get(c_role.strip().lower(), c_role)
         return {
             "code": c_code,
             "name": c_name,
-            "role": c_role,
+            "role": c_role_display,
             "tactic": tac,
             "trigger": trig,
             "defense": dfn,
@@ -1104,12 +1114,20 @@ def render_tactics_review_panel(
 
     # 3. 昨日预案对比渲染
     comp_rows = []
-    for comp in data.get("yesterday_comparison") or []:
+    comp_items = list(data.get("yesterday_comparison") or [])
+    has_verified_comp = any("未对账" not in str(c.get("result_badge") or "") and "无当日对账" not in str(c.get("point") or "") for c in comp_items)
+    comp_header_badge = (
+        '<span style="font-size:11px;color:#3fb950;font-weight:bold;">✅ 已验证对账 · 逻辑闭环</span>'
+        if has_verified_comp
+        else '<span style="font-size:11px;color:#8b949e;font-weight:bold;">⚪ 历史预案待对账 · 不沿用旧结论</span>'
+    )
+    for comp in comp_items:
         pt = _esc(comp.get("point"))
         plan = _esc(comp.get("yesterday_plan"))
         real = _esc(comp.get("today_reality"))
         badge = _esc(comp.get("result_badge"))
-        b_clr = comp.get("badge_color") or "#3fb950"
+        b_clr = comp.get("badge_color") or ("#8b949e" if "未对账" in str(comp.get("result_badge") or "") else "#3fb950")
+        b_bg = "rgba(139,148,158,0.12)" if b_clr == "#8b949e" else "rgba(63,185,80,0.15)"
         eva = _esc(comp.get("eval"))
         comp_rows.append(f'''
         <tr style="border-bottom:1px solid #21262d;">
@@ -1117,7 +1135,7 @@ def render_tactics_review_panel(
             <td style="padding:10px;color:#c9d1d9;font-size:12px;line-height:1.5;">{plan}</td>
             <td style="padding:10px;color:#c9d1d9;font-size:12px;line-height:1.5;">{real}</td>
             <td style="padding:10px;white-space:nowrap;text-align:center;">
-                <span style="display:inline-block;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:700;background:rgba(63,185,80,0.15);color:{b_clr};border:1px solid {b_clr};">{badge}</span>
+                <span style="display:inline-block;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:700;background:{b_bg};color:{b_clr};border:1px solid {b_clr};">{badge}</span>
             </td>
             <td style="padding:10px;color:#8b949e;font-size:11.5px;line-height:1.5;">{eva}</td>
         </tr>
@@ -1292,7 +1310,7 @@ def render_tactics_review_panel(
     <div style="background:#161b22;border:1px solid #30363d;border-radius:10px;padding:18px 20px;margin-bottom:20px;box-shadow:0 4px 12px rgba(0,0,0,0.25);">
         <div style="font-size:15px;font-weight:700;color:#f0f6fc;margin-bottom:12px;border-bottom:1px solid #21262d;padding-bottom:10px;display:flex;align-items:center;justify-content:space-between;">
             <span>🎯 昨日预案实战检验与逻辑回溯</span>
-            <span style="font-size:11px;color:#3fb950;font-weight:bold;">已验证全命中 · 逻辑闭环</span>
+            {comp_header_badge}
         </div>
         <div style="overflow-x:auto;">
             <table style="width:100%;font-size:12px;text-align:left;border-collapse:collapse;">

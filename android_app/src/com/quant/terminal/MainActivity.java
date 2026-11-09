@@ -77,7 +77,7 @@ public class MainActivity extends Activity {
             private boolean handleUrlOverride(WebView view, String url) {
                 if (url == null) return false;
                 // 本地 asset 资源直接放行加载，不接管
-                if (url.startsWith("file:///android_asset/")) {
+                if (url.startsWith("file:///android_asset/") || url.startsWith("https://mengkai666.github.io/app")) {
                     return false;
                 }
                 // 外部网页呼出系统浏览器打开

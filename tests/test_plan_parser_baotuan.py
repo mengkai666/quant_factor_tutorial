@@ -55,3 +55,41 @@ def test_get_plan_for_date():
     assert len(plan["baotuan_stock_targets"]) >= 4
     assert "baotuan_cb_targets" in plan
     assert len(plan["baotuan_cb_targets"]) >= 4
+
+
+def test_np_plan_extracts_concrete_sectors_stocks_and_conditional_tactics():
+    """验证新版 np-plan 预案能直指具体主线板块、逐股深度战法、条件开仓仓位与严重异动雷达."""
+    plan = get_plan_for_date(REPO_ROOT, "2026-11-06", 25, "极度冰点期", [], dt_count=15)
+    assert plan.get("report_date") == "2026-11-06"
+    assert plan.get("target_date") == "2026-11-09"
+    assert "成" in plan["recommended_position"] and not plan["recommended_position"].startswith("0 仓位")
+
+    stocks = plan["baotuan_stock_targets"]
+    assert len(stocks) == 4
+    for idx, card in enumerate(stocks):
+        assert card.get("sector"), f"missing sector in {card}"
+        assert card.get("name"), f"missing stock name in {card}"
+        assert card.get("targets") and len(card["targets"]) >= 1
+        assert card.get("stock_details") and len(card["stock_details"]) >= 1
+        if idx < 3:
+            assert "成" in card.get("pos", "")
+        else:
+            assert "0 仓位" in card.get("pos", "")
+
+    assert "新能源电网" in stocks[0]["sector"]
+    assert "闽发铝业" in stocks[0]["name"]
+    assert any(t["code"] == "sz002578" for t in stocks[0]["targets"])
+    assert "5.01" in stocks[0]["stock_details"][0]["metrics"]
+
+    # 验证严重异动雷达直接内建返回（奥雅股份 10日+92.21% 为 danger）
+    radar = plan.get("abnormal_radar") or []
+    assert len(radar) >= 4
+    assert any(r["name"] == "奥雅股份" and r["risk_level"] == "danger" for r in radar)
+
+    cbs = plan["baotuan_cb_targets"]
+    assert len(cbs) >= 4
+    assert cbs[0]["bond_name"] == "福新转债"
+    assert "成交" in cbs[0].get("bond_metrics", "")
+    assert "成" in cbs[0].get("pos", "")
+
+

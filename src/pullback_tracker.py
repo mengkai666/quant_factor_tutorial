@@ -677,6 +677,17 @@ def render_pullback_tracker_panel(
         </div>
       </div>
 
+      <!-- 典型量化基准案例库 -->
+      <div style="margin-top:16px;background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:12px 16px;">
+        <div style="font-size:12.5px;font-weight:700;color:#58a6ff;margin-bottom:6px;display:flex;align-items:center;gap:6px;">
+          <span>📚 典型回调量化基准案例库 (Historical Benchmark Cases)</span>
+        </div>
+        <div style="font-size:12px;color:#8b949e;line-height:1.6;">
+          <b style="color:#c9d1d9;">• AI算力硬件 / CPO (中际旭创 300308 / 新易盛 300502)：</b>放量主升大涨 +28.5% (RS=138%) 后的健康缩量回调，缩量 42% 依托 20 日均线支撑，契合战法 G 滑窗二波与 Level A 蓄势标准。<br>
+          <b style="color:#c9d1d9;">• 文化传媒 (新华传媒 600825)：</b>空间总龙 5 板与 10 板高标试压，契合战法 A 龙头高度突破与断板反包鉴别。
+        </div>
+      </div>
+
     </section>
     """
 

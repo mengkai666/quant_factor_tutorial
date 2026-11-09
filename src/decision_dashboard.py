@@ -1027,8 +1027,16 @@ def _action_plan_html(plan: dict, prefix: str = '') -> str:
                       and row.get('candidate_eligible') is not False and row.get('scenario_candidate_eligible') is not False}
         pick_codes = set([row.get('code') for row in all_rows if row.get('code') in pick_codes][:3])
     if not pick_codes:
-        fallback_picks = [row.get('code') for row in all_rows if row.get('role') in {'attack', 'confirm'}]
-        pick_codes = set(fallback_picks[:3])
+        fallback_rows = sorted(
+            [row for row in all_rows if row.get('role') in {'attack', 'confirm'}],
+            key=lambda row: (
+                not bool(row.get('mainline_match')),
+                not bool(row.get('candidate_eligible')),
+                -_height_number(row.get('height')),
+                str(row.get('code') or ''),
+            ),
+        )
+        pick_codes = {row.get('code') for row in fallback_rows[:3]}
     risk_codes = {row.get('code') for row in sorted(
         [row for row in all_rows if row.get('role') == 'risk'],
         key=lambda row: (-_height_number(row.get('height')), str(row.get('code'))))[:2]}
@@ -1047,22 +1055,34 @@ def _action_plan_html(plan: dict, prefix: str = '') -> str:
                 '风险锚' if row.get('role') == 'risk' else ('核心先锋' if row.get('role') == 'attack' else '梯队确认')
             )
             execution = row.get('execution') or {}
+            ref_close = execution.get('reference_close')
+            ref_badge = f'<span style="color:#58a6ff;font-family:monospace;font-size:11px;background:rgba(88,166,255,0.1);padding:1px 6px;border-radius:4px;border:1px solid rgba(88,166,255,0.25);">参考收盘 {ref_close:.2f}</span>' if isinstance(ref_close, (int, float)) else ''
             rows.append(
-                '<article class="candidate-card" style="min-width:0;padding:12px 0;border-top:1px solid #30363d">'
-                f'<div style="display:flex;justify-content:space-between;gap:10px"><b style="color:#f0f6fc;font-size:14px">{_esc(row.get("name"))}</b>'
-                f'<span style="color:{color};font-size:11px">{marker}</span></div>'
-                f'<div style="color:#8b949e;font-size:11px">{_esc(row.get("code"))} · {_esc(row.get("height"))}板 · {_esc(row.get("sector"))}</div>'
-                f'<div style="font-weight:700;font-size:12px;margin:5px 0">{_esc(row.get("action"))}</div>'
-                '<div style="font-size:12px;line-height:1.65;overflow-wrap:anywhere">'
-                f'<div><b>触发：</b>{_esc(row.get("trigger"))}</div><div><b>撤销：</b>{_esc(row.get("invalid"))}</div>'
+                '<article class="candidate-card" style="min-width:0;padding:12px 14px;margin-top:10px;background:#0d1117;border:1px solid #21262d;border-radius:8px;">'
+                f'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;">'
+                f'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><b style="color:#f0f6fc;font-size:14px">{_esc(row.get("name"))}</b>'
+                f'<span style="color:#8b949e;font-size:11px;font-family:monospace;">{_esc(row.get("code"))}</span>{ref_badge}</div>'
+                f'<span style="color:{color};background:{color}1a;border:1px solid {color}4d;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700;white-space:nowrap;">{marker}</span></div>'
+                f'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;font-size:11px;">'
+                f'<span style="color:#8b949e;">高度：<b style="color:#c9d1d9;">{_esc(row.get("height"))}板</b> · 板块：<b style="color:#c9d1d9;">{_esc(row.get("sector"))}</b></span>'
+                f'<span style="color:{color};font-weight:700;">{_esc(row.get("action"))}</span></div>'
+                '<div style="font-size:12px;line-height:1.6;overflow-wrap:anywhere;background:rgba(22,27,34,0.7);padding:8px 10px;border-radius:6px;border-left:2px solid ' + color + ';">'
+                f'<div style="color:#c9d1d9;"><b style="color:#3fb950;">触发条件：</b>{_esc(row.get("trigger"))}</div>'
+                f'<div style="color:#c9d1d9;margin-top:3px;"><b style="color:#f85149;">失效底线：</b>{_esc(row.get("invalid"))}</div>'
+                f'<details style="margin-top:4px;font-size:11px;color:#8b949e;"><summary style="cursor:pointer;color:#6e7681;user-select:none;">交易风控与T+1约束说明</summary>'
+                f'<div style="margin-top:4px;padding-top:4px;border-top:1px dashed #21262d;">'
                 f'<div><b>价格：</b>{_esc(execution.get("price_note") or "价格参数不可用")}</div>'
                 f'<div><b>持仓：</b>{_esc(execution.get("holding_note") or "未提供持仓")}</div>'
-                f'<div style="color:#8b949e">{_esc(execution.get("t_plus_one") or "T+1约束待确认")}</div></div></article>'
+                f'<div>{_esc(execution.get("t_plus_one") or "T+1约束待确认")}</div></div></details></div></article>'
             )
         if rows:
-            group_html.append(f'<section class="{prefix}action-group" style="min-width:0;border-top:3px solid {color};padding:10px 14px;background:#161b22">'
-                              f'<b style="color:{color};font-size:13px">{_esc(group.get("label"))}</b> <span style="font-size:11px;color:#8b949e">{_esc(group.get("position"))}</span>'
-                              + ''.join(rows) + '</section>')
+            group_html.append(
+                f'<section class="{prefix}action-group" style="min-width:0;border:1px solid #30363d;border-top:3px solid {color};border-radius:10px;padding:14px 16px;background:rgba(22,27,34,0.85);box-shadow:0 4px 12px rgba(0,0,0,0.2);">'
+                f'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding-bottom:6px;border-bottom:1px solid #21262d;">'
+                f'<b style="color:{color};font-size:13px">{_esc(group.get("label"))}</b> '
+                f'<span style="font-size:11px;color:#8b949e;background:#0d1117;padding:2px 8px;border-radius:4px;border:1px solid #21262d;">{_esc(group.get("position"))}</span></div>'
+                + ''.join(rows) + '</section>'
+            )
     reasons = {'off_mainline': '非当前主线', 'risk_anchor': '仅作风险锚', 'mainline_unknown': '主线尚未确认',
                'strategy_role': '不符合当前策略角色', 'not_tradeable': '证券资格未通过', 'attribution_missing': '缺少个股题材归因'}
     other_rows = {str(row.get('code')): row for row in all_rows if row.get('code') not in visible_codes}
@@ -1080,11 +1100,12 @@ def _action_plan_html(plan: dict, prefix: str = '') -> str:
         position_note = f"{position_label} {_esc(plan.get('position'))}；仍须执行前复核"
     else:
         position_note = f"防守观察（当前未授权新增开仓） · 模型参考区间 {_esc(plan.get('position'))}"
-    return (f'<section class="{prefix}action-plan" style="margin:16px 0"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px">'
-            '<div style="color:#ffcc00;font-size:15px;font-weight:800">明日执行计划</div>'
-            f'<div style="color:#8b949e;font-size:12px">{position_note}</div></div>'
-            '<div style="font-size:11px;color:#8b949e;margin:5px 0 9px">最多1只首选、2只备选；其余保留核查。条件未确认不执行，失效即撤销。</div>'
-            f'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">{"".join(group_html)}</div>{audit}</section>')
+    return (f'<section class="{prefix}action-plan" style="margin:18px 0;padding:16px 18px;background:rgba(22,27,34,0.6);border:1px solid #30363d;border-radius:12px;">'
+            '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:6px;">'
+            '<div style="color:#f0f6fc;font-size:15px;font-weight:800;display:flex;align-items:center;gap:8px;"><span style="display:inline-block;width:4px;height:15px;background:#f85149;border-radius:2px;"></span>🎯 明日执行计划与锚定标的</div>'
+            f'<div style="color:#e3b341;font-size:12px;font-weight:600;background:rgba(227,179,65,0.1);border:1px solid rgba(227,179,65,0.3);padding:3px 10px;border-radius:6px;">{position_note}</div></div>'
+            '<div style="font-size:11px;color:#8b949e;margin:4px 0 12px">最多1只首选、2只备选；其余保留核查。条件未确认不执行，失效即撤销。</div>'
+            f'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px">{"".join(group_html)}</div>{audit}</section>')
 
 
 def _win_rate_color(wr: float | None) -> str:

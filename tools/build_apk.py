@@ -93,7 +93,7 @@ def build_apk():
     print(" 1/7 同步最新前端资产与真实行情数据...")
     assets_dir = PROJECT_ROOT / "android_app" / "assets"
     assets_dir.mkdir(parents=True, exist_ok=True)
-    for f in ["index.html", "bundle.json", "manifest.json", "history_index.json", "history_index.js"]:
+    for f in ["index.html", "bundle.json", "version.json", "manifest.json", "history_index.json", "history_index.js"]:
         src_f = PROJECT_ROOT / "mobile_app" / f
         if src_f.exists():
             shutil.copy2(src_f, assets_dir / f)

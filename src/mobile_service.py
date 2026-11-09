@@ -98,11 +98,37 @@ class MobileDataAggregator:
             "local_cycles": local_crowding,
         }
 
-        # 5. 聚合 Tab 3：核心自选池 (Focus Pool) 与龙头个股
-        focus_stocks = self._build_focus_pool(tianti_data.get("stocks", []))
-
-        # 6. 聚合 Tab 4：复盘推演预案
+        # 5. 先聚合 Tab 4：复盘推演预案（提取真实主线板块、龙头与抱团趋势锚）
         strategy_module = self._build_strategy_plan(degree, degree_status, tianti_data.get("stocks", []), today_str, mood_module.get("dt_count", 0))
+
+        # 6. 聚合 Tab 3：核心自选池 (Focus Pool) 与高标异动监控样本
+        focus_stocks = self._build_focus_pool(tianti_data.get("stocks", []), strategy_module)
+
+        # 提炼严重异动雷达专区名单 (合并预案解析层已提取的高标异动雷达与自选池K线雷达)
+        abnormal_radar_list = list(strategy_module.get("abnormal_radar") or [])
+        seen_radar_codes = {x.get("code") for x in abnormal_radar_list if x.get("code")}
+        for s in focus_stocks:
+            ab = s.get("abnormal")
+            if ab and s.get("code") not in seen_radar_codes:
+                seen_radar_codes.add(s.get("code"))
+                abnormal_radar_list.append({
+                    "name": s.get("name"),
+                    "code": s.get("code"),
+                    "sector": s.get("sector", "核心"),
+                    "latest_close": s.get("latest_close", 0.0),
+                    "is_20cm": ab.get("is_20cm", False),
+                    "ret10": ab.get("ret10", 0.0),
+                    "safety10": ab.get("safety10", 100.0),
+                    "boards_left": ab.get("boards_left", 9.9),
+                    "ret30": ab.get("ret30", 0.0),
+                    "safety30": ab.get("safety30", 200.0),
+                    "risk_level": ab.get("risk_level", "safe"),
+                    "risk_text": ab.get("risk_text", "")
+                })
+        strategy_module["abnormal_radar"] = sorted(
+            abnormal_radar_list,
+            key=lambda x: (0 if x["risk_level"] == "danger" else (1 if x["risk_level"] == "warning" else 2), x["safety10"])
+        )
 
         # 7. 聚合「盯盘」页（财联社盯盘 1:1 结构，三源降级）
         logger.info("Building dingpan module...")
@@ -110,9 +136,11 @@ class MobileDataAggregator:
 
         bundle = {
             "meta": {
-                "version": "1.1.0",
+                "version": "1.3.0",
                 "updated_at": f"{today_str} {now_time_str}",
                 "date": today_str,
+                "report_date": strategy_module.get("report_date", ""),
+                "target_date": strategy_module.get("target_date", ""),
                 "sources": ["开盘啦(6.1.6)", "财联社(8.5.4)", "东方财富(备用源)", "量化投研模型"],
                 "dingpan_sources": dingpan_module.get("sources", {}),
                 "dingpan_degraded": dingpan_module.get("degraded", False),
@@ -176,20 +204,49 @@ class MobileDataAggregator:
             logger.warning(f"Could not load local crowding json: {e}")
         return []
 
-    def _build_focus_pool(self, tianti_stocks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """构建关注池标的列表（融合 focus_pool.csv 与梯队前排龙头）"""
+    def _build_focus_pool(self, tianti_stocks: List[Dict[str, Any]], strategy_module: Dict[str, Any] = None) -> List[Dict[str, Any]]:
+        """构建关注池标的列表（融合 focus_pool.csv、预案主线风向标与梯队前排龙头）"""
         pool = []
-        # 1. 尝试读取 focus_pool.csv
+        mock_names = {"正常股份", "测试股", "样例股份", "示例股份"}
+        # 从预案卡片提取主线板块映射，优先修正个股所属主线名称
+        sector_override: Dict[str, str] = {}
+        strategy_targets: List[Dict[str, Any]] = []
+        if isinstance(strategy_module, dict):
+            for card in strategy_module.get("baotuan_stock_targets", []) or []:
+                if card.get("tag") == "avoid_black" or "禁买" in str(card.get("role", "")):
+                    continue
+                for t in card.get("targets", []) or []:
+                    t_name = str(t.get("name", "")).strip()
+                    t_code = str(t.get("code", "")).strip()
+                    t_sec = str(t.get("sector", "") or card.get("sector", "")).strip()
+                    if t_name and t_sec and t_sec not in {"梯队晋级", "延续观察", "持续核心观察"}:
+                        sector_override[t_name] = t_sec
+                    if t_name and t_code:
+                        strategy_targets.append({
+                            "name": t_name,
+                            "code": t_code,
+                            "sector": t_sec or str(card.get("sector", "主线风向标")),
+                            "tag": str(t.get("tag", "")),
+                            "role": str(card.get("role", "核心观察")),
+                            "action": str(card.get("action", "关注竞价与分时承接")),
+                            "stop": str(card.get("stop", "跌破均线支撑止损")),
+                        })
+
+        # 1. 尝试读取 focus_pool.csv（过滤测试占位股）
         focus_csv = Path(BASE_DIR) / "focus_pool.csv"
         if focus_csv.exists():
             import pandas as pd
             try:
                 df = pd.read_csv(focus_csv)
                 for _, row in df.iterrows():
+                    s_name = str(row.get("股票", row.get("name", ""))).strip()
+                    s_code = str(row.get("代码", row.get("code", ""))).strip()
+                    if not s_name or s_name in mock_names:
+                        continue
                     pool.append({
-                        "name": str(row.get("股票", row.get("name", ""))),
-                        "code": str(row.get("代码", row.get("code", ""))),
-                        "sector": str(row.get("板块", "重点自选")),
+                        "name": s_name,
+                        "code": s_code,
+                        "sector": sector_override.get(s_name, str(row.get("板块", "重点自选"))),
                         "pool_type": str(row.get("策略池", "【核心池】")),
                         "entry_rule": str(row.get("入场条件", "关注早盘承接")),
                         "defense_rule": str(row.get("防守位", "跌破均线止损")),
@@ -199,22 +256,39 @@ class MobileDataAggregator:
             except Exception as e:
                 logger.warning(f"Failed to read focus_pool.csv: {e}")
 
-        # 2. 如果自选数量较少，补充开盘啦高标连板龙头
+        # 2. 补充开盘啦高标连板龙头
         for stock in tianti_stocks[:6]:
-            # 避免重复
-            if any(p["name"] == stock["name"] for p in pool):
+            s_name = str(stock.get("name", "")).strip()
+            if not s_name or s_name in mock_names or any(p["name"] == s_name for p in pool):
                 continue
             height = stock.get("height", 1)
             status = "green" if height >= 3 else ("yellow" if height == 2 else "normal")
             pool.append({
-                "name": stock["name"],
+                "name": s_name,
                 "code": stock["symbol"],
-                "sector": stock.get("plate_name", "主线热点"),
+                "sector": sector_override.get(s_name, stock.get("plate_name", "主线热点")),
                 "pool_type": f"【{height}连板梯队】",
-                "entry_rule": f"连板龙头。首选分时平开弱转强放量换手承接，谨防无量一字秒开坑杀。",
-                "defense_rule": "5日均线或前一日涨停价为防守位。",
+                "entry_rule": "连板风向标。核验早盘竞价承接与分时换手回封强度，严防无量一字炸板。",
+                "defense_rule": "5日均线或前一日涨停收盘价为防守参考位。",
                 "height": height,
                 "status": status,
+                "is_custom": False
+            })
+
+        # 3. 补充明日预案中的主线龙头与抱团趋势锚（确保盘前/周末自选池与异动雷达完整覆盖）
+        for st in strategy_targets:
+            if len(pool) >= 9:
+                break
+            if any(p["name"] == st["name"] or (p.get("code") and p["code"] == st["code"]) for p in pool):
+                continue
+            pool.append({
+                "name": st["name"],
+                "code": st["code"],
+                "sector": st["sector"],
+                "pool_type": f"【{st['tag'] or '预案锚点'}】",
+                "entry_rule": st["action"],
+                "defense_rule": st["stop"],
+                "status": "yellow",
                 "is_custom": False
             })
 
@@ -293,6 +367,63 @@ class MobileDataAggregator:
                         stock["ema5"] = ema5_list
                         stock["ema20"] = ema20_list
                         stock["latest_close"] = candles[-1]["close"]
+
+                        # 计算严重异动安全雷达指标 (10日100% / 30日200%)
+                        import math
+                        num_code = clean_code[2:] if clean_code.startswith(('sh', 'sz', 'bj')) else clean_code
+                        is_20cm = num_code.startswith(('30', '68'))
+                        limit_pct = 20.0 if is_20cm else 10.0
+                        limit_rate = 0.20 if is_20cm else 0.10
+                        c_now = float(df['close'].iloc[-1])
+
+                        ret10 = 0.0
+                        safety10 = 100.0
+                        boards10 = 9.9
+                        if len(df) >= 10:
+                            c_base10 = float(df['close'].iloc[-10])
+                            if c_base10 > 0:
+                                ret10 = round((c_now / c_base10 - 1.0) * 100, 2)
+                                safety10 = round(100.0 - ret10, 2)
+                                ratio_needed = 2.0 / (c_now / c_base10)
+                                if ratio_needed <= 1.0:
+                                    boards10 = 0.0
+                                else:
+                                    boards10 = round(math.log(ratio_needed) / math.log(1.0 + limit_rate), 1)
+                        elif len(df) >= 2:
+                            c_base1 = float(df['close'].iloc[0])
+                            if c_base1 > 0:
+                                ret10 = round((c_now / c_base1 - 1.0) * 100, 2)
+                                safety10 = round(100.0 - ret10, 2)
+
+                        ret30 = 0.0
+                        safety30 = 200.0
+                        if len(df) >= 30:
+                            c_base30 = float(df['close'].iloc[-30])
+                            if c_base30 > 0:
+                                ret30 = round((c_now / c_base30 - 1.0) * 100, 2)
+                                safety30 = round(200.0 - ret30, 2)
+
+                        if safety10 <= limit_pct:
+                            risk_level = "danger"
+                            risk_text = "极度危险 (≤1板触线)"
+                        elif safety10 <= (limit_pct * 2.2):
+                            risk_level = "warning"
+                            risk_text = "警戒区 (1~2板防主动断板)"
+                        else:
+                            risk_level = "safe"
+                            risk_text = f"安全垫充裕 (余{boards10}板)"
+
+                        stock["abnormal"] = {
+                            "is_20cm": is_20cm,
+                            "limit_rate": limit_rate,
+                            "ret10": ret10,
+                            "safety10": safety10,
+                            "boards_left": max(0.0, boards10),
+                            "ret30": ret30,
+                            "safety30": safety30,
+                            "risk_level": risk_level,
+                            "risk_text": risk_text
+                        }
             bs.logout()
         except Exception as e:
             logger.warning(f"Error enriching klines: {e}")

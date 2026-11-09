@@ -1,0 +1,102 @@
+{
+  "rows": [
+    {
+      "symbol": "sh603306",
+      "date": "2026-11-09",
+      "time": "15:34:59",
+      "name": "华懋科技",
+      "close": 45.56,
+      "previous_close": 44.18
+    },
+    {
+      "symbol": "sh605058",
+      "date": "2026-11-09",
+      "time": "15:34:59",
+      "name": "澳弘电子",
+      "close": 48.63,
+      "previous_close": 50.22
+    },
+    {
+      "symbol": "sh605488",
+      "date": "2026-11-09",
+      "time": "15:34:59",
+      "name": "福莱新材",
+      "close": 52.09,
+      "previous_close": 48.91
+    },
+    {
+      "symbol": "sh688147",
+      "date": "2026-11-09",
+      "time": "15:34:59",
+      "name": "微导纳米",
+      "close": 59.22,
+      "previous_close": 58.68
+    },
+    {
+      "symbol": "sh688686",
+      "date": "2026-11-09",
+      "time": "15:34:59",
+      "name": "奥普特",
+      "close": 165.7,
+      "previous_close": 161.5
+    },
+    {
+      "symbol": "sz002913",
+      "date": "2026-11-09",
+      "time": "16:29:30",
+      "name": "奥士康",
+      "close": 58.42,
+      "previous_close": 53.11
+    },
+    {
+      "symbol": "sz003004",
+      "date": "2026-11-09",
+      "time": "16:29:15",
+      "name": "声迅股份",
+      "close": 50.89,
+      "previous_close": 46.26
+    },
+    {
+      "symbol": "sz300870",
+      "date": "2026-11-09",
+      "time": "16:29:00",
+      "name": "欧陆通",
+      "close": 99.15,
+      "previous_close": 98.54
+    },
+    {
+      "symbol": "sz300953",
+      "date": "2026-11-09",
+      "time": "16:29:30",
+      "name": "震裕科技",
+      "close": 106.46,
+      "previous_close": 102.43
+    },
+    {
+      "symbol": "sz301000",
+      "date": "2026-11-09",
+      "time": "16:29:45",
+      "name": "肇民科技",
+      "close": 28.9,
+      "previous_close": 26.98
+    },
+    {
+      "symbol": "sz301018",
+      "date": "2026-11-09",
+      "time": "16:29:00",
+      "name": "申菱环境",
+      "close": 61.78,
+      "previous_close": 60.97
+    },
+    {
+      "symbol": "sz301132",
+      "date": "2026-11-09",
+      "time": "16:29:00",
+      "name": "满坤科技",
+      "close": 54.12,
+      "previous_close": 50.68
+    }
+  ],
+  "retrieved_at": "2026-11-09T16:36:49.004489+00:00",
+  "source": "https://hq.sinajs.cn/list="
+}
