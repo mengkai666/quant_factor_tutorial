@@ -1,0 +1,6250 @@
+{
+  "report_date": "2026-11-10",
+  "run_id": "20261110T163400586211Z-622bfc8d",
+  "max_height": 7,
+  "limit_up": 93,
+  "limit_down": 0,
+  "breadth_ratio": 0.7887,
+  "ladder_integrity": 0.6,
+  "concentration": 0.2913,
+  "promotion_rate": 0.35185185185185186,
+  "mainline_rank": "机器人",
+  "limit_pool_rows": [
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh600261",
+      "名称": "阳光照明",
+      "连板数": 1,
+      "细分板块": "航天",
+      "大主线": "军工航天",
+      "code": "sh600261",
+      "name": "阳光照明",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 93016,
+      "last_limit_time": 93016,
+      "limit_up_fund": 225375356,
+      "turnover_rate": 7.891615867614746,
+      "amount": 611885936,
+      "float_market_cap": 7810059851.099999,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 611885936
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 93016
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 7810059851.099999
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 93016
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 225375356
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 7.891615867614746
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh600281",
+      "名称": "华阳新材",
+      "连板数": 1,
+      "细分板块": "有色",
+      "大主线": "周期资源",
+      "code": "sh600281",
+      "name": "华阳新材",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 111934,
+      "last_limit_time": 131743,
+      "limit_up_fund": 32092666,
+      "turnover_rate": 13.088848114013672,
+      "amount": 361704800,
+      "float_market_cap": 2849787218.5,
+      "break_count": 1,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 361704800
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 1
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 111934
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 2849787218.5
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 131743
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 32092666
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 13.088848114013672
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh600327",
+      "名称": "大东方",
+      "连板数": 3,
+      "细分板块": "其它",
+      "大主线": "其它",
+      "code": "sh600327",
+      "name": "大东方",
+      "level": 3,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 93020,
+      "last_limit_time": 93020,
+      "limit_up_fund": 216578007,
+      "turnover_rate": 7.16886568069458,
+      "amount": 373905328,
+      "float_market_cap": 5255590336.92,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 373905328
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 93020
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 5255590336.92
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 93020
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 216578007
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 7.16886568069458
+        }
+      },
+      "height": 3
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh600408",
+      "名称": "安泰集团",
+      "连板数": 2,
+      "细分板块": "煤炭",
+      "大主线": "周期资源",
+      "code": "sh600408",
+      "name": "安泰集团",
+      "level": 2,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 94204,
+      "last_limit_time": 133007,
+      "limit_up_fund": 18212040,
+      "turnover_rate": 16.895612716674805,
+      "amount": 609888624,
+      "float_market_cap": 3674820000.0,
+      "break_count": 7,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 609888624
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 7
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 94204
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 3674820000.0
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 133007
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 18212040
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 16.895612716674805
+        }
+      },
+      "height": 2
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh600510",
+      "名称": "黑牡丹",
+      "连板数": 1,
+      "细分板块": "元件",
+      "大主线": "AI算力",
+      "code": "sh600510",
+      "name": "黑牡丹",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 100356,
+      "last_limit_time": 101305,
+      "limit_up_fund": 39876622,
+      "turnover_rate": 2.5175983905792236,
+      "amount": 206163209,
+      "float_market_cap": 8421327729.12,
+      "break_count": 2,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 206163209
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 2
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 100356
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 8421327729.12
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 101305
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 39876622
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 2.5175983905792236
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh600609",
+      "名称": "金杯汽车",
+      "连板数": 2,
+      "细分板块": "机器人",
+      "大主线": "机器人",
+      "code": "sh600609",
+      "name": "金杯汽车",
+      "level": 2,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 103302,
+      "last_limit_time": 103302,
+      "limit_up_fund": 47580484,
+      "turnover_rate": 7.879075527191162,
+      "amount": 379432816,
+      "float_market_cap": 4996459277.14,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 379432816
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 103302
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 4996459277.14
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 103302
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 47580484
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 7.879075527191162
+        }
+      },
+      "height": 2
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh600715",
+      "名称": "文投控股",
+      "连板数": 2,
+      "细分板块": "传媒",
+      "大主线": "AI应用",
+      "code": "sh600715",
+      "name": "文投控股",
+      "level": 2,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 93110,
+      "last_limit_time": 93110,
+      "limit_up_fund": 185298735,
+      "turnover_rate": 6.416724681854248,
+      "amount": 513191728,
+      "float_market_cap": 8157760886.85,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 513191728
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 93110
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 8157760886.85
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 93110
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 185298735
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 6.416724681854248
+        }
+      },
+      "height": 2
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh600778",
+      "名称": "友好集团",
+      "连板数": 1,
+      "细分板块": "其它",
+      "大主线": "其它",
+      "code": "sh600778",
+      "name": "友好集团",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 94019,
+      "last_limit_time": 143755,
+      "limit_up_fund": 32611788,
+      "turnover_rate": 22.156410217285156,
+      "amount": 394556496,
+      "float_market_cap": 1811270613.24,
+      "break_count": 5,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 394556496
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 5
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 94019
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 1811270613.24
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 143755
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 32611788
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 22.156410217285156
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh600793",
+      "名称": "宜宾纸业",
+      "连板数": 1,
+      "细分板块": "化工",
+      "大主线": "周期资源",
+      "code": "sh600793",
+      "name": "宜宾纸业",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 101807,
+      "last_limit_time": 101807,
+      "limit_up_fund": 46139030,
+      "turnover_rate": 6.574187278747559,
+      "amount": 173079217,
+      "float_market_cap": 2715476430.7,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 173079217
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 101807
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 2715476430.7
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 101807
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 46139030
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 6.574187278747559
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh600829",
+      "名称": "人民同泰",
+      "连板数": 1,
+      "细分板块": "医药",
+      "大主线": "医药",
+      "code": "sh600829",
+      "name": "人民同泰",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 94630,
+      "last_limit_time": 94630,
+      "limit_up_fund": 31749569,
+      "turnover_rate": 3.2256195545196533,
+      "amount": 177937292,
+      "float_market_cap": 5665511592.69,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 177937292
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 94630
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 5665511592.69
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 94630
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 31749569
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 3.2256195545196533
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh600892",
+      "名称": "大晟文化",
+      "连板数": 2,
+      "细分板块": "传媒",
+      "大主线": "AI应用",
+      "code": "sh600892",
+      "name": "大晟文化",
+      "level": 2,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 144152,
+      "last_limit_time": 144152,
+      "limit_up_fund": 17203760,
+      "turnover_rate": 34.146114349365234,
+      "amount": 1003475616,
+      "float_market_cap": 3132189401.6,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 1003475616
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 144152
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 3132189401.6
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 144152
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 17203760
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 34.146114349365234
+        }
+      },
+      "height": 2
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh601188",
+      "名称": "龙江交通",
+      "连板数": 3,
+      "细分板块": "光伏",
+      "大主线": "新能源电网",
+      "code": "sh601188",
+      "name": "龙江交通",
+      "level": 3,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 92502,
+      "last_limit_time": 144856,
+      "limit_up_fund": 14016244,
+      "turnover_rate": 32.44330978393555,
+      "amount": 1926262736,
+      "float_market_cap": 6018216308.150001,
+      "break_count": 11,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 1926262736
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 11
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 92502
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 6018216308.150001
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 144856
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 14016244
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 32.44330978393555
+        }
+      },
+      "height": 3
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh601595",
+      "名称": "上海电影",
+      "连板数": 1,
+      "细分板块": "传媒",
+      "大主线": "AI应用",
+      "code": "sh601595",
+      "name": "上海电影",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 104738,
+      "last_limit_time": 104738,
+      "limit_up_fund": 52053063,
+      "turnover_rate": 5.781879425048828,
+      "amount": 1048369808,
+      "float_market_cap": 19079874000.0,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 1048369808
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 104738
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 19079874000.0
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 104738
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 52053063
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 5.781879425048828
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh603037",
+      "名称": "凯众股份",
+      "连板数": 1,
+      "细分板块": "机器人",
+      "大主线": "机器人",
+      "code": "sh603037",
+      "name": "凯众股份",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 93303,
+      "last_limit_time": 94912,
+      "limit_up_fund": 59689114,
+      "turnover_rate": 8.537692070007324,
+      "amount": 321829056,
+      "float_market_cap": 3824576606.49,
+      "break_count": 1,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 321829056
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 1
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 93303
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 3824576606.49
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 94912
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 59689114
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 8.537692070007324
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh603058",
+      "名称": "永吉股份",
+      "连板数": 1,
+      "细分板块": "传媒",
+      "大主线": "AI应用",
+      "code": "sh603058",
+      "name": "永吉股份",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 104251,
+      "last_limit_time": 135430,
+      "limit_up_fund": 14548744,
+      "turnover_rate": 9.882200241088867,
+      "amount": 341756944,
+      "float_market_cap": 3541227912.5999994,
+      "break_count": 2,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 341756944
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 2
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 104251
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 3541227912.5999994
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 135430
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 14548744
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 9.882200241088867
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh603121",
+      "名称": "华培动力",
+      "连板数": 2,
+      "细分板块": "机器人",
+      "大主线": "机器人",
+      "code": "sh603121",
+      "name": "华培动力",
+      "level": 2,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 100028,
+      "last_limit_time": 100028,
+      "limit_up_fund": 51516666,
+      "turnover_rate": 6.715342998504639,
+      "amount": 285757536,
+      "float_market_cap": 4461874363.7,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 285757536
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 100028
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 4461874363.7
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 100028
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 51516666
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 6.715342998504639
+        }
+      },
+      "height": 2
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh603215",
+      "名称": "比依股份",
+      "连板数": 1,
+      "细分板块": "消费电子",
+      "大主线": "AI算力",
+      "code": "sh603215",
+      "name": "比依股份",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 132305,
+      "last_limit_time": 134941,
+      "limit_up_fund": 8248968,
+      "turnover_rate": 5.523959636688232,
+      "amount": 190258577,
+      "float_market_cap": 3515067377.64,
+      "break_count": 3,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 190258577
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 3
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 132305
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 3515067377.64
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 134941
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 8248968
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 5.523959636688232
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh603278",
+      "名称": "大业股份",
+      "连板数": 1,
+      "细分板块": "机器人",
+      "大主线": "机器人",
+      "code": "sh603278",
+      "name": "大业股份",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 145428,
+      "last_limit_time": 145428,
+      "limit_up_fund": 23625460,
+      "turnover_rate": 24.06165885925293,
+      "amount": 1196464096,
+      "float_market_cap": 5160566819.2,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 1196464096
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 145428
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 5160566819.2
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 145428
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 23625460
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 24.06165885925293
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh603283",
+      "名称": "赛腾股份",
+      "连板数": 1,
+      "细分板块": "消费电子",
+      "大主线": "AI算力",
+      "code": "sh603283",
+      "name": "赛腾股份",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 132047,
+      "last_limit_time": 132047,
+      "limit_up_fund": 45002806,
+      "turnover_rate": 6.003669738769531,
+      "amount": 820361872,
+      "float_market_cap": 14182130755.89,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 820361872
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 132047
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 14182130755.89
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 132047
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 45002806
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 6.003669738769531
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh603286",
+      "名称": "日盈电子",
+      "连板数": 2,
+      "细分板块": "机器人",
+      "大主线": "机器人",
+      "code": "sh603286",
+      "name": "日盈电子",
+      "level": 2,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 141043,
+      "last_limit_time": 145216,
+      "limit_up_fund": 4817190,
+      "turnover_rate": 11.27049446105957,
+      "amount": 782906976,
+      "float_market_cap": 7118249058.9,
+      "break_count": 2,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 782906976
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 2
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 141043
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 7118249058.9
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 145216
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 4817190
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 11.27049446105957
+        }
+      },
+      "height": 2
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh603366",
+      "名称": "日出东方",
+      "连板数": 3,
+      "细分板块": "光伏",
+      "大主线": "新能源电网",
+      "code": "sh603366",
+      "name": "日出东方",
+      "level": 3,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 92501,
+      "last_limit_time": 92501,
+      "limit_up_fund": 780041143,
+      "turnover_rate": 0.713382363319397,
+      "amount": 63105545,
+      "float_market_cap": 8845963338.880001,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 63105545
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 92501
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 8845963338.880001
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 92501
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 780041143
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 0.713382363319397
+        }
+      },
+      "height": 3
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh603381",
+      "名称": "永臻股份",
+      "连板数": 1,
+      "细分板块": "光伏",
+      "大主线": "新能源电网",
+      "code": "sh603381",
+      "name": "永臻股份",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 130956,
+      "last_limit_time": 132608,
+      "limit_up_fund": 20458394,
+      "turnover_rate": 29.58148193359375,
+      "amount": 870133488,
+      "float_market_cap": 3111393946.54,
+      "break_count": 4,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 870133488
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 4
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 130956
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 3111393946.54
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 132608
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 20458394
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 29.58148193359375
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh603466",
+      "名称": "风语筑",
+      "连板数": 1,
+      "细分板块": "机器人",
+      "大主线": "机器人",
+      "code": "sh603466",
+      "name": "风语筑",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 103011,
+      "last_limit_time": 110147,
+      "limit_up_fund": 122051649,
+      "turnover_rate": 14.361440658569336,
+      "amount": 1267469696,
+      "float_market_cap": 9118774008.12,
+      "break_count": 1,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 1267469696
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 1
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 103011
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 9118774008.12
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 110147
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 122051649
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 14.361440658569336
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh603533",
+      "名称": "掌阅科技",
+      "连板数": 1,
+      "细分板块": "传媒",
+      "大主线": "AI应用",
+      "code": "sh603533",
+      "name": "掌阅科技",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 93605,
+      "last_limit_time": 100508,
+      "limit_up_fund": 149261156,
+      "turnover_rate": 14.510855674743652,
+      "amount": 2043609664,
+      "float_market_cap": 14395816187.999998,
+      "break_count": 1,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 2043609664
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 1
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 93605
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 14395816187.999998
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 100508
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 149261156
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 14.510855674743652
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh603536",
+      "名称": "惠发食品",
+      "连板数": 1,
+      "细分板块": "其它",
+      "大主线": "其它",
+      "code": "sh603536",
+      "name": "惠发食品",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 142829,
+      "last_limit_time": 142829,
+      "limit_up_fund": 40161760,
+      "turnover_rate": 7.759778022766113,
+      "amount": 192085741,
+      "float_market_cap": 2590532440.2,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 192085741
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 142829
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 2590532440.2
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 142829
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 40161760
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 7.759778022766113
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh603598",
+      "名称": "引力传媒",
+      "连板数": 1,
+      "细分板块": "传媒",
+      "大主线": "AI应用",
+      "code": "sh603598",
+      "name": "引力传媒",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 104329,
+      "last_limit_time": 104329,
+      "limit_up_fund": 116028882,
+      "turnover_rate": 13.765532493591309,
+      "amount": 843832912,
+      "float_market_cap": 6401353077.0,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 843832912
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 104329
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 6401353077.0
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 104329
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 116028882
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 13.765532493591309
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh603602",
+      "名称": "纵横通信",
+      "连板数": 1,
+      "细分板块": "AI应用",
+      "大主线": "AI应用",
+      "code": "sh603602",
+      "name": "纵横通信",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 103702,
+      "last_limit_time": 103702,
+      "limit_up_fund": 57685502,
+      "turnover_rate": 3.075589895248413,
+      "amount": 85450299,
+      "float_market_cap": 2867423500.54,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 85450299
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 103702
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 2867423500.54
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 103702
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 57685502
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 3.075589895248413
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh603666",
+      "名称": "亿嘉和",
+      "连板数": 1,
+      "细分板块": "机器人",
+      "大主线": "机器人",
+      "code": "sh603666",
+      "name": "亿嘉和",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 93132,
+      "last_limit_time": 93132,
+      "limit_up_fund": 50353221,
+      "turnover_rate": 2.296030044555664,
+      "amount": 133448122,
+      "float_market_cap": 5859672274.200001,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 133448122
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 93132
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 5859672274.200001
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 93132
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 50353221
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 2.296030044555664
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh603679",
+      "名称": "华体科技",
+      "连板数": 1,
+      "细分板块": "航天",
+      "大主线": "军工航天",
+      "code": "sh603679",
+      "name": "华体科技",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 101735,
+      "last_limit_time": 101735,
+      "limit_up_fund": 58572519,
+      "turnover_rate": 4.758834362030029,
+      "amount": 152877572,
+      "float_market_cap": 3271203254.97,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 152877572
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 101735
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 3271203254.97
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 101735
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 58572519
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 4.758834362030029
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh603703",
+      "名称": "盛洋科技",
+      "连板数": 2,
+      "细分板块": "航天",
+      "大主线": "军工航天",
+      "code": "sh603703",
+      "name": "盛洋科技",
+      "level": 2,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 105656,
+      "last_limit_time": 145141,
+      "limit_up_fund": 10710099,
+      "turnover_rate": 29.16998863220215,
+      "amount": 1435744032,
+      "float_market_cap": 5066931685.200001,
+      "break_count": 5,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 1435744032
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 5
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 105656
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 5066931685.200001
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 145141
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 10710099
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 29.16998863220215
+        }
+      },
+      "height": 2
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh603706",
+      "名称": "东方环宇",
+      "连板数": 2,
+      "细分板块": "油气",
+      "大主线": "周期资源",
+      "code": "sh603706",
+      "name": "东方环宇",
+      "level": 2,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 94127,
+      "last_limit_time": 142433,
+      "limit_up_fund": 7526969,
+      "turnover_rate": 8.326529502868652,
+      "amount": 340401280,
+      "float_market_cap": 4206190077.94,
+      "break_count": 9,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 340401280
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 9
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 94127
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 4206190077.94
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 142433
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 7526969
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 8.326529502868652
+        }
+      },
+      "height": 2
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh603809",
+      "名称": "豪能股份",
+      "连板数": 1,
+      "细分板块": "机器人",
+      "大主线": "机器人",
+      "code": "sh603809",
+      "name": "豪能股份",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 94651,
+      "last_limit_time": 94651,
+      "limit_up_fund": 37708509,
+      "turnover_rate": 3.511643886566162,
+      "amount": 304159104,
+      "float_market_cap": 8788758106.85,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 304159104
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 94651
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 8788758106.85
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 94651
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 37708509
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 3.511643886566162
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh603893",
+      "名称": "瑞芯微",
+      "连板数": 1,
+      "细分板块": "芯片",
+      "大主线": "AI算力",
+      "code": "sh603893",
+      "name": "瑞芯微",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 132024,
+      "last_limit_time": 132024,
+      "limit_up_fund": 239276492,
+      "turnover_rate": 4.3742475509643555,
+      "amount": 4144798560,
+      "float_market_cap": 98724928500.0,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 4144798560
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 132024
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 98724928500.0
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 132024
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 239276492
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 4.3742475509643555
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh603955",
+      "名称": "大千生态",
+      "连板数": 1,
+      "细分板块": "其它",
+      "大主线": "其它",
+      "code": "sh603955",
+      "name": "大千生态",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 95116,
+      "last_limit_time": 144601,
+      "limit_up_fund": 26634960,
+      "turnover_rate": 8.083446502685547,
+      "amount": 405153296,
+      "float_market_cap": 5105786400.0,
+      "break_count": 2,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 405153296
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 2
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 95116
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 5105786400.0
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 144601
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 26634960
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 8.083446502685547
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh605255",
+      "名称": "天普股份",
+      "连板数": 1,
+      "细分板块": "算力",
+      "大主线": "AI算力",
+      "code": "sh605255",
+      "name": "天普股份",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 130330,
+      "last_limit_time": 130330,
+      "limit_up_fund": 13770607,
+      "turnover_rate": 1.0926320552825928,
+      "amount": 78432465,
+      "float_market_cap": 7436076800.0,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 78432465
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 130330
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 7436076800.0
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 130330
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 13770607
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 1.0926320552825928
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh605258",
+      "名称": "协和电子",
+      "连板数": 1,
+      "细分板块": "PCB",
+      "大主线": "AI算力",
+      "code": "sh605258",
+      "name": "协和电子",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 102945,
+      "last_limit_time": 102945,
+      "limit_up_fund": 46597724,
+      "turnover_rate": 7.026590824127197,
+      "amount": 238264203,
+      "float_market_cap": 3481280000.0,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 238264203
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 102945
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 3481280000.0
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 102945
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 46597724
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 7.026590824127197
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh605398",
+      "名称": "新炬网络",
+      "连板数": 1,
+      "细分板块": "传媒",
+      "大主线": "AI应用",
+      "code": "sh605398",
+      "name": "新炬网络",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 93037,
+      "last_limit_time": 93816,
+      "limit_up_fund": 38323725,
+      "turnover_rate": 5.008309364318848,
+      "amount": 207525743,
+      "float_market_cap": 4189946759.25,
+      "break_count": 1,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 207525743
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 1
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 93037
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 4189946759.25
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 93816
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 38323725
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 5.008309364318848
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh605488",
+      "名称": "福莱新材",
+      "连板数": 1,
+      "细分板块": "机器人",
+      "大主线": "机器人",
+      "code": "sh605488",
+      "name": "福莱新材",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 93232,
+      "last_limit_time": 94908,
+      "limit_up_fund": 94109233,
+      "turnover_rate": 7.621366500854492,
+      "amount": 1281997776,
+      "float_market_cap": 17102826587.699999,
+      "break_count": 2,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 1281997776
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 2
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 93232
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 17102826587.699999
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 94908
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 94109233
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 7.621366500854492
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh605577",
+      "名称": "龙版传媒",
+      "连板数": 1,
+      "细分板块": "传媒",
+      "大主线": "AI应用",
+      "code": "sh605577",
+      "name": "龙版传媒",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 105450,
+      "last_limit_time": 142847,
+      "limit_up_fund": 12225600,
+      "turnover_rate": 11.90073013305664,
+      "amount": 880803808,
+      "float_market_cap": 7680000009.6,
+      "break_count": 1,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 880803808
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 1
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 105450
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 7680000009.6
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 142847
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 12225600
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 11.90073013305664
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh605598",
+      "名称": "上海港湾",
+      "连板数": 1,
+      "细分板块": "航天",
+      "大主线": "军工航天",
+      "code": "sh605598",
+      "name": "上海港湾",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 93835,
+      "last_limit_time": 93835,
+      "limit_up_fund": 81874275,
+      "turnover_rate": 3.598518133163452,
+      "amount": 237947849,
+      "float_market_cap": 6780452469.349999,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 237947849
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 93835
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 6780452469.349999
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 93835
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 81874275
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 3.598518133163452
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh688611",
+      "名称": "杭州柯林",
+      "连板数": 1,
+      "细分板块": "机器人",
+      "大主线": "机器人",
+      "code": "sh688611",
+      "name": "杭州柯林",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 102825,
+      "last_limit_time": 102825,
+      "limit_up_fund": 32533348,
+      "turnover_rate": 3.80942440032959,
+      "amount": 438836064,
+      "float_market_cap": 12126981776.0,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 438836064
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 102825
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 12126981776.0
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 102825
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 32533348
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 3.80942440032959
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sh688781",
+      "名称": "视涯科技-UW",
+      "连板数": 1,
+      "细分板块": "消费电子",
+      "大主线": "AI算力",
+      "code": "sh688781",
+      "name": "视涯科技-UW",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 132045,
+      "last_limit_time": 132045,
+      "limit_up_fund": 54649183,
+      "turnover_rate": 17.530717849731445,
+      "amount": 383169632,
+      "float_market_cap": 2337884696.16,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 383169632
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 132045
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 2337884696.16
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 132045
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 54649183
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 17.530717849731445
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz000530",
+      "名称": "冰山冷热",
+      "连板数": 2,
+      "细分板块": "核电",
+      "大主线": "新能源电网",
+      "code": "sz000530",
+      "name": "冰山冷热",
+      "level": 2,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 93015,
+      "last_limit_time": 94512,
+      "limit_up_fund": 126152948,
+      "turnover_rate": 24.447772979736328,
+      "amount": 1533466352,
+      "float_market_cap": 6319229114.25,
+      "break_count": 5,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 1533466352
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 5
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 93015
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 6319229114.25
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 94512
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 126152948
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 24.447772979736328
+        }
+      },
+      "height": 2
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz000593",
+      "名称": "德龙汇能",
+      "连板数": 1,
+      "细分板块": "储能",
+      "大主线": "新能源电网",
+      "code": "sz000593",
+      "name": "德龙汇能",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 130400,
+      "last_limit_time": 130400,
+      "limit_up_fund": 65727378,
+      "turnover_rate": 4.600174427032471,
+      "amount": 306322096,
+      "float_market_cap": 6922307096.889999,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 306322096
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 130400
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 6922307096.889999
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 130400
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 65727378
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 4.600174427032471
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz000678",
+      "名称": "襄阳轴承",
+      "连板数": 1,
+      "细分板块": "机器人",
+      "大主线": "机器人",
+      "code": "sz000678",
+      "name": "襄阳轴承",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 95748,
+      "last_limit_time": 95748,
+      "limit_up_fund": 184859367,
+      "turnover_rate": 15.352693557739258,
+      "amount": 1302930304,
+      "float_market_cap": 8852123210.220001,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 1302930304
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 95748
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 8852123210.220001
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 95748
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 184859367
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 15.352693557739258
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz000782",
+      "名称": "恒申新材",
+      "连板数": 1,
+      "细分板块": "化工",
+      "大主线": "周期资源",
+      "code": "sz000782",
+      "name": "恒申新材",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 135515,
+      "last_limit_time": 135515,
+      "limit_up_fund": 31825469,
+      "turnover_rate": 4.354795455932617,
+      "amount": 176726111,
+      "float_market_cap": 4188147210.39,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 176726111
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 135515
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 4188147210.39
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 135515
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 31825469
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 4.354795455932617
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz000810",
+      "名称": "创维数字",
+      "连板数": 1,
+      "细分板块": "机器人",
+      "大主线": "机器人",
+      "code": "sz000810",
+      "name": "创维数字",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 130115,
+      "last_limit_time": 130115,
+      "limit_up_fund": 121882443,
+      "turnover_rate": 4.214794158935547,
+      "amount": 544240688,
+      "float_market_cap": 13574438423.5,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 544240688
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 130115
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 13574438423.5
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 130115
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 121882443
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 4.214794158935547
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz001226",
+      "名称": "拓山重工",
+      "连板数": 2,
+      "细分板块": "油气",
+      "大主线": "周期资源",
+      "code": "sz001226",
+      "name": "拓山重工",
+      "level": 2,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 103127,
+      "last_limit_time": 143012,
+      "limit_up_fund": 3817253,
+      "turnover_rate": 7.8112945556640625,
+      "amount": 113561739,
+      "float_market_cap": 1484313534.0,
+      "break_count": 2,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 113561739
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 2
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 103127
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 1484313534.0
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 143012
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 3817253
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 7.8112945556640625
+        }
+      },
+      "height": 2
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz001232",
+      "名称": "嘉立创",
+      "连板数": 1,
+      "细分板块": "PCB",
+      "大主线": "AI算力",
+      "code": "sz001232",
+      "name": "嘉立创",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 132345,
+      "last_limit_time": 132345,
+      "limit_up_fund": 108125025,
+      "turnover_rate": 8.59803581237793,
+      "amount": 640968880,
+      "float_market_cap": 7726420634.22,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 640968880
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 132345
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 7726420634.22
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 132345
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 108125025
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 8.59803581237793
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz001308",
+      "名称": "康冠科技",
+      "连板数": 1,
+      "细分板块": "消费电子",
+      "大主线": "AI算力",
+      "code": "sz001308",
+      "name": "康冠科技",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 130600,
+      "last_limit_time": 130600,
+      "limit_up_fund": 23939391,
+      "turnover_rate": 5.023684024810791,
+      "amount": 616354192,
+      "float_market_cap": 12755999611.75,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 616354192
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 130600
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 12755999611.75
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 130600
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 23939391
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 5.023684024810791
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz001314",
+      "名称": "亿道信息",
+      "连板数": 1,
+      "细分板块": "消费电子",
+      "大主线": "AI算力",
+      "code": "sz001314",
+      "name": "亿道信息",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 134933,
+      "last_limit_time": 134933,
+      "limit_up_fund": 40065080,
+      "turnover_rate": 4.774946212768555,
+      "amount": 243276218,
+      "float_market_cap": 5306722263.849999,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 243276218
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 134933
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 5306722263.849999
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 134933
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 40065080
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 4.774946212768555
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz001318",
+      "名称": "阳光乳业",
+      "连板数": 1,
+      "细分板块": "其它",
+      "大主线": "其它",
+      "code": "sz001318",
+      "name": "阳光乳业",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 93600,
+      "last_limit_time": 130003,
+      "limit_up_fund": 55780868,
+      "turnover_rate": 9.895421981811523,
+      "amount": 404246864,
+      "float_market_cap": 4152275400.0,
+      "break_count": 2,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 404246864
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 2
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 93600
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 4152275400.0
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 130003
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 55780868
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 9.895421981811523
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz001339",
+      "名称": "智微智能",
+      "连板数": 1,
+      "细分板块": "消费电子",
+      "大主线": "AI算力",
+      "code": "sz001339",
+      "name": "智微智能",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 132100,
+      "last_limit_time": 132100,
+      "limit_up_fund": 90930419,
+      "turnover_rate": 7.12050724029541,
+      "amount": 708328784,
+      "float_market_cap": 10262820208.08,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 708328784
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 132100
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 10262820208.08
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 132100
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 90930419
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 7.12050724029541
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz001379",
+      "名称": "腾达科技",
+      "连板数": 2,
+      "细分板块": "航天",
+      "大主线": "军工航天",
+      "code": "sz001379",
+      "name": "腾达科技",
+      "level": 2,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 141427,
+      "last_limit_time": 141427,
+      "limit_up_fund": 10788802,
+      "turnover_rate": 26.050077438354492,
+      "amount": 288167632,
+      "float_market_cap": 1173684532.0,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 288167632
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 141427
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 1173684532.0
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 141427
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 10788802
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 26.050077438354492
+        }
+      },
+      "height": 2
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz002009",
+      "名称": "天奇股份",
+      "连板数": 1,
+      "细分板块": "储能",
+      "大主线": "新能源电网",
+      "code": "sz002009",
+      "name": "天奇股份",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 100318,
+      "last_limit_time": 100318,
+      "limit_up_fund": 142596182,
+      "turnover_rate": 9.781067848205566,
+      "amount": 646760048,
+      "float_market_cap": 6815410577.559999,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 646760048
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 100318
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 6815410577.559999
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 100318
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 142596182
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 9.781067848205566
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz002021",
+      "名称": "中捷资源",
+      "连板数": 1,
+      "细分板块": "机器人",
+      "大主线": "机器人",
+      "code": "sz002021",
+      "name": "中捷资源",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 104009,
+      "last_limit_time": 105500,
+      "limit_up_fund": 20195824,
+      "turnover_rate": 6.373555660247803,
+      "amount": 175233386,
+      "float_market_cap": 2833187801.67,
+      "break_count": 3,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 175233386
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 3
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 104009
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 2833187801.67
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 105500
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 20195824
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 6.373555660247803
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz002036",
+      "名称": "联创电子",
+      "连板数": 1,
+      "细分板块": "消费电子",
+      "大主线": "AI算力",
+      "code": "sz002036",
+      "name": "联创电子",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 130557,
+      "last_limit_time": 130557,
+      "limit_up_fund": 35366531,
+      "turnover_rate": 5.0178141593933105,
+      "amount": 291560448,
+      "float_market_cap": 5995056962.0,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 291560448
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 130557
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 5995056962.0
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 130557
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 35366531
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 5.0178141593933105
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz002045",
+      "名称": "国光电器",
+      "连板数": 1,
+      "细分板块": "消费电子",
+      "大主线": "AI算力",
+      "code": "sz002045",
+      "name": "国光电器",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 132051,
+      "last_limit_time": 140909,
+      "limit_up_fund": 70013562,
+      "turnover_rate": 16.08339500427246,
+      "amount": 977917600,
+      "float_market_cap": 6410513183.62,
+      "break_count": 1,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 977917600
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 1
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 132051
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 6410513183.62
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 140909
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 70013562
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 16.08339500427246
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz002048",
+      "名称": "宁波华翔",
+      "连板数": 1,
+      "细分板块": "机器人",
+      "大主线": "机器人",
+      "code": "sz002048",
+      "name": "宁波华翔",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 101830,
+      "last_limit_time": 112206,
+      "limit_up_fund": 9860209,
+      "turnover_rate": 9.372488021850586,
+      "amount": 1363173568,
+      "float_market_cap": 14772433334.119999,
+      "break_count": 5,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 1363173568
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 5
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 101830
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 14772433334.119999
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 112206
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 9860209
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 9.372488021850586
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz002160",
+      "名称": "常铝股份",
+      "连板数": 1,
+      "细分板块": "有色",
+      "大主线": "周期资源",
+      "code": "sz002160",
+      "name": "常铝股份",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 141900,
+      "last_limit_time": 141900,
+      "limit_up_fund": 109645396,
+      "turnover_rate": 6.349071502685547,
+      "amount": 249877649,
+      "float_market_cap": 4122917956.0,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 249877649
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 141900
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 4122917956.0
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 141900
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 109645396
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 6.349071502685547
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz002209",
+      "名称": "达 意 隆",
+      "连板数": 1,
+      "细分板块": "机器人",
+      "大主线": "机器人",
+      "code": "sz002209",
+      "name": "达 意 隆",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 94254,
+      "last_limit_time": 94318,
+      "limit_up_fund": 116498007,
+      "turnover_rate": 4.456606864929199,
+      "amount": 87639551,
+      "float_market_cap": 2003101119.72,
+      "break_count": 1,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 87639551
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 1
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 94254
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 2003101119.72
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 94318
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 116498007
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 4.456606864929199
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz002238",
+      "名称": "天威视讯",
+      "连板数": 1,
+      "细分板块": "传媒",
+      "大主线": "AI应用",
+      "code": "sz002238",
+      "name": "天威视讯",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 104357,
+      "last_limit_time": 104357,
+      "limit_up_fund": 34156380,
+      "turnover_rate": 2.632373094558716,
+      "amount": 150984183,
+      "float_market_cap": 5946963375.6,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 150984183
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 104357
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 5946963375.6
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 104357
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 34156380
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 2.632373094558716
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz002303",
+      "名称": "美盈森",
+      "连板数": 1,
+      "细分板块": "消费电子",
+      "大主线": "AI算力",
+      "code": "sz002303",
+      "name": "美盈森",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 143657,
+      "last_limit_time": 144112,
+      "limit_up_fund": 4668037,
+      "turnover_rate": 6.5989909172058105,
+      "amount": 319416592,
+      "float_market_cap": 5048629473.25,
+      "break_count": 1,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 319416592
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 1
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 143657
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 5048629473.25
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 144112
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 4668037
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 6.5989909172058105
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz002310",
+      "名称": "东方新能",
+      "连板数": 3,
+      "细分板块": "算力",
+      "大主线": "AI算力",
+      "code": "sz002310",
+      "name": "东方新能",
+      "level": 3,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 92500,
+      "last_limit_time": 92500,
+      "limit_up_fund": 323602691,
+      "turnover_rate": 1.3668726682662964,
+      "amount": 168962088,
+      "float_market_cap": 12361216560.12,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 168962088
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 92500
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 12361216560.12
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 92500
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 323602691
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 1.3668726682662964
+        }
+      },
+      "height": 3
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz002313",
+      "名称": "日海智能",
+      "连板数": 1,
+      "细分板块": "机器人",
+      "大主线": "机器人",
+      "code": "sz002313",
+      "name": "日海智能",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 100854,
+      "last_limit_time": 130039,
+      "limit_up_fund": 34947528,
+      "turnover_rate": 10.107085227966309,
+      "amount": 343310560,
+      "float_market_cap": 3459264732.0,
+      "break_count": 6,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 343310560
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 6
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 100854
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 3459264732.0
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 130039
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 34947528
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 10.107085227966309
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz002324",
+      "名称": "普利特",
+      "连板数": 1,
+      "细分板块": "航天",
+      "大主线": "军工航天",
+      "code": "sz002324",
+      "name": "普利特",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 141009,
+      "last_limit_time": 141009,
+      "limit_up_fund": 28179698,
+      "turnover_rate": 7.3062543869018555,
+      "amount": 499559392,
+      "float_market_cap": 7032629865.72,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 499559392
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 141009
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 7032629865.72
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 141009
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 28179698
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 7.3062543869018555
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz002343",
+      "名称": "慈文传媒",
+      "连板数": 1,
+      "细分板块": "传媒",
+      "大主线": "AI应用",
+      "code": "sz002343",
+      "name": "慈文传媒",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 93827,
+      "last_limit_time": 93827,
+      "limit_up_fund": 121772547,
+      "turnover_rate": 21.92552375793457,
+      "amount": 947000784,
+      "float_market_cap": 4419437068.38,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 947000784
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 93827
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 4419437068.38
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 93827
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 121772547
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 21.92552375793457
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz002347",
+      "名称": "泰尔股份",
+      "连板数": 2,
+      "细分板块": "机器人",
+      "大主线": "机器人",
+      "code": "sz002347",
+      "name": "泰尔股份",
+      "level": 2,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 93012,
+      "last_limit_time": 93012,
+      "limit_up_fund": 59899039,
+      "turnover_rate": 8.489500999450684,
+      "amount": 321997824,
+      "float_market_cap": 3799048337.7000003,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 321997824
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 93012
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 3799048337.7000003
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 93012
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 59899039
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 8.489500999450684
+        }
+      },
+      "height": 2
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz002376",
+      "名称": "新北洋",
+      "连板数": 1,
+      "细分板块": "机器人",
+      "大主线": "机器人",
+      "code": "sz002376",
+      "name": "新北洋",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 101103,
+      "last_limit_time": 112803,
+      "limit_up_fund": 94758205,
+      "turnover_rate": 10.122138977050781,
+      "amount": 600485376,
+      "float_market_cap": 6087101010.150001,
+      "break_count": 2,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 600485376
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 2
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 101103
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 6087101010.150001
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 112803
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 94758205
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 10.122138977050781
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz002425",
+      "名称": "凯撒文化",
+      "连板数": 1,
+      "细分板块": "传媒",
+      "大主线": "AI应用",
+      "code": "sz002425",
+      "name": "凯撒文化",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 93409,
+      "last_limit_time": 93436,
+      "limit_up_fund": 45037116,
+      "turnover_rate": 4.6959967613220215,
+      "amount": 147934683,
+      "float_market_cap": 3202247012.04,
+      "break_count": 1,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 147934683
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 1
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 93409
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 3202247012.04
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 93436
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 45037116
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 4.6959967613220215
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz002432",
+      "名称": "九安医疗",
+      "连板数": 1,
+      "细分板块": "医药",
+      "大主线": "医药",
+      "code": "sz002432",
+      "name": "九安医疗",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 103503,
+      "last_limit_time": 104106,
+      "limit_up_fund": 173824319,
+      "turnover_rate": 6.924463272094727,
+      "amount": 1690522848,
+      "float_market_cap": 25220619613.6,
+      "break_count": 2,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 1690522848
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 2
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 103503
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 25220619613.6
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 104106
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 173824319
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 6.924463272094727
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz002535",
+      "名称": "林州重机",
+      "连板数": 1,
+      "细分板块": "军工",
+      "大主线": "军工航天",
+      "code": "sz002535",
+      "name": "林州重机",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 95348,
+      "last_limit_time": 95348,
+      "limit_up_fund": 41449347,
+      "turnover_rate": 5.8109965324401855,
+      "amount": 118014759,
+      "float_market_cap": 2104671848.6999998,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 118014759
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 95348
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 2104671848.6999998
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 95348
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 41449347
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 5.8109965324401855
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz002578",
+      "名称": "闽发铝业",
+      "连板数": 7,
+      "细分板块": "光伏",
+      "大主线": "新能源电网",
+      "code": "sz002578",
+      "name": "闽发铝业",
+      "level": 7,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 141303,
+      "last_limit_time": 141303,
+      "limit_up_fund": 94291248,
+      "turnover_rate": 38.90397644042969,
+      "amount": 1921741056,
+      "float_market_cap": 5218645119.66,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 1921741056
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 141303
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 5218645119.66
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 141303
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 94291248
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 38.90397644042969
+        }
+      },
+      "height": 7
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz002614",
+      "名称": "奥佳华",
+      "连板数": 1,
+      "细分板块": "机器人",
+      "大主线": "机器人",
+      "code": "sz002614",
+      "name": "奥佳华",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 100257,
+      "last_limit_time": 100445,
+      "limit_up_fund": 43213782,
+      "turnover_rate": 5.644752502441406,
+      "amount": 185190958,
+      "float_market_cap": 3362517869.82,
+      "break_count": 1,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 185190958
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 1
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 100257
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 3362517869.82
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 100445
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 43213782
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 5.644752502441406
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz002623",
+      "名称": "亚玛顿",
+      "连板数": 2,
+      "细分板块": "光伏",
+      "大主线": "新能源电网",
+      "code": "sz002623",
+      "name": "亚玛顿",
+      "level": 2,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 92500,
+      "last_limit_time": 92500,
+      "limit_up_fund": 236637849,
+      "turnover_rate": 0.6924453377723694,
+      "amount": 28292019,
+      "float_market_cap": 4085812486.98,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 28292019
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 92500
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 4085812486.98
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 92500
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 236637849
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 0.6924453377723694
+        }
+      },
+      "height": 2
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz002631",
+      "名称": "德尔未来",
+      "连板数": 1,
+      "细分板块": "半导体",
+      "大主线": "AI算力",
+      "code": "sz002631",
+      "name": "德尔未来",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 132939,
+      "last_limit_time": 132957,
+      "limit_up_fund": 46403298,
+      "turnover_rate": 3.328066825866699,
+      "amount": 245480911,
+      "float_market_cap": 7730539158.4800005,
+      "break_count": 1,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 245480911
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 1
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 132939
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 7730539158.4800005
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 132957
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 46403298
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 3.328066825866699
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz002664",
+      "名称": "信质集团",
+      "连板数": 1,
+      "细分板块": "机器人",
+      "大主线": "机器人",
+      "code": "sz002664",
+      "name": "信质集团",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 140818,
+      "last_limit_time": 144427,
+      "limit_up_fund": 13582720,
+      "turnover_rate": 4.443191051483154,
+      "amount": 264137223,
+      "float_market_cap": 6124799537.599999,
+      "break_count": 1,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 264137223
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 1
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 140818
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 6124799537.599999
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 144427
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 13582720
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 4.443191051483154
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz002708",
+      "名称": "光洋股份",
+      "连板数": 2,
+      "细分板块": "机器人",
+      "大主线": "机器人",
+      "code": "sz002708",
+      "name": "光洋股份",
+      "level": 2,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 93012,
+      "last_limit_time": 93012,
+      "limit_up_fund": 265338743,
+      "turnover_rate": 3.144329786300659,
+      "amount": 383005696,
+      "float_market_cap": 12317765583.67,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 383005696
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 93012
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 12317765583.67
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 93012
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 265338743
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 3.144329786300659
+        }
+      },
+      "height": 2
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz002861",
+      "名称": "瀛通通讯",
+      "连板数": 1,
+      "细分板块": "消费电子",
+      "大主线": "AI算力",
+      "code": "sz002861",
+      "name": "瀛通通讯",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 130345,
+      "last_limit_time": 130345,
+      "limit_up_fund": 57024214,
+      "turnover_rate": 3.8896453380584717,
+      "amount": 68829412,
+      "float_market_cap": 1848894723.06,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 68829412
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 130345
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 1848894723.06
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 130345
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 57024214
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 3.8896453380584717
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz002865",
+      "名称": "钧达股份",
+      "连板数": 1,
+      "细分板块": "光伏",
+      "大主线": "新能源电网",
+      "code": "sz002865",
+      "name": "钧达股份",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 140921,
+      "last_limit_time": 140921,
+      "limit_up_fund": 85642433,
+      "turnover_rate": 23.63174057006836,
+      "amount": 2498293408,
+      "float_market_cap": 11189369002.8,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 2498293408
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 140921
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 11189369002.8
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 140921
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 85642433
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 23.63174057006836
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz002870",
+      "名称": "香山股份",
+      "连板数": 1,
+      "细分板块": "机器人",
+      "大主线": "机器人",
+      "code": "sz002870",
+      "name": "香山股份",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 101012,
+      "last_limit_time": 101012,
+      "limit_up_fund": 64299560,
+      "turnover_rate": 3.1631603240966797,
+      "amount": 159899495,
+      "float_market_cap": 5167249219.0199995,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 159899495
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 101012
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 5167249219.0199995
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 101012
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 64299560
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 3.1631603240966797
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz002876",
+      "名称": "三利谱",
+      "连板数": 1,
+      "细分板块": "消费电子",
+      "大主线": "AI算力",
+      "code": "sz002876",
+      "name": "三利谱",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 132545,
+      "last_limit_time": 132545,
+      "limit_up_fund": 15436185,
+      "turnover_rate": 5.763418674468994,
+      "amount": 252435880,
+      "float_market_cap": 4575481651.2,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 252435880
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 132545
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 4575481651.2
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 132545
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 15436185
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 5.763418674468994
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz002905",
+      "名称": "金逸影视",
+      "连板数": 1,
+      "细分板块": "传媒",
+      "大主线": "AI应用",
+      "code": "sz002905",
+      "name": "金逸影视",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 94445,
+      "last_limit_time": 95327,
+      "limit_up_fund": 24632942,
+      "turnover_rate": 6.170084476470947,
+      "amount": 196827748,
+      "float_market_cap": 3263769600.0,
+      "break_count": 1,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 196827748
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 1
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 94445
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 3263769600.0
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 95327
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 24632942
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 6.170084476470947
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz002931",
+      "名称": "锋龙股份",
+      "连板数": 2,
+      "细分板块": "机器人",
+      "大主线": "机器人",
+      "code": "sz002931",
+      "name": "锋龙股份",
+      "level": 2,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 93130,
+      "last_limit_time": 93130,
+      "limit_up_fund": 138555327,
+      "turnover_rate": 4.234851837158203,
+      "amount": 409223152,
+      "float_market_cap": 9774285148.5,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 409223152
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 93130
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 9774285148.5
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 93130
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 138555327
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 4.234851837158203
+        }
+      },
+      "height": 2
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz002981",
+      "名称": "朝阳科技",
+      "连板数": 1,
+      "细分板块": "消费电子",
+      "大主线": "AI算力",
+      "code": "sz002981",
+      "name": "朝阳科技",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 130527,
+      "last_limit_time": 130527,
+      "limit_up_fund": 49685020,
+      "turnover_rate": 5.904924392700195,
+      "amount": 166308955,
+      "float_market_cap": 2942335244.2,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 166308955
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 130527
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 2942335244.2
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 130527
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 49685020
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 5.904924392700195
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz002995",
+      "名称": "天地在线",
+      "连板数": 1,
+      "细分板块": "AI应用",
+      "大主线": "AI应用",
+      "code": "sz002995",
+      "name": "天地在线",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 131621,
+      "last_limit_time": 132900,
+      "limit_up_fund": 65775655,
+      "turnover_rate": 20.454330444335938,
+      "amount": 493116992,
+      "float_market_cap": 2516624578.6,
+      "break_count": 1,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 493116992
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 1
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 131621
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 2516624578.6
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 132900
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 65775655
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 20.454330444335938
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz300052",
+      "名称": "中青宝",
+      "连板数": 1,
+      "细分板块": "算力",
+      "大主线": "AI算力",
+      "code": "sz300052",
+      "name": "中青宝",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 143715,
+      "last_limit_time": 144527,
+      "limit_up_fund": 38190408,
+      "turnover_rate": 20.274694442749023,
+      "amount": 588239248,
+      "float_market_cap": 3095047615.2000003,
+      "break_count": 1,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 588239248
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 1
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 143715
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 3095047615.2000003
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 144527
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 38190408
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 20.274694442749023
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz300264",
+      "名称": "佳创视讯",
+      "连板数": 1,
+      "细分板块": "AI应用",
+      "大主线": "AI应用",
+      "code": "sz300264",
+      "name": "佳创视讯",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 130515,
+      "last_limit_time": 130515,
+      "limit_up_fund": 58281034,
+      "turnover_rate": 11.567392349243164,
+      "amount": 265554871,
+      "float_market_cap": 2437512235.62,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 265554871
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 130515
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 2437512235.62
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 130515
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 58281034
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 11.567392349243164
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz300426",
+      "名称": "华智数媒",
+      "连板数": 1,
+      "细分板块": "传媒",
+      "大主线": "AI应用",
+      "code": "sz300426",
+      "name": "华智数媒",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 145627,
+      "last_limit_time": 145627,
+      "limit_up_fund": 52388078,
+      "turnover_rate": 27.55870819091797,
+      "amount": 1150421296,
+      "float_market_cap": 4588000000.0,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 1150421296
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 145627
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 4588000000.0
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 145627
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 52388078
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 27.55870819091797
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz300556",
+      "名称": "丝路视觉",
+      "连板数": 1,
+      "细分板块": "AI应用",
+      "大主线": "AI应用",
+      "code": "sz300556",
+      "name": "丝路视觉",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 144818,
+      "last_limit_time": 144818,
+      "limit_up_fund": 28281975,
+      "turnover_rate": 36.60908126831055,
+      "amount": 817085184,
+      "float_market_cap": 2414272072.5,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 817085184
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 144818
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 2414272072.5
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 144818
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 28281975
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 36.60908126831055
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz300613",
+      "名称": "富瀚微",
+      "连板数": 1,
+      "细分板块": "芯片",
+      "大主线": "AI算力",
+      "code": "sz300613",
+      "name": "富瀚微",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 131112,
+      "last_limit_time": 131112,
+      "limit_up_fund": 172031077,
+      "turnover_rate": 13.607880592346191,
+      "amount": 2217242352,
+      "float_market_cap": 17586025887.62,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 2217242352
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 131112
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 17586025887.62
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 131112
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 172031077
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 13.607880592346191
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz301255",
+      "名称": "通力科技",
+      "连板数": 1,
+      "细分板块": "机器人",
+      "大主线": "机器人",
+      "code": "sz301255",
+      "name": "通力科技",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 93251,
+      "last_limit_time": 93251,
+      "limit_up_fund": 57473520,
+      "turnover_rate": 3.45206356048584,
+      "amount": 99202079,
+      "float_market_cap": 2936881229.3599997,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 99202079
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 93251
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 2936881229.3599997
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 93251
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 57473520
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 3.45206356048584
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261110",
+      "类型": "ZT",
+      "代码": "sz301314",
+      "名称": "科瑞思",
+      "连板数": 1,
+      "细分板块": "光通信",
+      "大主线": "AI算力",
+      "code": "sz301314",
+      "name": "科瑞思",
+      "level": 1,
+      "report_date": "20261110",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": 134512,
+      "last_limit_time": 134512,
+      "limit_up_fund": 94912935,
+      "turnover_rate": 15.836563110351562,
+      "amount": 222434815,
+      "float_market_cap": 1517600717.1000001,
+      "break_count": 0,
+      "source": "eastmoney_push2ex",
+      "source_timestamp": "2026-11-10T17:14:14.178061+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-10T17:14:14.186225+00:00",
+      "trade_date": "2026-11-10",
+      "trade_date_source": "source",
+      "trade_date_evidence": {
+        "field": "qdate",
+        "value": 20261110
+      },
+      "event_evidence": {
+        "amount": {
+          "field": "amount",
+          "value": 222434815
+        },
+        "break_count": {
+          "field": "zbc",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "fbt",
+          "value": 134512
+        },
+        "float_market_cap": {
+          "field": "ltsz",
+          "value": 1517600717.1000001
+        },
+        "last_limit_time": {
+          "field": "lbt",
+          "value": 134512
+        },
+        "limit_up_fund": {
+          "field": "fund",
+          "value": 94912935
+        },
+        "turnover_rate": {
+          "field": "hs",
+          "value": 15.836563110351562
+        }
+      },
+      "height": 1
+    }
+  ],
+  "snapshot_schema": "daily-fact-snapshot/v1",
+  "snapshot_source": "daily_snapshot",
+  "source": "daily_snapshot",
+  "date_verified": true,
+  "immutable": true
+}
