@@ -1,0 +1,5195 @@
+{
+  "meta": {
+    "version": "1.3.0",
+    "updated_at": "2026-10-30 15:30:00",
+    "date": "2026-10-30",
+    "sources": [
+      "量化投研归档",
+      "开盘啦",
+      "财联社"
+    ],
+    "is_history": true
+  },
+  "tab_mood": {
+    "degree": 10,
+    "status_text": "冰点 · 空仓观望",
+    "color_tag": "emerald",
+    "turnover": "1.85万亿",
+    "turnover_change": "",
+    "up_count": 864,
+    "down_count": 4557,
+    "zt_count": 147,
+    "dt_count": 82,
+    "broken_ratio": 35.7,
+    "yesterday_zt_perf": -1.5,
+    "tianti_stocks": [
+      {
+        "name": "青岛食品",
+        "symbol": "",
+        "height": 5,
+        "plate_name": "全市场空间天花板",
+        "first_time": "09:30"
+      },
+      {
+        "name": "上海沪工",
+        "symbol": "",
+        "height": 3,
+        "plate_name": "双子星同身位PK (淘汰率 50%)",
+        "first_time": "09:30"
+      },
+      {
+        "name": "澳洋健康",
+        "symbol": "",
+        "height": 3,
+        "plate_name": "双子星同身位PK (淘汰率 50%)",
+        "first_time": "09:30"
+      },
+      {
+        "name": "阳光照明",
+        "symbol": "",
+        "height": 2,
+        "plate_name": "低位承接与晋级活口 (同身位竞争)",
+        "first_time": "09:30"
+      },
+      {
+        "name": "盛洋科技",
+        "symbol": "",
+        "height": 2,
+        "plate_name": "低位承接与晋级活口 (同身位竞争)",
+        "first_time": "09:30"
+      },
+      {
+        "name": "巴比食品",
+        "symbol": "",
+        "height": 2,
+        "plate_name": "低位承接与晋级活口 (同身位竞争)",
+        "first_time": "09:30"
+      },
+      {
+        "name": "东方海洋",
+        "symbol": "",
+        "height": 2,
+        "plate_name": "低位承接与晋级活口 (同身位竞争)",
+        "first_time": "09:30"
+      }
+    ],
+    "distribution_bins": {
+      "-10%": 66,
+      "-7%": 120,
+      "-5%": 350,
+      "-2%": 1200,
+      "0%": 600,
+      "+2%": 900,
+      "+5%": 400,
+      "+7%": 180,
+      "+10%": 147
+    }
+  },
+  "tab_crowding": {
+    "mainline_desc": "2026-10-30 市场主线与题材梯队",
+    "mainlines": [
+      {
+        "title": "全市场空间天花板",
+        "hot": 45,
+        "desc": "空间龙头带领题材展开接力，全天共封板 147 只。"
+      }
+    ],
+    "tuyeres": [],
+    "fund_heat": [],
+    "local_cycles": [
+      {
+        "id": "medicine",
+        "title": "医药旧团 / 8月前史",
+        "start": "2026-08-08",
+        "end": "2026-08-28",
+        "codes": [
+          "sh600721",
+          "sh600664",
+          "sh600613",
+          "sz002412"
+        ],
+        "origin": "复盘补充样本，不宣称线性接替",
+        "members": [
+          {
+            "code": "sh600721",
+            "name": "百花医药",
+            "source": "全市场本地前复权缓存",
+            "as_of": "2026-10-30",
+            "price_basis": "qfq",
+            "source_selection": {
+              "source": "全市场本地前复权缓存",
+              "price_basis": "qfq",
+              "source_as_of": "2026-10-30",
+              "missing_trade_dates": [],
+              "source_candidates": [
+                {
+                  "source": "腾讯补充日线 / qfq",
+                  "as_of": "2026-10-08",
+                  "valid_recent_count": 5,
+                  "complete_recent_window": false
+                },
+                {
+                  "source": "全市场本地前复权缓存",
+                  "as_of": "2026-10-30",
+                  "valid_recent_count": 21,
+                  "complete_recent_window": true
+                }
+              ],
+              "selection_reason": "单窗口单源：优先完整覆盖应有近21交易日的序列，再比较截止日和覆盖；同等条件优先全市场前复权缓存。无完整源时降级，不拼接补洞。"
+            },
+            "reference_date": "2026-08-08",
+            "since_reference": null,
+            "two_month": {
+              "first_date": "2026-08-31",
+              "last_date": "2026-10-30",
+              "return_pct": -36.33,
+              "max_drawdown_pct": -42.1,
+              "count": 39,
+              "expected_count": 39,
+              "base_date": "2026-08-28",
+              "complete": true
+            },
+            "metrics": {
+              "r1": 9.96,
+              "r5": 2.61,
+              "r20": -23.92,
+              "dd20": -25.02,
+              "score": null,
+              "above_ma5": true
+            },
+            "zt_days": 9,
+            "max_height": 7.0,
+            "role": "截图/复盘样本，非事前推荐"
+          },
+          {
+            "code": "sh600664",
+            "name": "哈药股份",
+            "source": "全市场本地前复权缓存",
+            "as_of": "2026-10-30",
+            "price_basis": "qfq",
+            "source_selection": {
+              "source": "全市场本地前复权缓存",
+              "price_basis": "qfq",
+              "source_as_of": "2026-10-30",
+              "missing_trade_dates": [],
+              "source_candidates": [
+                {
+                  "source": "腾讯补充日线 / qfq",
+                  "as_of": "2026-10-08",
+                  "valid_recent_count": 5,
+                  "complete_recent_window": false
+                },
+                {
+                  "source": "全市场本地前复权缓存",
+                  "as_of": "2026-10-30",
+                  "valid_recent_count": 21,
+                  "complete_recent_window": true
+                }
+              ],
+              "selection_reason": "单窗口单源：优先完整覆盖应有近21交易日的序列，再比较截止日和覆盖；同等条件优先全市场前复权缓存。无完整源时降级，不拼接补洞。"
+            },
+            "reference_date": "2026-08-08",
+            "since_reference": null,
+            "two_month": {
+              "first_date": "2026-08-31",
+              "last_date": "2026-10-30",
+              "return_pct": -38.33,
+              "max_drawdown_pct": -44.26,
+              "count": 39,
+              "expected_count": 39,
+              "base_date": "2026-08-28",
+              "complete": true
+            },
+            "metrics": {
+              "r1": 4.91,
+              "r5": -0.18,
+              "r20": -31.82,
+              "dd20": -25.0,
+              "score": null,
+              "above_ma5": true
+            },
+            "zt_days": 4,
+            "max_height": 3.0,
+            "role": "截图/复盘样本，非事前推荐"
+          },
+          {
+            "code": "sh600613",
+            "name": "神奇制药",
+            "source": "全市场本地前复权缓存",
+            "as_of": "2026-10-30",
+            "price_basis": "qfq",
+            "source_selection": {
+              "source": "全市场本地前复权缓存",
+              "price_basis": "qfq",
+              "source_as_of": "2026-10-30",
+              "missing_trade_dates": [],
+              "source_candidates": [
+                {
+                  "source": "腾讯补充日线 / qfq",
+                  "as_of": "2026-10-08",
+                  "valid_recent_count": 5,
+                  "complete_recent_window": false
+                },
+                {
+                  "source": "全市场本地前复权缓存",
+                  "as_of": "2026-10-30",
+                  "valid_recent_count": 21,
+                  "complete_recent_window": true
+                }
+              ],
+              "selection_reason": "单窗口单源：优先完整覆盖应有近21交易日的序列，再比较截止日和覆盖；同等条件优先全市场前复权缓存。无完整源时降级，不拼接补洞。"
+            },
+            "reference_date": "2026-08-08",
+            "since_reference": null,
+            "two_month": {
+              "first_date": "2026-08-31",
+              "last_date": "2026-10-30",
+              "return_pct": -49.27,
+              "max_drawdown_pct": -49.52,
+              "count": 39,
+              "expected_count": 39,
+              "base_date": "2026-08-28",
+              "complete": true
+            },
+            "metrics": {
+              "r1": 0.48,
+              "r5": -5.98,
+              "r20": -23.76,
+              "dd20": -27.87,
+              "score": null,
+              "above_ma5": false
+            },
+            "zt_days": 8,
+            "max_height": 4.0,
+            "role": "截图/复盘样本，非事前推荐"
+          },
+          {
+            "code": "sz002412",
+            "name": "汉森制药",
+            "source": "全市场本地前复权缓存",
+            "as_of": "2026-10-30",
+            "price_basis": "qfq",
+            "source_selection": {
+              "source": "全市场本地前复权缓存",
+              "price_basis": "qfq",
+              "source_as_of": "2026-10-30",
+              "missing_trade_dates": [],
+              "source_candidates": [
+                {
+                  "source": "腾讯补充日线 / qfq",
+                  "as_of": "2026-10-08",
+                  "valid_recent_count": 5,
+                  "complete_recent_window": false
+                },
+                {
+                  "source": "全市场本地前复权缓存",
+                  "as_of": "2026-10-30",
+                  "valid_recent_count": 21,
+                  "complete_recent_window": true
+                }
+              ],
+              "selection_reason": "单窗口单源：优先完整覆盖应有近21交易日的序列，再比较截止日和覆盖；同等条件优先全市场前复权缓存。无完整源时降级，不拼接补洞。"
+            },
+            "reference_date": "2026-08-08",
+            "since_reference": null,
+            "two_month": {
+              "first_date": "2026-08-31",
+              "last_date": "2026-10-30",
+              "return_pct": -43.03,
+              "max_drawdown_pct": -43.26,
+              "count": 39,
+              "expected_count": 39,
+              "base_date": "2026-08-28",
+              "complete": true
+            },
+            "metrics": {
+              "r1": 0.4,
+              "r5": -1.32,
+              "r20": -17.8,
+              "dd20": -18.52,
+              "score": null,
+              "above_ma5": false
+            },
+            "zt_days": 5,
+            "max_height": 5.0,
+            "role": "截图/复盘样本，非事前推荐"
+          }
+        ],
+        "assessment": {
+          "date": "2026-10-30",
+          "last_known_state": "瓦解",
+          "was_broken": true,
+          "stable_days": 1,
+          "recovery_days": 0,
+          "stage": "瓦解观察",
+          "weak_share": 0.5,
+          "strong_share": 0.25,
+          "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+          "supporting_evidence": [
+            "强势成员1/4",
+            "连续止跌1日"
+          ],
+          "opposing_evidence": [
+            "深度回撤且在MA5下2/4"
+          ],
+          "missing_evidence": [
+            "成交集中、量能及可成交证据"
+          ],
+          "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+        },
+        "history": [
+          {
+            "date": "2026-08-31",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-09-01",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-09-02",
+            "last_known_state": null,
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 0.75,
+            "strong_share": 0.25,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员1/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-03",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 0.75,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-04",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下4/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-07",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 1,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌1日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下4/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-08",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 0.5,
+            "strong_share": 0.0,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下2/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-09",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下4/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-10",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下4/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-11",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下4/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-14",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 1,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌1日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下4/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-15",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下4/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-16",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 0.75,
+            "strong_share": 0.0,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-17",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 1,
+            "recovery_days": 1,
+            "stage": "瓦解观察",
+            "weak_share": 0.0,
+            "strong_share": 0.75,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员3/4",
+              "连续止跌1日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-18",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 2,
+            "recovery_days": 2,
+            "stage": "修复待验证",
+            "weak_share": 0.0,
+            "strong_share": 1.0,
+            "reason": "同一固定篮子多数成员连续恢复MA5和正5日收益；保留瓦解历史，不视为新团。",
+            "supporting_evidence": [
+              "强势成员4/4",
+              "连续止跌2日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-21",
+            "last_known_state": "修复待验证",
+            "was_broken": true,
+            "stable_days": 3,
+            "recovery_days": 3,
+            "stage": "旧团修复",
+            "weak_share": 0.0,
+            "strong_share": 1.0,
+            "reason": "同一固定篮子多数成员连续恢复MA5和正5日收益；保留瓦解历史，不视为新团。",
+            "supporting_evidence": [
+              "强势成员4/4",
+              "连续止跌3日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-22",
+            "last_known_state": "旧团修复",
+            "was_broken": true,
+            "stable_days": 4,
+            "recovery_days": 4,
+            "stage": "旧团修复",
+            "weak_share": 0.0,
+            "strong_share": 1.0,
+            "reason": "同一固定篮子多数成员连续恢复MA5和正5日收益；保留瓦解历史，不视为新团。",
+            "supporting_evidence": [
+              "强势成员4/4",
+              "连续止跌4日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-23",
+            "last_known_state": "旧团修复",
+            "was_broken": true,
+            "stable_days": 5,
+            "recovery_days": 5,
+            "stage": "旧团修复",
+            "weak_share": 0.25,
+            "strong_share": 0.75,
+            "reason": "同一固定篮子多数成员连续恢复MA5和正5日收益；保留瓦解历史，不视为新团。",
+            "supporting_evidence": [
+              "强势成员3/4",
+              "连续止跌5日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下1/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-24",
+            "last_known_state": "旧团修复",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下4/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-28",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下4/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-29",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下4/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-30",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 1,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 0.5,
+            "strong_share": 0.0,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌1日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下2/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-08",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 2,
+            "recovery_days": 0,
+            "stage": "出清观察",
+            "weak_share": 0.75,
+            "strong_share": 0.0,
+            "reason": "至少2日不再普遍创新低，只能说明抛压暂稳，不等于出清完成。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌2日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-09",
+            "last_known_state": "出清观察",
+            "was_broken": true,
+            "stable_days": 3,
+            "recovery_days": 0,
+            "stage": "出清观察",
+            "weak_share": 0.25,
+            "strong_share": 0.5,
+            "reason": "至少2日不再普遍创新低，只能说明抛压暂稳，不等于出清完成。",
+            "supporting_evidence": [
+              "强势成员2/4",
+              "连续止跌3日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下1/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-12",
+            "last_known_state": "出清观察",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下4/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-13",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下4/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-14",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下4/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-15",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 0.75,
+            "strong_share": 0.0,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-16",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 0.75,
+            "strong_share": 0.0,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-19",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下4/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-20",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下4/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-21",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 1,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌1日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下4/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-22",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下4/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-23",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下4/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-26",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下4/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-27",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下4/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-28",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 1,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 0.75,
+            "strong_share": 0.0,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌1日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-29",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下4/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-30",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 1,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 0.5,
+            "strong_share": 0.25,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员1/4",
+              "连续止跌1日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下2/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          }
+        ],
+        "basket_id": "medicine:1da46df68314",
+        "basket_version": 1,
+        "member_codes": [
+          "sh600721",
+          "sh600664",
+          "sh600613",
+          "sz002412"
+        ],
+        "known_at": "2026-10-08",
+        "rule_version": "crowding-price-proxy/2026-10-24",
+        "was_broken": true,
+        "dimensions": {
+          "price_strength_share": 0.25,
+          "price_fragility_share": 0.5,
+          "denominator": 4,
+          "turnover_concentration": null,
+          "interpretation": "价格持续性×脆弱性代理；无成交/持仓集中证据，不认定真实资金抱团。"
+        },
+        "next_step": "停止把反抽自动视为新周期，逐股核对破位与修复。"
+      },
+      {
+        "id": "farm",
+        "title": "农业 / 同一周期内部轮动",
+        "start": "2026-08-31",
+        "end": "2026-09-15",
+        "codes": [
+          "sh600371",
+          "sh600108",
+          "sh600127"
+        ],
+        "origin": "截图1：万向德农 → 亚盛集团、金健米业",
+        "members": [
+          {
+            "code": "sh600371",
+            "name": "万向德农",
+            "source": "全市场本地前复权缓存",
+            "as_of": "2026-10-30",
+            "price_basis": "qfq",
+            "source_selection": {
+              "source": "全市场本地前复权缓存",
+              "price_basis": "qfq",
+              "source_as_of": "2026-10-30",
+              "missing_trade_dates": [],
+              "source_candidates": [
+                {
+                  "source": "腾讯补充日线 / qfq",
+                  "as_of": "2026-10-08",
+                  "valid_recent_count": 5,
+                  "complete_recent_window": false
+                },
+                {
+                  "source": "全市场本地前复权缓存",
+                  "as_of": "2026-10-30",
+                  "valid_recent_count": 21,
+                  "complete_recent_window": true
+                }
+              ],
+              "selection_reason": "单窗口单源：优先完整覆盖应有近21交易日的序列，再比较截止日和覆盖；同等条件优先全市场前复权缓存。无完整源时降级，不拼接补洞。"
+            },
+            "reference_date": "2026-08-31",
+            "since_reference": -23.88,
+            "two_month": {
+              "first_date": "2026-08-31",
+              "last_date": "2026-10-30",
+              "return_pct": -16.29,
+              "max_drawdown_pct": -44.1,
+              "count": 39,
+              "expected_count": 39,
+              "base_date": "2026-08-28",
+              "complete": true
+            },
+            "metrics": {
+              "r1": -0.41,
+              "r5": -11.29,
+              "r20": -39.05,
+              "dd20": -35.47,
+              "score": null,
+              "above_ma5": false
+            },
+            "zt_days": 7,
+            "max_height": 6.0,
+            "role": "截图/复盘样本，非事前推荐"
+          },
+          {
+            "code": "sh600108",
+            "name": "亚盛集团",
+            "source": "全市场本地前复权缓存",
+            "as_of": "2026-10-30",
+            "price_basis": "qfq",
+            "source_selection": {
+              "source": "全市场本地前复权缓存",
+              "price_basis": "qfq",
+              "source_as_of": "2026-10-30",
+              "missing_trade_dates": [],
+              "source_candidates": [
+                {
+                  "source": "腾讯补充日线 / qfq",
+                  "as_of": "2026-10-08",
+                  "valid_recent_count": 5,
+                  "complete_recent_window": false
+                },
+                {
+                  "source": "全市场本地前复权缓存",
+                  "as_of": "2026-10-30",
+                  "valid_recent_count": 21,
+                  "complete_recent_window": true
+                }
+              ],
+              "selection_reason": "单窗口单源：优先完整覆盖应有近21交易日的序列，再比较截止日和覆盖；同等条件优先全市场前复权缓存。无完整源时降级，不拼接补洞。"
+            },
+            "reference_date": "2026-08-31",
+            "since_reference": -17.03,
+            "two_month": {
+              "first_date": "2026-08-31",
+              "last_date": "2026-10-30",
+              "return_pct": -19.42,
+              "max_drawdown_pct": -46.23,
+              "count": 39,
+              "expected_count": 39,
+              "base_date": "2026-08-28",
+              "complete": true
+            },
+            "metrics": {
+              "r1": -1.92,
+              "r5": -8.63,
+              "r20": -25.67,
+              "dd20": -27.59,
+              "score": null,
+              "above_ma5": false
+            },
+            "zt_days": 4,
+            "max_height": 4.0,
+            "role": "截图/复盘样本，非事前推荐"
+          },
+          {
+            "code": "sh600127",
+            "name": "金健米业",
+            "source": "全市场本地前复权缓存",
+            "as_of": "2026-10-30",
+            "price_basis": "qfq",
+            "source_selection": {
+              "source": "全市场本地前复权缓存",
+              "price_basis": "qfq",
+              "source_as_of": "2026-10-30",
+              "missing_trade_dates": [],
+              "source_candidates": [
+                {
+                  "source": "腾讯补充日线 / qfq",
+                  "as_of": "2026-10-08",
+                  "valid_recent_count": 5,
+                  "complete_recent_window": false
+                },
+                {
+                  "source": "全市场本地前复权缓存",
+                  "as_of": "2026-10-30",
+                  "valid_recent_count": 21,
+                  "complete_recent_window": true
+                }
+              ],
+              "selection_reason": "单窗口单源：优先完整覆盖应有近21交易日的序列，再比较截止日和覆盖；同等条件优先全市场前复权缓存。无完整源时降级，不拼接补洞。"
+            },
+            "reference_date": "2026-08-31",
+            "since_reference": -20.76,
+            "two_month": {
+              "first_date": "2026-08-31",
+              "last_date": "2026-10-30",
+              "return_pct": -18.95,
+              "max_drawdown_pct": -43.04,
+              "count": 39,
+              "expected_count": 39,
+              "base_date": "2026-08-28",
+              "complete": true
+            },
+            "metrics": {
+              "r1": -1.45,
+              "r5": -16.75,
+              "r20": -42.15,
+              "dd20": -37.15,
+              "score": null,
+              "above_ma5": false
+            },
+            "zt_days": 6,
+            "max_height": 3.0,
+            "role": "截图/复盘样本，非事前推荐"
+          }
+        ],
+        "assessment": {
+          "date": "2026-10-30",
+          "last_known_state": "瓦解",
+          "was_broken": true,
+          "stable_days": 0,
+          "recovery_days": 0,
+          "stage": "瓦解观察",
+          "weak_share": 1.0,
+          "strong_share": 0.0,
+          "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+          "supporting_evidence": [
+            "强势成员0/3",
+            "连续止跌0日"
+          ],
+          "opposing_evidence": [
+            "深度回撤且在MA5下3/3"
+          ],
+          "missing_evidence": [
+            "成交集中、量能及可成交证据"
+          ],
+          "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+        },
+        "history": [
+          {
+            "date": "2026-08-31",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 1,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-09-01",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 2,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-09-02",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "分歧",
+            "weak_share": 0.0,
+            "strong_share": 0.667,
+            "reason": "固定篮子强弱分化；断板不等于整体瓦解。",
+            "supporting_evidence": [
+              "强势成员2/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-03",
+            "last_known_state": "分歧",
+            "was_broken": false,
+            "stable_days": 1,
+            "recovery_days": 0,
+            "stage": "分歧",
+            "weak_share": 0.0,
+            "strong_share": 0.667,
+            "reason": "固定篮子强弱分化；断板不等于整体瓦解。",
+            "supporting_evidence": [
+              "强势成员2/3",
+              "连续止跌1日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-04",
+            "last_known_state": "分歧",
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "分歧",
+            "weak_share": 0.0,
+            "strong_share": 0.667,
+            "reason": "固定篮子强弱分化；断板不等于整体瓦解。",
+            "supporting_evidence": [
+              "强势成员2/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-07",
+            "last_known_state": "分歧",
+            "was_broken": false,
+            "stable_days": 1,
+            "recovery_days": 0,
+            "stage": "强化",
+            "weak_share": 0.0,
+            "strong_share": 1.0,
+            "reason": "固定篮子多数在5日均线上且5日收益为正；需量能与广度交叉确认。",
+            "supporting_evidence": [
+              "强势成员3/3",
+              "连续止跌1日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-08",
+            "last_known_state": "强化",
+            "was_broken": false,
+            "stable_days": 2,
+            "recovery_days": 0,
+            "stage": "强化",
+            "weak_share": 0.0,
+            "strong_share": 1.0,
+            "reason": "固定篮子多数在5日均线上且5日收益为正；需量能与广度交叉确认。",
+            "supporting_evidence": [
+              "强势成员3/3",
+              "连续止跌2日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-09",
+            "last_known_state": "强化",
+            "was_broken": false,
+            "stable_days": 3,
+            "recovery_days": 0,
+            "stage": "强化",
+            "weak_share": 0.0,
+            "strong_share": 1.0,
+            "reason": "固定篮子多数在5日均线上且5日收益为正；需量能与广度交叉确认。",
+            "supporting_evidence": [
+              "强势成员3/3",
+              "连续止跌3日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-10",
+            "last_known_state": "强化",
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "分歧",
+            "weak_share": 0.333,
+            "strong_share": 0.667,
+            "reason": "固定篮子强弱分化；断板不等于整体瓦解。",
+            "supporting_evidence": [
+              "强势成员2/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下1/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-11",
+            "last_known_state": "分歧",
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "分歧",
+            "weak_share": 0.333,
+            "strong_share": 0.0,
+            "reason": "固定篮子强弱分化；断板不等于整体瓦解。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下1/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-14",
+            "last_known_state": "分歧",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 0.667,
+            "strong_share": 0.333,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员1/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下2/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-15",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-16",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 0.667,
+            "strong_share": 0.0,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下2/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-17",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 1,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 0.333,
+            "strong_share": 0.333,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员1/3",
+              "连续止跌1日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下1/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-18",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 2,
+            "recovery_days": 0,
+            "stage": "出清观察",
+            "weak_share": 0.0,
+            "strong_share": 0.667,
+            "reason": "至少2日不再普遍创新低，只能说明抛压暂稳，不等于出清完成。",
+            "supporting_evidence": [
+              "强势成员2/3",
+              "连续止跌2日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-21",
+            "last_known_state": "出清观察",
+            "was_broken": true,
+            "stable_days": 3,
+            "recovery_days": 1,
+            "stage": "出清观察",
+            "weak_share": 0.0,
+            "strong_share": 1.0,
+            "reason": "至少2日不再普遍创新低，只能说明抛压暂稳，不等于出清完成。",
+            "supporting_evidence": [
+              "强势成员3/3",
+              "连续止跌3日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-22",
+            "last_known_state": "出清观察",
+            "was_broken": true,
+            "stable_days": 4,
+            "recovery_days": 2,
+            "stage": "修复待验证",
+            "weak_share": 0.0,
+            "strong_share": 1.0,
+            "reason": "同一固定篮子多数成员连续恢复MA5和正5日收益；保留瓦解历史，不视为新团。",
+            "supporting_evidence": [
+              "强势成员3/3",
+              "连续止跌4日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-23",
+            "last_known_state": "修复待验证",
+            "was_broken": true,
+            "stable_days": 5,
+            "recovery_days": 0,
+            "stage": "出清观察",
+            "weak_share": 0.333,
+            "strong_share": 0.667,
+            "reason": "至少2日不再普遍创新低，只能说明抛压暂稳，不等于出清完成。",
+            "supporting_evidence": [
+              "强势成员2/3",
+              "连续止跌5日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下1/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-24",
+            "last_known_state": "出清观察",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 0.333,
+            "strong_share": 0.333,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员1/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下1/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-28",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-29",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-30",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-08",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 1,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 0.667,
+            "strong_share": 0.0,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌1日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下2/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-09",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 2,
+            "recovery_days": 0,
+            "stage": "出清观察",
+            "weak_share": 0.0,
+            "strong_share": 0.333,
+            "reason": "至少2日不再普遍创新低，只能说明抛压暂稳，不等于出清完成。",
+            "supporting_evidence": [
+              "强势成员1/3",
+              "连续止跌2日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-12",
+            "last_known_state": "出清观察",
+            "was_broken": true,
+            "stable_days": 3,
+            "recovery_days": 0,
+            "stage": "出清观察",
+            "weak_share": 0.0,
+            "strong_share": 0.333,
+            "reason": "至少2日不再普遍创新低，只能说明抛压暂稳，不等于出清完成。",
+            "supporting_evidence": [
+              "强势成员1/3",
+              "连续止跌3日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-13",
+            "last_known_state": "出清观察",
+            "was_broken": true,
+            "stable_days": 4,
+            "recovery_days": 1,
+            "stage": "出清观察",
+            "weak_share": 0.0,
+            "strong_share": 1.0,
+            "reason": "至少2日不再普遍创新低，只能说明抛压暂稳，不等于出清完成。",
+            "supporting_evidence": [
+              "强势成员3/3",
+              "连续止跌4日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-14",
+            "last_known_state": "出清观察",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 0.667,
+            "strong_share": 0.333,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员1/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下2/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-15",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-16",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 0.667,
+            "strong_share": 0.0,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下2/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-19",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-20",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 1,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌1日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-21",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 2,
+            "recovery_days": 0,
+            "stage": "出清观察",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "至少2日不再普遍创新低，只能说明抛压暂稳，不等于出清完成。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌2日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-22",
+            "last_known_state": "出清观察",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-23",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-26",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-27",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-28",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-29",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-30",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          }
+        ],
+        "basket_id": "farm:0d71d8902164",
+        "basket_version": 1,
+        "member_codes": [
+          "sh600371",
+          "sh600108",
+          "sh600127"
+        ],
+        "known_at": "2026-10-08",
+        "rule_version": "crowding-price-proxy/2026-10-24",
+        "was_broken": true,
+        "dimensions": {
+          "price_strength_share": 0.0,
+          "price_fragility_share": 1.0,
+          "denominator": 3,
+          "turnover_concentration": null,
+          "interpretation": "价格持续性×脆弱性代理；无成交/持仓集中证据，不认定真实资金抱团。"
+        },
+        "next_step": "停止把反抽自动视为新周期，逐股核对破位与修复。"
+      },
+      {
+        "id": "consumer",
+        "title": "消费 / 核心切换",
+        "start": "2026-08-31",
+        "end": "2026-09-15",
+        "codes": [
+          "sh601086",
+          "sh600865",
+          "sz000978"
+        ],
+        "origin": "截图1：国芳集团 → 百大集团 → 桂林旅游",
+        "members": [
+          {
+            "code": "sh601086",
+            "name": "国芳集团",
+            "source": "全市场本地前复权缓存",
+            "as_of": "2026-10-30",
+            "price_basis": "qfq",
+            "source_selection": {
+              "source": "全市场本地前复权缓存",
+              "price_basis": "qfq",
+              "source_as_of": "2026-10-30",
+              "missing_trade_dates": [],
+              "source_candidates": [
+                {
+                  "source": "腾讯补充日线 / qfq",
+                  "as_of": "2026-10-08",
+                  "valid_recent_count": 5,
+                  "complete_recent_window": false
+                },
+                {
+                  "source": "全市场本地前复权缓存",
+                  "as_of": "2026-10-30",
+                  "valid_recent_count": 21,
+                  "complete_recent_window": true
+                }
+              ],
+              "selection_reason": "单窗口单源：优先完整覆盖应有近21交易日的序列，再比较截止日和覆盖；同等条件优先全市场前复权缓存。无完整源时降级，不拼接补洞。"
+            },
+            "reference_date": "2026-08-31",
+            "since_reference": 33.48,
+            "two_month": {
+              "first_date": "2026-08-31",
+              "last_date": "2026-10-30",
+              "return_pct": 46.76,
+              "max_drawdown_pct": -38.33,
+              "count": 39,
+              "expected_count": 39,
+              "base_date": "2026-08-28",
+              "complete": true
+            },
+            "metrics": {
+              "r1": -10.0,
+              "r5": 9.29,
+              "r20": -20.1,
+              "dd20": -22.78,
+              "score": null,
+              "above_ma5": false
+            },
+            "zt_days": 10,
+            "max_height": 5.0,
+            "role": "截图/复盘样本，非事前推荐"
+          },
+          {
+            "code": "sh600865",
+            "name": "百大集团",
+            "source": "全市场本地前复权缓存",
+            "as_of": "2026-10-30",
+            "price_basis": "qfq",
+            "source_selection": {
+              "source": "全市场本地前复权缓存",
+              "price_basis": "qfq",
+              "source_as_of": "2026-10-30",
+              "missing_trade_dates": [],
+              "source_candidates": [
+                {
+                  "source": "腾讯补充日线 / qfq",
+                  "as_of": "2026-10-08",
+                  "valid_recent_count": 5,
+                  "complete_recent_window": false
+                },
+                {
+                  "source": "全市场本地前复权缓存",
+                  "as_of": "2026-10-30",
+                  "valid_recent_count": 21,
+                  "complete_recent_window": true
+                }
+              ],
+              "selection_reason": "单窗口单源：优先完整覆盖应有近21交易日的序列，再比较截止日和覆盖；同等条件优先全市场前复权缓存。无完整源时降级，不拼接补洞。"
+            },
+            "reference_date": "2026-08-31",
+            "since_reference": 17.43,
+            "two_month": {
+              "first_date": "2026-08-31",
+              "last_date": "2026-10-30",
+              "return_pct": 15.53,
+              "max_drawdown_pct": -33.55,
+              "count": 39,
+              "expected_count": 39,
+              "base_date": "2026-08-28",
+              "complete": true
+            },
+            "metrics": {
+              "r1": -10.0,
+              "r5": -2.99,
+              "r20": -1.74,
+              "dd20": -15.13,
+              "score": null,
+              "above_ma5": false
+            },
+            "zt_days": 7,
+            "max_height": 5.0,
+            "role": "截图/复盘样本，非事前推荐"
+          },
+          {
+            "code": "sz000978",
+            "name": "桂林旅游",
+            "source": "全市场本地前复权缓存",
+            "as_of": "2026-10-30",
+            "price_basis": "qfq",
+            "source_selection": {
+              "source": "全市场本地前复权缓存",
+              "price_basis": "qfq",
+              "source_as_of": "2026-10-30",
+              "missing_trade_dates": [],
+              "source_candidates": [
+                {
+                  "source": "腾讯补充日线 / qfq",
+                  "as_of": "2026-10-08",
+                  "valid_recent_count": 5,
+                  "complete_recent_window": false
+                },
+                {
+                  "source": "全市场本地前复权缓存",
+                  "as_of": "2026-10-30",
+                  "valid_recent_count": 21,
+                  "complete_recent_window": true
+                }
+              ],
+              "selection_reason": "单窗口单源：优先完整覆盖应有近21交易日的序列，再比较截止日和覆盖；同等条件优先全市场前复权缓存。无完整源时降级，不拼接补洞。"
+            },
+            "reference_date": "2026-08-31",
+            "since_reference": -9.34,
+            "two_month": {
+              "first_date": "2026-08-31",
+              "last_date": "2026-10-30",
+              "return_pct": -6.98,
+              "max_drawdown_pct": -47.24,
+              "count": 39,
+              "expected_count": 39,
+              "base_date": "2026-08-28",
+              "complete": true
+            },
+            "metrics": {
+              "r1": -1.72,
+              "r5": -5.45,
+              "r20": -27.56,
+              "dd20": -21.18,
+              "score": null,
+              "above_ma5": false
+            },
+            "zt_days": 5,
+            "max_height": 4.0,
+            "role": "截图/复盘样本，非事前推荐"
+          }
+        ],
+        "assessment": {
+          "date": "2026-10-30",
+          "last_known_state": "瓦解观察",
+          "was_broken": true,
+          "stable_days": 0,
+          "recovery_days": 0,
+          "stage": "瓦解",
+          "weak_share": 1.0,
+          "strong_share": 0.0,
+          "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+          "supporting_evidence": [
+            "强势成员0/3",
+            "连续止跌0日"
+          ],
+          "opposing_evidence": [
+            "深度回撤且在MA5下3/3"
+          ],
+          "missing_evidence": [
+            "成交集中、量能及可成交证据"
+          ],
+          "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+        },
+        "history": [
+          {
+            "date": "2026-08-31",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 1,
+            "recovery_days": 0,
+            "stage": "强化",
+            "weak_share": 0.0,
+            "strong_share": 1.0,
+            "reason": "固定篮子多数在5日均线上且5日收益为正；需量能与广度交叉确认。",
+            "supporting_evidence": [
+              "强势成员3/3",
+              "连续止跌1日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-01",
+            "last_known_state": "强化",
+            "was_broken": false,
+            "stable_days": 2,
+            "recovery_days": 0,
+            "stage": "强化",
+            "weak_share": 0.0,
+            "strong_share": 1.0,
+            "reason": "固定篮子多数在5日均线上且5日收益为正；需量能与广度交叉确认。",
+            "supporting_evidence": [
+              "强势成员3/3",
+              "连续止跌2日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-02",
+            "last_known_state": "强化",
+            "was_broken": false,
+            "stable_days": 3,
+            "recovery_days": 0,
+            "stage": "强化",
+            "weak_share": 0.0,
+            "strong_share": 1.0,
+            "reason": "固定篮子多数在5日均线上且5日收益为正；需量能与广度交叉确认。",
+            "supporting_evidence": [
+              "强势成员3/3",
+              "连续止跌3日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-03",
+            "last_known_state": "强化",
+            "was_broken": false,
+            "stable_days": 4,
+            "recovery_days": 0,
+            "stage": "强化",
+            "weak_share": 0.0,
+            "strong_share": 1.0,
+            "reason": "固定篮子多数在5日均线上且5日收益为正；需量能与广度交叉确认。",
+            "supporting_evidence": [
+              "强势成员3/3",
+              "连续止跌4日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-04",
+            "last_known_state": "强化",
+            "was_broken": false,
+            "stable_days": 5,
+            "recovery_days": 0,
+            "stage": "强化",
+            "weak_share": 0.0,
+            "strong_share": 1.0,
+            "reason": "固定篮子多数在5日均线上且5日收益为正；需量能与广度交叉确认。",
+            "supporting_evidence": [
+              "强势成员3/3",
+              "连续止跌5日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-07",
+            "last_known_state": "强化",
+            "was_broken": false,
+            "stable_days": 6,
+            "recovery_days": 0,
+            "stage": "强化",
+            "weak_share": 0.0,
+            "strong_share": 1.0,
+            "reason": "固定篮子多数在5日均线上且5日收益为正；需量能与广度交叉确认。",
+            "supporting_evidence": [
+              "强势成员3/3",
+              "连续止跌6日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-08",
+            "last_known_state": "强化",
+            "was_broken": false,
+            "stable_days": 7,
+            "recovery_days": 0,
+            "stage": "强化",
+            "weak_share": 0.0,
+            "strong_share": 1.0,
+            "reason": "固定篮子多数在5日均线上且5日收益为正；需量能与广度交叉确认。",
+            "supporting_evidence": [
+              "强势成员3/3",
+              "连续止跌7日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-09",
+            "last_known_state": "强化",
+            "was_broken": false,
+            "stable_days": 8,
+            "recovery_days": 0,
+            "stage": "强化",
+            "weak_share": 0.0,
+            "strong_share": 1.0,
+            "reason": "固定篮子多数在5日均线上且5日收益为正；需量能与广度交叉确认。",
+            "supporting_evidence": [
+              "强势成员3/3",
+              "连续止跌8日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-10",
+            "last_known_state": "强化",
+            "was_broken": false,
+            "stable_days": 9,
+            "recovery_days": 0,
+            "stage": "强化",
+            "weak_share": 0.0,
+            "strong_share": 1.0,
+            "reason": "固定篮子多数在5日均线上且5日收益为正；需量能与广度交叉确认。",
+            "supporting_evidence": [
+              "强势成员3/3",
+              "连续止跌9日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-11",
+            "last_known_state": "强化",
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "分歧",
+            "weak_share": 0.333,
+            "strong_share": 0.667,
+            "reason": "固定篮子强弱分化；断板不等于整体瓦解。",
+            "supporting_evidence": [
+              "强势成员2/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下1/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-14",
+            "last_known_state": "分歧",
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "分歧",
+            "weak_share": 0.333,
+            "strong_share": 0.667,
+            "reason": "固定篮子强弱分化；断板不等于整体瓦解。",
+            "supporting_evidence": [
+              "强势成员2/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下1/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-15",
+            "last_known_state": "分歧",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 0.667,
+            "strong_share": 0.333,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员1/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下2/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-16",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-17",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-18",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 1,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 0.667,
+            "strong_share": 0.0,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌1日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下2/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-21",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 2,
+            "recovery_days": 0,
+            "stage": "出清观察",
+            "weak_share": 0.333,
+            "strong_share": 0.0,
+            "reason": "至少2日不再普遍创新低，只能说明抛压暂稳，不等于出清完成。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌2日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下1/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-22",
+            "last_known_state": "出清观察",
+            "was_broken": true,
+            "stable_days": 3,
+            "recovery_days": 0,
+            "stage": "出清观察",
+            "weak_share": 0.0,
+            "strong_share": 0.667,
+            "reason": "至少2日不再普遍创新低，只能说明抛压暂稳，不等于出清完成。",
+            "supporting_evidence": [
+              "强势成员2/3",
+              "连续止跌3日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-23",
+            "last_known_state": "出清观察",
+            "was_broken": true,
+            "stable_days": 4,
+            "recovery_days": 0,
+            "stage": "出清观察",
+            "weak_share": 0.0,
+            "strong_share": 0.667,
+            "reason": "至少2日不再普遍创新低，只能说明抛压暂稳，不等于出清完成。",
+            "supporting_evidence": [
+              "强势成员2/3",
+              "连续止跌4日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-24",
+            "last_known_state": "出清观察",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-28",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-29",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-30",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-08",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-09",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 1,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 0.0,
+            "strong_share": 0.333,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员1/3",
+              "连续止跌1日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-12",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 0.667,
+            "strong_share": 0.333,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员1/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下2/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-13",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 0.333,
+            "strong_share": 0.333,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员1/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下1/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-14",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 0.667,
+            "strong_share": 0.333,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员1/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下2/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-15",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-16",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-19",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-20",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-21",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 1,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 0.333,
+            "strong_share": 0.0,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌1日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下1/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-22",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-23",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 0.667,
+            "strong_share": 0.333,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员1/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下2/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-26",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 0.667,
+            "strong_share": 0.333,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员1/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下2/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-27",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 0.333,
+            "strong_share": 0.667,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员2/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下1/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-28",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 1,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 0.333,
+            "strong_share": 0.667,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员2/3",
+              "连续止跌1日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下1/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-29",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 0.333,
+            "strong_share": 0.667,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员2/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下1/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-30",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/3",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/3"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          }
+        ],
+        "basket_id": "consumer:0013771ef95b",
+        "basket_version": 1,
+        "member_codes": [
+          "sh601086",
+          "sh600865",
+          "sz000978"
+        ],
+        "known_at": "2026-10-08",
+        "rule_version": "crowding-price-proxy/2026-10-24",
+        "was_broken": true,
+        "dimensions": {
+          "price_strength_share": 0.0,
+          "price_fragility_share": 1.0,
+          "denominator": 3,
+          "turnover_concentration": null,
+          "interpretation": "价格持续性×脆弱性代理；无成交/持仓集中证据，不认定真实资金抱团。"
+        },
+        "next_step": "停止把反抽自动视为新周期，逐股核对破位与修复。"
+      },
+      {
+        "id": "parallel",
+        "title": "并行方向 / 不能拼成单一龙头链",
+        "start": "2026-08-31",
+        "end": "2026-09-24",
+        "codes": [
+          "sz000017",
+          "sz003040",
+          "sz000993",
+          "sh601091"
+        ],
+        "origin": "截图1：深中华断板为情绪参照；楚天龙；9/10闽东电力；9/17沈鼓集团",
+        "members": [
+          {
+            "code": "sz000017",
+            "name": "深中华A",
+            "source": "全市场本地前复权缓存",
+            "as_of": "2026-10-30",
+            "price_basis": "qfq",
+            "source_selection": {
+              "source": "全市场本地前复权缓存",
+              "price_basis": "qfq",
+              "source_as_of": "2026-10-30",
+              "missing_trade_dates": [],
+              "source_candidates": [
+                {
+                  "source": "腾讯补充日线 / qfq",
+                  "as_of": "2026-10-08",
+                  "valid_recent_count": 5,
+                  "complete_recent_window": false
+                },
+                {
+                  "source": "全市场本地前复权缓存",
+                  "as_of": "2026-10-30",
+                  "valid_recent_count": 21,
+                  "complete_recent_window": true
+                }
+              ],
+              "selection_reason": "单窗口单源：优先完整覆盖应有近21交易日的序列，再比较截止日和覆盖；同等条件优先全市场前复权缓存。无完整源时降级，不拼接补洞。"
+            },
+            "reference_date": "2026-08-31",
+            "since_reference": -50.94,
+            "two_month": {
+              "first_date": "2026-08-31",
+              "last_date": "2026-10-30",
+              "return_pct": -51.97,
+              "max_drawdown_pct": -53.19,
+              "count": 39,
+              "expected_count": 39,
+              "base_date": "2026-08-28",
+              "complete": true
+            },
+            "metrics": {
+              "r1": -4.18,
+              "r5": -12.7,
+              "r20": -26.96,
+              "dd20": -29.4,
+              "score": null,
+              "above_ma5": false
+            },
+            "zt_days": 0,
+            "max_height": null,
+            "role": "截图/复盘样本，非事前推荐"
+          },
+          {
+            "code": "sz003040",
+            "name": "楚天龙",
+            "source": "全市场本地前复权缓存",
+            "as_of": "2026-10-30",
+            "price_basis": "qfq",
+            "source_selection": {
+              "source": "全市场本地前复权缓存",
+              "price_basis": "qfq",
+              "source_as_of": "2026-10-30",
+              "missing_trade_dates": [],
+              "source_candidates": [
+                {
+                  "source": "腾讯补充日线 / qfq",
+                  "as_of": "2026-10-08",
+                  "valid_recent_count": 5,
+                  "complete_recent_window": false
+                },
+                {
+                  "source": "全市场本地前复权缓存",
+                  "as_of": "2026-10-30",
+                  "valid_recent_count": 21,
+                  "complete_recent_window": true
+                }
+              ],
+              "selection_reason": "单窗口单源：优先完整覆盖应有近21交易日的序列，再比较截止日和覆盖；同等条件优先全市场前复权缓存。无完整源时降级，不拼接补洞。"
+            },
+            "reference_date": "2026-08-31",
+            "since_reference": -33.82,
+            "two_month": {
+              "first_date": "2026-08-31",
+              "last_date": "2026-10-30",
+              "return_pct": -36.32,
+              "max_drawdown_pct": -48.67,
+              "count": 39,
+              "expected_count": 39,
+              "base_date": "2026-08-28",
+              "complete": true
+            },
+            "metrics": {
+              "r1": -5.38,
+              "r5": -12.16,
+              "r20": -18.76,
+              "dd20": -22.65,
+              "score": null,
+              "above_ma5": false
+            },
+            "zt_days": 2,
+            "max_height": 1.0,
+            "role": "截图/复盘样本，非事前推荐"
+          },
+          {
+            "code": "sz000993",
+            "name": "闽东电力",
+            "source": "全市场本地前复权缓存",
+            "as_of": "2026-10-30",
+            "price_basis": "qfq",
+            "source_selection": {
+              "source": "全市场本地前复权缓存",
+              "price_basis": "qfq",
+              "source_as_of": "2026-10-30",
+              "missing_trade_dates": [],
+              "source_candidates": [
+                {
+                  "source": "腾讯补充日线 / qfq",
+                  "as_of": "2026-10-08",
+                  "valid_recent_count": 5,
+                  "complete_recent_window": false
+                },
+                {
+                  "source": "全市场本地前复权缓存",
+                  "as_of": "2026-10-30",
+                  "valid_recent_count": 21,
+                  "complete_recent_window": true
+                }
+              ],
+              "selection_reason": "单窗口单源：优先完整覆盖应有近21交易日的序列，再比较截止日和覆盖；同等条件优先全市场前复权缓存。无完整源时降级，不拼接补洞。"
+            },
+            "reference_date": "2026-08-31",
+            "since_reference": 11.0,
+            "two_month": {
+              "first_date": "2026-08-31",
+              "last_date": "2026-10-30",
+              "return_pct": 10.89,
+              "max_drawdown_pct": -47.39,
+              "count": 39,
+              "expected_count": 39,
+              "base_date": "2026-08-28",
+              "complete": true
+            },
+            "metrics": {
+              "r1": -1.87,
+              "r5": -13.45,
+              "r20": -43.06,
+              "dd20": -41.33,
+              "score": null,
+              "above_ma5": false
+            },
+            "zt_days": 6,
+            "max_height": 6.0,
+            "role": "截图/复盘样本，非事前推荐"
+          },
+          {
+            "code": "sh601091",
+            "name": "沈鼓集团",
+            "source": "缺少同口径行情",
+            "as_of": null,
+            "price_basis": "qfq",
+            "source_selection": {
+              "source": "缺少同口径行情",
+              "price_basis": "qfq",
+              "source_as_of": null,
+              "missing_trade_dates": [
+                "2026-08-31",
+                "2026-09-01",
+                "2026-09-02",
+                "2026-09-03",
+                "2026-09-04",
+                "2026-09-07",
+                "2026-09-08",
+                "2026-09-09",
+                "2026-09-10",
+                "2026-09-11",
+                "2026-09-14",
+                "2026-09-15",
+                "2026-09-16",
+                "2026-09-17",
+                "2026-09-18",
+                "2026-09-21",
+                "2026-09-22",
+                "2026-09-23",
+                "2026-09-24",
+                "2026-09-28",
+                "2026-09-29",
+                "2026-09-30",
+                "2026-10-08",
+                "2026-10-09",
+                "2026-10-12",
+                "2026-10-13",
+                "2026-10-14",
+                "2026-10-15",
+                "2026-10-16",
+                "2026-10-19",
+                "2026-10-20",
+                "2026-10-21",
+                "2026-10-22",
+                "2026-10-23",
+                "2026-10-26",
+                "2026-10-27",
+                "2026-10-28",
+                "2026-10-29",
+                "2026-10-30"
+              ],
+              "source_candidates": [],
+              "selection_reason": "仅有原始/未知口径或缺价；不拼接不同复权序列。"
+            },
+            "reference_date": "2026-08-31",
+            "since_reference": null,
+            "two_month": {
+              "first_date": null,
+              "last_date": null,
+              "return_pct": null,
+              "max_drawdown_pct": null,
+              "count": 0,
+              "expected_count": 39,
+              "base_date": null,
+              "complete": false
+            },
+            "metrics": {
+              "r1": null,
+              "r5": null,
+              "r20": null,
+              "dd20": null,
+              "score": null,
+              "above_ma5": null
+            },
+            "zt_days": 1,
+            "max_height": 1.0,
+            "role": "次新独立观察，常规连板不适用"
+          }
+        ],
+        "assessment": {
+          "date": "2026-10-30",
+          "last_known_state": null,
+          "was_broken": false,
+          "stable_days": 0,
+          "recovery_days": 0,
+          "stage": "并行观察",
+          "weak_share": null,
+          "strong_share": null,
+          "reason": "数字经济、电力、次新不应强行算作同一篮子。",
+          "supporting_evidence": [],
+          "opposing_evidence": [],
+          "missing_evidence": [
+            "固定成员完整价格窗口"
+          ],
+          "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+        },
+        "history": [
+          {
+            "date": "2026-08-31",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-09-01",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-09-02",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-09-03",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-09-04",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-09-07",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-09-08",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-09-09",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-09-10",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-09-11",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-09-14",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-09-15",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-09-16",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-09-17",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-09-18",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-09-21",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-09-22",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-09-23",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-09-24",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-09-28",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-09-29",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-09-30",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-10-08",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-10-09",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-10-12",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-10-13",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-10-14",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-10-15",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-10-16",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-10-19",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-10-20",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-10-21",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-10-22",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-10-23",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-10-26",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-10-27",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-10-28",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-10-29",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          },
+          {
+            "date": "2026-10-30",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "数据不足",
+            "weak_share": null,
+            "strong_share": null,
+            "reason": "固定篮子有缺价或历史不足；不能据此认定出清。",
+            "supporting_evidence": [],
+            "opposing_evidence": [],
+            "missing_evidence": [
+              "固定成员完整价格窗口"
+            ],
+            "next_condition": "补齐同一固定篮子的连续价格，重新验证；不得删除缺价或掉队成员。"
+          }
+        ],
+        "basket_id": "parallel:22813b4b8394",
+        "basket_version": 1,
+        "member_codes": [
+          "sz000017",
+          "sz003040",
+          "sz000993",
+          "sh601091"
+        ],
+        "known_at": "2026-10-08",
+        "rule_version": "crowding-price-proxy/2026-10-24",
+        "was_broken": false,
+        "dimensions": {
+          "price_strength_share": null,
+          "price_fragility_share": null,
+          "denominator": 4,
+          "turnover_concentration": null,
+          "interpretation": "价格持续性×脆弱性代理；无成交/持仓集中证据，不认定真实资金抱团。"
+        },
+        "next_step": "继续观察旧团失效和新候选承接，缺全市场证据不升级。"
+      },
+      {
+        "id": "trial",
+        "title": "9/28后 / 新周期试错池",
+        "start": "2026-09-28",
+        "end": "2026-10-08",
+        "codes": [
+          "sh600241",
+          "sz301513",
+          "sz301190",
+          "sh688137"
+        ],
+        "origin": "截图2、3为同一观点；4只候选不等于4只已确认核心",
+        "members": [
+          {
+            "code": "sh600241",
+            "name": "时代万恒",
+            "source": "全市场本地前复权缓存",
+            "as_of": "2026-10-30",
+            "price_basis": "qfq",
+            "source_selection": {
+              "source": "全市场本地前复权缓存",
+              "price_basis": "qfq",
+              "source_as_of": "2026-10-30",
+              "missing_trade_dates": [],
+              "source_candidates": [
+                {
+                  "source": "腾讯补充日线 / qfq",
+                  "as_of": "2026-10-08",
+                  "valid_recent_count": 5,
+                  "complete_recent_window": false
+                },
+                {
+                  "source": "全市场本地前复权缓存",
+                  "as_of": "2026-10-30",
+                  "valid_recent_count": 21,
+                  "complete_recent_window": true
+                }
+              ],
+              "selection_reason": "单窗口单源：优先完整覆盖应有近21交易日的序列，再比较截止日和覆盖；同等条件优先全市场前复权缓存。无完整源时降级，不拼接补洞。"
+            },
+            "reference_date": "2026-09-28",
+            "since_reference": -2.36,
+            "two_month": {
+              "first_date": "2026-08-31",
+              "last_date": "2026-10-30",
+              "return_pct": 4.67,
+              "max_drawdown_pct": -44.52,
+              "count": 39,
+              "expected_count": 39,
+              "base_date": "2026-08-28",
+              "complete": true
+            },
+            "metrics": {
+              "r1": -2.61,
+              "r5": -22.66,
+              "r20": 7.39,
+              "dd20": -44.52,
+              "score": null,
+              "above_ma5": false
+            },
+            "zt_days": 6,
+            "max_height": 6.0,
+            "role": "9/28列入候选，起涨与确认需分开"
+          },
+          {
+            "code": "sz301513",
+            "name": "尚水智能",
+            "source": "全市场本地前复权缓存",
+            "as_of": "2026-10-30",
+            "price_basis": "qfq",
+            "source_selection": {
+              "source": "全市场本地前复权缓存",
+              "price_basis": "qfq",
+              "source_as_of": "2026-10-30",
+              "missing_trade_dates": [],
+              "source_candidates": [
+                {
+                  "source": "腾讯补充日线 / qfq",
+                  "as_of": "2026-10-08",
+                  "valid_recent_count": 5,
+                  "complete_recent_window": false
+                },
+                {
+                  "source": "全市场本地前复权缓存",
+                  "as_of": "2026-10-30",
+                  "valid_recent_count": 21,
+                  "complete_recent_window": true
+                }
+              ],
+              "selection_reason": "单窗口单源：优先完整覆盖应有近21交易日的序列，再比较截止日和覆盖；同等条件优先全市场前复权缓存。无完整源时降级，不拼接补洞。"
+            },
+            "reference_date": "2026-09-28",
+            "since_reference": 3.57,
+            "two_month": {
+              "first_date": "2026-08-31",
+              "last_date": "2026-10-30",
+              "return_pct": -6.17,
+              "max_drawdown_pct": -38.27,
+              "count": 39,
+              "expected_count": 39,
+              "base_date": "2026-08-28",
+              "complete": true
+            },
+            "metrics": {
+              "r1": -4.04,
+              "r5": -20.12,
+              "r20": -0.52,
+              "dd20": -38.27,
+              "score": null,
+              "above_ma5": false
+            },
+            "zt_days": 1,
+            "max_height": 1.0,
+            "role": "9/28列入候选，起涨与确认需分开"
+          },
+          {
+            "code": "sz301190",
+            "name": "善水科技",
+            "source": "全市场本地前复权缓存",
+            "as_of": "2026-10-30",
+            "price_basis": "qfq",
+            "source_selection": {
+              "source": "全市场本地前复权缓存",
+              "price_basis": "qfq",
+              "source_as_of": "2026-10-30",
+              "missing_trade_dates": [],
+              "source_candidates": [
+                {
+                  "source": "腾讯补充日线 / qfq",
+                  "as_of": "2026-10-08",
+                  "valid_recent_count": 5,
+                  "complete_recent_window": false
+                },
+                {
+                  "source": "全市场本地前复权缓存",
+                  "as_of": "2026-10-30",
+                  "valid_recent_count": 21,
+                  "complete_recent_window": true
+                }
+              ],
+              "selection_reason": "单窗口单源：优先完整覆盖应有近21交易日的序列，再比较截止日和覆盖；同等条件优先全市场前复权缓存。无完整源时降级，不拼接补洞。"
+            },
+            "reference_date": "2026-09-28",
+            "since_reference": 29.86,
+            "two_month": {
+              "first_date": "2026-08-31",
+              "last_date": "2026-10-30",
+              "return_pct": 53.41,
+              "max_drawdown_pct": -39.78,
+              "count": 39,
+              "expected_count": 39,
+              "base_date": "2026-08-28",
+              "complete": true
+            },
+            "metrics": {
+              "r1": -4.87,
+              "r5": -20.55,
+              "r20": 55.84,
+              "dd20": -39.78,
+              "score": null,
+              "above_ma5": false
+            },
+            "zt_days": 3,
+            "max_height": 3.0,
+            "role": "9/28列入候选，起涨与确认需分开"
+          },
+          {
+            "code": "sh688137",
+            "name": "近岸蛋白",
+            "source": "全市场本地前复权缓存",
+            "as_of": "2026-10-30",
+            "price_basis": "qfq",
+            "source_selection": {
+              "source": "全市场本地前复权缓存",
+              "price_basis": "qfq",
+              "source_as_of": "2026-10-30",
+              "missing_trade_dates": [],
+              "source_candidates": [
+                {
+                  "source": "腾讯补充日线 / qfq",
+                  "as_of": "2026-10-08",
+                  "valid_recent_count": 5,
+                  "complete_recent_window": false
+                },
+                {
+                  "source": "全市场本地前复权缓存",
+                  "as_of": "2026-10-30",
+                  "valid_recent_count": 21,
+                  "complete_recent_window": true
+                }
+              ],
+              "selection_reason": "单窗口单源：优先完整覆盖应有近21交易日的序列，再比较截止日和覆盖；同等条件优先全市场前复权缓存。无完整源时降级，不拼接补洞。"
+            },
+            "reference_date": "2026-09-28",
+            "since_reference": 17.74,
+            "two_month": {
+              "first_date": "2026-08-31",
+              "last_date": "2026-10-30",
+              "return_pct": 105.67,
+              "max_drawdown_pct": -34.24,
+              "count": 39,
+              "expected_count": 39,
+              "base_date": "2026-08-28",
+              "complete": true
+            },
+            "metrics": {
+              "r1": 16.45,
+              "r5": 40.93,
+              "r20": 20.4,
+              "dd20": -6.44,
+              "score": 100.0,
+              "above_ma5": true
+            },
+            "zt_days": 1,
+            "max_height": 1.0,
+            "role": "既有趋势延续，非9/28低位首发"
+          }
+        ],
+        "assessment": {
+          "date": "2026-10-30",
+          "last_known_state": "瓦解",
+          "was_broken": true,
+          "stable_days": 0,
+          "recovery_days": 0,
+          "stage": "试错待确认",
+          "weak_share": 0.75,
+          "strong_share": 0.25,
+          "reason": "仅价格证据；全市场、成交与承接条件尚未全部验证。",
+          "supporting_evidence": [
+            "强势成员1/4",
+            "连续止跌0日"
+          ],
+          "opposing_evidence": [
+            "深度回撤且在MA5下3/4"
+          ],
+          "missing_evidence": [
+            "成交集中、量能及可成交证据"
+          ],
+          "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+        },
+        "history": [
+          {
+            "date": "2026-09-28",
+            "last_known_state": null,
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "强化",
+            "weak_share": 0.0,
+            "strong_share": 0.75,
+            "reason": "固定篮子多数在5日均线上且5日收益为正；需量能与广度交叉确认。",
+            "supporting_evidence": [
+              "强势成员3/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-29",
+            "last_known_state": "强化",
+            "was_broken": false,
+            "stable_days": 1,
+            "recovery_days": 0,
+            "stage": "强化",
+            "weak_share": 0.0,
+            "strong_share": 1.0,
+            "reason": "固定篮子多数在5日均线上且5日收益为正；需量能与广度交叉确认。",
+            "supporting_evidence": [
+              "强势成员4/4",
+              "连续止跌1日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-09-30",
+            "last_known_state": "强化",
+            "was_broken": false,
+            "stable_days": 2,
+            "recovery_days": 0,
+            "stage": "强化",
+            "weak_share": 0.0,
+            "strong_share": 1.0,
+            "reason": "固定篮子多数在5日均线上且5日收益为正；需量能与广度交叉确认。",
+            "supporting_evidence": [
+              "强势成员4/4",
+              "连续止跌2日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-08",
+            "last_known_state": "强化",
+            "was_broken": false,
+            "stable_days": 3,
+            "recovery_days": 0,
+            "stage": "强化",
+            "weak_share": 0.0,
+            "strong_share": 1.0,
+            "reason": "固定篮子多数在5日均线上且5日收益为正；需量能与广度交叉确认。",
+            "supporting_evidence": [
+              "强势成员4/4",
+              "连续止跌3日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-09",
+            "last_known_state": "强化",
+            "was_broken": false,
+            "stable_days": 4,
+            "recovery_days": 0,
+            "stage": "强化",
+            "weak_share": 0.0,
+            "strong_share": 1.0,
+            "reason": "固定篮子多数在5日均线上且5日收益为正；需量能与广度交叉确认。",
+            "supporting_evidence": [
+              "强势成员4/4",
+              "连续止跌4日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-12",
+            "last_known_state": "强化",
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "强化",
+            "weak_share": 0.0,
+            "strong_share": 0.75,
+            "reason": "固定篮子多数在5日均线上且5日收益为正；需量能与广度交叉确认。",
+            "supporting_evidence": [
+              "强势成员3/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-13",
+            "last_known_state": "强化",
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "强化",
+            "weak_share": 0.25,
+            "strong_share": 0.75,
+            "reason": "固定篮子多数在5日均线上且5日收益为正；需量能与广度交叉确认。",
+            "supporting_evidence": [
+              "强势成员3/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下1/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-14",
+            "last_known_state": "强化",
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "分歧",
+            "weak_share": 0.5,
+            "strong_share": 0.5,
+            "reason": "固定篮子强弱分化；断板不等于整体瓦解。",
+            "supporting_evidence": [
+              "强势成员2/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下2/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-15",
+            "last_known_state": "分歧",
+            "was_broken": false,
+            "stable_days": 1,
+            "recovery_days": 0,
+            "stage": "强化",
+            "weak_share": 0.0,
+            "strong_share": 0.75,
+            "reason": "固定篮子多数在5日均线上且5日收益为正；需量能与广度交叉确认。",
+            "supporting_evidence": [
+              "强势成员3/4",
+              "连续止跌1日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下0/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-16",
+            "last_known_state": "强化",
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "分歧",
+            "weak_share": 0.5,
+            "strong_share": 0.25,
+            "reason": "固定篮子强弱分化；断板不等于整体瓦解。",
+            "supporting_evidence": [
+              "强势成员1/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下2/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-19",
+            "last_known_state": "分歧",
+            "was_broken": false,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "分歧",
+            "weak_share": 0.5,
+            "strong_share": 0.25,
+            "reason": "固定篮子强弱分化；断板不等于整体瓦解。",
+            "supporting_evidence": [
+              "强势成员1/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下2/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-20",
+            "last_known_state": "分歧",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 0.75,
+            "strong_share": 0.25,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员1/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-21",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下4/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-22",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下4/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-23",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下4/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-26",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 0.75,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-27",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 1.0,
+            "strong_share": 0.0,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下4/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-28",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解观察",
+            "weak_share": 0.75,
+            "strong_share": 0.0,
+            "reason": "等待旧篮子连续止跌，不急于推断新周期。",
+            "supporting_evidence": [
+              "强势成员0/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-29",
+            "last_known_state": "瓦解观察",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 0.75,
+            "strong_share": 0.25,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员1/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          },
+          {
+            "date": "2026-10-30",
+            "last_known_state": "瓦解",
+            "was_broken": true,
+            "stable_days": 0,
+            "recovery_days": 0,
+            "stage": "瓦解",
+            "weak_share": 0.75,
+            "strong_share": 0.25,
+            "reason": "多数固定核心深度回撤且当日继续下跌；仅为价格瓦解代理。",
+            "supporting_evidence": [
+              "强势成员1/4",
+              "连续止跌0日"
+            ],
+            "opposing_evidence": [
+              "深度回撤且在MA5下3/4"
+            ],
+            "missing_evidence": [
+              "成交集中、量能及可成交证据"
+            ],
+            "next_condition": "同一篮子多数成员连续2日恢复为修复待验证，3日为旧团价格修复；缺价即暂停。"
+          }
+        ],
+        "basket_id": "trial:858968445b44",
+        "basket_version": 1,
+        "member_codes": [
+          "sh600241",
+          "sz301513",
+          "sz301190",
+          "sh688137"
+        ],
+        "known_at": "2026-10-08",
+        "rule_version": "crowding-price-proxy/2026-10-24",
+        "was_broken": true,
+        "dimensions": {
+          "price_strength_share": 0.25,
+          "price_fragility_share": 0.75,
+          "denominator": 4,
+          "turnover_concentration": null,
+          "interpretation": "价格持续性×脆弱性代理；无成交/持仓集中证据，不认定真实资金抱团。"
+        },
+        "next_step": "继续观察旧团失效和新候选承接，缺全市场证据不升级。"
+      }
+    ]
+  },
+  "tab_focus": [
+    {
+      "name": "阳光照明",
+      "code": "sh600261",
+      "sector": "attack",
+      "pool_type": "【铁律 3 : 双子星卡位生死律】",
+      "entry_rule": "防守场景/数据降级，未开放执行；仅作走势跟踪",
+      "defense_rule": "跌破昨日收盘且题材无跟随",
+      "status": "yellow",
+      "is_custom": false
+    },
+    {
+      "name": "盛洋科技",
+      "code": "sh603703",
+      "sector": "attack",
+      "pool_type": "【铁律 4 : 人气容量龙反包律】",
+      "entry_rule": "防守场景/数据降级，未开放执行；仅作走势跟踪",
+      "defense_rule": "跌破昨日收盘且题材无跟随",
+      "status": "yellow",
+      "is_custom": false
+    },
+    {
+      "name": "巴比食品",
+      "code": "sh605338",
+      "sector": "attack",
+      "pool_type": "【铁律 3 : 双子星卡位生死律】",
+      "entry_rule": "防守场景/数据降级，未开放执行；仅作走势跟踪",
+      "defense_rule": "跌破昨日收盘且题材无跟随",
+      "status": "yellow",
+      "is_custom": false
+    },
+    {
+      "name": "东方海洋",
+      "code": "sz002086",
+      "sector": "attack",
+      "pool_type": "【铁律 3 : 双子星卡位生死律】",
+      "entry_rule": "防守场景/数据降级，未开放执行；仅作走势跟踪",
+      "defense_rule": "跌破昨日收盘且题材无跟随",
+      "status": "yellow",
+      "is_custom": false
+    },
+    {
+      "name": "桂林三金",
+      "code": "sz002275",
+      "sector": "attack",
+      "pool_type": "【铁律 3 : 双子星卡位生死律】",
+      "entry_rule": "防守场景/数据降级，未开放执行；仅作走势跟踪",
+      "defense_rule": "跌破昨日收盘且题材无跟随",
+      "status": "yellow",
+      "is_custom": false
+    },
+    {
+      "name": "传智教育",
+      "code": "sz003032",
+      "sector": "attack",
+      "pool_type": "【铁律 3 : 双子星卡位生死律】",
+      "entry_rule": "防守场景/数据降级，未开放执行；仅作走势跟踪",
+      "defense_rule": "跌破昨日收盘且题材无跟随",
+      "status": "yellow",
+      "is_custom": false
+    }
+  ],
+  "tab_strategy": {
+    "report_date": "2026-10-30",
+    "target_date": "2026-10-30",
+    "title": "明日实战推演与交易预案",
+    "action_slogan": "防守熔断生效中：全市场跌停潮高达 82 家，处于极端退潮冰点杀跌期，默认执行 0 仓位，严禁盲目接飞刀！",
+    "recommended_position": "1成。",
+    "is_melt": true,
+    "melt_text": "🚨 防守熔断生效中：全市场跌停潮高达 82 家，处于极端退潮冰点杀跌期，默认执行 0 仓位，严禁盲目接飞刀！ 熔断状态",
+    "iron_rules": [
+      {
+        "tag": "🚨 铁律一 · 断板反包禁令",
+        "sub": "次日反包率极低，冲高一律防范诱多！",
+        "detail": "操盘军规：严禁低吸、抄底、搏首阴！重点回避高位断板被核标的。"
+      },
+      {
+        "tag": "⚠️ 铁律二 · 冰点修复陷阱",
+        "sub": "无题材梯队共振的急拉多为假冲天炮！",
+        "detail": "操盘军规：存量出逃诱多只看不追，早盘 10:00 前严禁盲目开新仓！"
+      }
+    ],
+    "baotuan_stock_targets": [
+      {
+        "role": "襄阳轴承【连板接力 · 主线身位总龙 · 进攻先锋】",
+        "name": "0006783 板12.8 亿",
+        "sector": "具身智能机器人 + 减速器核心",
+        "logic": "主流题材（机器人）绝对身位核心，日内爆量 12.8 亿充分换手承接，最具备新周期破局潜质！",
+        "action": "竞价定性：红开高开 > +3% 且成交 > 8000 万；买入指令：9:35 确认分歧转一致后快速封板打板买入；配置仓位：1.0 成",
+        "pos": "1.0 成",
+        "stop": "盘中跌破分时均线或日内跌幅超 -3.5% 坚决止损出局"
+      },
+      {
+        "role": "上海九百【连板接力 · 空间天花板】",
+        "name": "6008384 板8.5 亿",
+        "sector": "零售商业 + 地方国资平台",
+        "logic": "全市场最高 4 连板独苗，测试短线连板空间拓展压制；无后排梯队助攻前仅作情绪风向标。",
+        "action": "竞价定性：超预期大单顶一字或高开 > +5% 秒板；买入指令：通道顶一字或开盘秒板打板排单；平开分歧不追，仅轻仓 0.5 成试错",
+        "pos": "0.5 成",
+        "stop": "开盘 10 分钟内未封死涨停，或盘中开板回封乏力立即撤单并弃用"
+      },
+      {
+        "role": "华阳智能【连板接力 · 20cm弹性先锋】",
+        "name": "3015023 板 (20cm)6.2 亿",
+        "sector": "微特电机 + 伺服系统 + 机器人",
+        "logic": "20cm 弹性连板先锋，配合空间龙形成梯队共振，具备极高日内反弹博弈弹性。",
+        "action": "竞价定性：竞价小幅高开 +1%~+3%；买入指令：早盘在分时均线上方震荡洗盘放量突破时打板介入；配置仓位：0.5 成",
+        "pos": "0.5 成",
+        "stop": "跌破分时黄线超过 10 分钟或日内跌幅触及 -5% 坚决清仓"
+      },
+      {
+        "role": "万向钱潮【核心产业抱团 · 容量中军定海神针 · 主攻重点】",
+        "name": "0005592 板25.1 亿巨量",
+        "sector": "汽车零部件 + 机器人关节轴承",
+        "logic": "日内爆出 25.1 亿巨量成交，机构与主力大兵团主战场，是机器人行情的定海神针与流动性压舱石！",
+        "action": "竞价定性：小幅平开或高开 +1%；买入指令：盘中回踩分时均线附近分批低吸，博弈板块中军趋势溢价；配置仓位：0.5~1.0 成",
+        "pos": "0.5~1.0 成",
+        "stop": "跌破昨日涨停收盘价或分时放量破位 -3% 无条件止损"
+      },
+      {
+        "role": "模塑科技【核心产业抱团 · 容量中位骨干 · 重点跟随】",
+        "name": "0007002 板15.3 亿",
+        "sector": "汽车轻量化 + 机器人外壳",
+        "logic": "2 板中军容量骨干，放量换手承接有力，中位大资金容量配置载体。",
+        "action": "竞价定性：分时黄线上方震荡；买入指令：回踩均线低吸或分时推升加仓 0.5 成",
+        "pos": "0.5 成",
+        "stop": "跌破分时黄线超过 15 分钟止损"
+      }
+    ],
+    "baotuan_cb_targets": [
+      {
+        "bond_name": "福新转债",
+        "bond_code": "111012",
+        "role": "【高成交人气标杆 · 联动观察】",
+        "badge_color": "#F87171",
+        "stock_name": "福莱新材",
+        "stock_pct": "联动观察",
+        "action": "• 锚定正股竞价与早盘分时承接，急拉不追高，回踩分时均线企稳且正股转强时再作 T+0 观察；若正股转弱破位立即撤退。",
+        "pos": "0.5~1.0 成",
+        "stop": "跌破分时黄线超 5 分钟或正股放量跳水立即止损；日内 T+0 严控隔夜溢价回撤。"
+      },
+      {
+        "bond_name": "奥普转债",
+        "bond_code": "118075",
+        "role": "【弹性活跃观察 · 波段跟踪】",
+        "badge_color": "#38BDF8",
+        "stock_name": "奥普特",
+        "stock_pct": "联动观察",
+        "action": "• 核对正股止跌企稳信号与转股溢价率变化（注意转股期条款），仅在债股同向放量回升时跟踪日内脉冲。",
+        "pos": "0.5 成",
+        "stop": "冲高回落跌破开盘价或正股继续走弱坚决放弃。"
+      },
+      {
+        "bond_name": "精测转2",
+        "bond_code": "123176",
+        "role": "【板块共振观察 · 辅助锚点】",
+        "badge_color": "#A78BFA",
+        "stock_name": "精测电子",
+        "stock_pct": "联动观察",
+        "action": "• 观察半导体/设备方向共振修复力度，债股同步企稳前保持观望，不单凭债端拉升追价。",
+        "pos": "0.5 成",
+        "stop": "分时均线破位或溢价被动走阔时无条件撤退。"
+      },
+      {
+        "bond_name": "澳弘转债",
+        "bond_code": "111024",
+        "role": "【破位出清 · 一票否决禁买】",
+        "badge_color": "#EF4444",
+        "stock_name": "澳弘电子",
+        "stock_pct": "破位风险",
+        "action": "• 正股走弱破位释放负反馈，一票否决严禁抄底！规避正股下探拖累转债杀溢价风险。",
+        "pos": "0 仓位",
+        "stop": "全天锁定 0 仓位，禁止开新仓。"
+      }
+    ],
+    "priority_matrix": [],
+    "candidates": [],
+    "checklist": [
+      {
+        "time": "09:25 集合竞价",
+        "focus": "全市场跌停家数、高标溢价率",
+        "pass_cond": "跌停家数 ≤ 10 家，襄阳轴承红开 +2% 以上且成交 > 8000 万",
+        "fail_cond": "跌停 > 15 家，或大业股份/海洋王大单焊死跌停：全天禁止开新仓"
+      },
+      {
+        "time": "09:35 开盘前10分",
+        "focus": "跌停封单变化、黄白线分化",
+        "pass_cond": "上涨家数不再恶化，跌停板无新增扩散，有承接盘撬板",
+        "fail_cond": "出现高标快速拉高天地板跳水：判定为出货诱多，立即放弃参与"
+      },
+      {
+        "time": "10:00 盘中确认",
+        "focus": "梯队晋级情况、市场宽度回暖",
+        "pass_cond": "上涨家数回升至 2000 家以上，机器人板块走出 2 只连板",
+        "fail_cond": "上涨家数 < 1500 家且无板块合力：全天彻底锁定空仓"
+      },
+      {
+        "time": "14:00 午后防守",
+        "focus": "尾盘流动性与抢筹真实度",
+        "pass_cond": "尾盘无大规模砸盘，主流板块有持续大买单护盘",
+        "fail_cond": "无增量资金进场严禁尾盘博弈次日抢筹，防范次日低开埋人"
+      }
+    ],
+    "avoid_list": [
+      "高位断板负反馈标的：严禁低吸首阴与盲目追反包"
+    ],
+    "scenarios": [],
+    "morning_card": "【晨会操盘内参 · 核心作战卡片】\n +\n基准日期：2026-10-30 ｜ 目标交易日：2026-11-02\n +\n定性军规：🚨 跌停潮爆发 (82 家) · 极端退潮冰点期\n +\n仓位上限：0~1 成 (默认动作：不开新仓)\n +\n【连板分析定论】空间高度回缩至 4 板 (上海九百独苗)，主流连板接力看襄阳轴承 (3板 · 12.8亿) 与华阳智能 (20cm · 3板)\n +\n【抱团分析定论】老高标 (大业股份/海洋王) 决裂跌停彻底出清；主力大资金深度抱团机器人大容量中军 (万向钱潮 25.1亿)\n +\n【明日关注标的清单 (直接给结果)】\n +\n1. 身位总龙：襄阳轴承 (000678 · 3板) ➔ 竞价高开>3%且成交>8000万，9:35后打板买入 1.0成\n +\n2. 容量中军：万向钱潮 (000559 · 2板) ➔ 早盘回踩分时均线平盘企稳低吸 0.5~1.0成\n +\n3. 20cm先锋：华阳智能 (301502 · 3板) ➔ 冲板打板买入 0.5成\n +\n4. 禁买黑名单：大业股份、海洋王 ➔ 严禁低吸抄底追反包！\n +\n【分时熔断底线】\n +\n- 09:25 竞价：跌停>15家或老龙头焊死跌停，全天彻底空仓\n +\n- 10:00 盘中：上涨家数<1500家无合力，严禁开新仓\n\n【重点抱团个股 · 实战预案指令】\n襄阳轴承【连板接力 · 主线身位总龙 · 进攻先锋】｜【具身智能机器人 + 减速器核心】0006783 板12.8 亿 (建议仓位: 1.0 成)\n• 核心判断：竞价定性：红开高开 > +3% 且成交 > 8000 万；买入指令：9:35 确认分歧转一致后快速封板打板买入；配置仓位：1.0 成\n• 纪律底线：盘中跌破分时均线或日内跌幅超 -3.5% 坚决止损出局\n上海九百【连板接力 · 空间天花板】｜【零售商业 + 地方国资平台】6008384 板8.5 亿 (建议仓位: 0.5 成)\n• 核心判断：竞价定性：超预期大单顶一字或高开 > +5% 秒板；买入指令：通道顶一字或开盘秒板打板排单；平开分歧不追，仅轻仓 0.5 成试错\n• 纪律底线：开盘 10 分钟内未封死涨停，或盘中开板回封乏力立即撤单并弃用\n华阳智能【连板接力 · 20cm弹性先锋】｜【微特电机 + 伺服系统 + 机器人】3015023 板 (20cm)6.2 亿 (建议仓位: 0.5 成)\n• 核心判断：竞价定性：竞价小幅高开 +1%~+3%；买入指令：早盘在分时均线上方震荡洗盘放量突破时打板介入；配置仓位：0.5 成\n• 纪律底线：跌破分时黄线超过 10 分钟或日内跌幅触及 -5% 坚决清仓\n万向钱潮【核心产业抱团 · 容量中军定海神针 · 主攻重点】｜【汽车零部件 + 机器人关节轴承】0005592 板25.1 亿巨量 (建议仓位: 0.5~1.0 成)\n• 核心判断：竞价定性：小幅平开或高开 +1%；买入指令：盘中回踩分时均线附近分批低吸，博弈板块中军趋势溢价；配置仓位：0.5~1.0 成\n• 纪律底线：跌破昨日涨停收盘价或分时放量破位 -3% 无条件止损\n模塑科技【核心产业抱团 · 容量中位骨干 · 重点跟随】｜【汽车轻量化 + 机器人外壳】0007002 板15.3 亿 (建议仓位: 0.5 成)\n• 核心判断：竞价定性：分时黄线上方震荡；买入指令：回踩均线低吸或分时推升加仓 0.5 成\n• 纪律底线：跌破分时黄线超过 15 分钟止损\n\n【重点抱团可转债 · 明日 T+0 深度作战预案】\n福新转债(111012) 【高成交人气标杆 · 联动观察】 (正股:福莱新材 联动观察 | 仓位:0.5~1.0 成)\n• 应对：• 锚定正股竞价与早盘分时承接，急拉不追高，回踩分时均线企稳且正股转强时再作 T+0 观察；若正股转弱破位立即撤退。\n• 底线：跌破分时黄线超 5 分钟或正股放量跳水立即止损；日内 T+0 严控隔夜溢价回撤。\n奥普转债(118075) 【弹性活跃观察 · 波段跟踪】 (正股:奥普特 联动观察 | 仓位:0.5 成)\n• 应对：• 核对正股止跌企稳信号与转股溢价率变化（注意转股期条款），仅在债股同向放量回升时跟踪日内脉冲。\n• 底线：冲高回落跌破开盘价或正股继续走弱坚决放弃。\n精测转2(123176) 【板块共振观察 · 辅助锚点】 (正股:精测电子 联动观察 | 仓位:0.5 成)\n• 应对：• 观察半导体/设备方向共振修复力度，债股同步企稳前保持观望，不单凭债端拉升追价。\n• 底线：分时均线破位或溢价被动走阔时无条件撤退。\n澳弘转债(111024) 【破位出清 · 一票否决禁买】 (正股:澳弘电子 破位风险 | 仓位:0 仓位)\n• 应对：• 正股走弱破位释放负反馈，一票否决严禁抄底！规避正股下探拖累转债杀溢价风险。\n• 底线：全天锁定 0 仓位，禁止开新仓。",
+    "full_report_url": "./reports/plan_2026-10-30.html"
+  }
+}
