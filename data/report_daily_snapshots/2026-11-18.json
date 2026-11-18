@@ -1,0 +1,2643 @@
+{
+  "report_date": "2026-11-18",
+  "run_id": "20261118T172903792029Z-4813bc49",
+  "max_height": 4,
+  "limit_up": 41,
+  "limit_down": 40,
+  "breadth_ratio": 0.2394,
+  "ladder_integrity": 0.5,
+  "concentration": 0.881,
+  "promotion_rate": 0.21621621621621623,
+  "mainline_rank": "AI算力",
+  "limit_pool_rows": [
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "bj920924",
+      "名称": "广脉科技",
+      "连板数": 1,
+      "细分板块": "算力",
+      "大主线": "AI算力",
+      "code": "bj920924",
+      "name": "广脉科技",
+      "level": 1,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "131855",
+      "last_limit_time": "131855",
+      "limit_up_fund": 38344769,
+      "turnover_rate": 16.743785858154297,
+      "amount": 155058890,
+      "float_market_cap": 1003451711.08,
+      "break_count": 0,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 155058890
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "131855"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 1003451711.08
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "131855"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 38344769
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 16.743785858154297
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sh600156",
+      "名称": "华升股份",
+      "连板数": 1,
+      "细分板块": "机器人",
+      "大主线": "机器人",
+      "code": "sh600156",
+      "name": "华升股份",
+      "level": 1,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "111457",
+      "last_limit_time": "111457",
+      "limit_up_fund": 49836018,
+      "turnover_rate": 14.474580764770508,
+      "amount": 448939600,
+      "float_market_cap": 3253075579.18,
+      "break_count": 0,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 448939600
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "111457"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 3253075579.18
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "111457"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 49836018
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 14.474580764770508
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sh600162",
+      "名称": "香江控股",
+      "连板数": 1,
+      "细分板块": "算力",
+      "大主线": "AI算力",
+      "code": "sh600162",
+      "name": "香江控股",
+      "level": 1,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "105527",
+      "last_limit_time": "134239",
+      "limit_up_fund": 21097454,
+      "turnover_rate": 4.722750186920166,
+      "amount": 492627968,
+      "float_market_cap": 10753161421.380001,
+      "break_count": 3,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 492627968
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 3
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "105527"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 10753161421.380001
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "134239"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 21097454
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 4.722750186920166
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sh600186",
+      "名称": "莲花控股",
+      "连板数": 1,
+      "细分板块": "算力",
+      "大主线": "AI算力",
+      "code": "sh600186",
+      "name": "莲花控股",
+      "level": 1,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "132736",
+      "last_limit_time": "134036",
+      "limit_up_fund": 103763900,
+      "turnover_rate": 10.95931339263916,
+      "amount": 1696162768,
+      "float_market_cap": 16066461853.18,
+      "break_count": 1,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 1696162768
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 1
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "132736"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 16066461853.18
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "134036"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 103763900
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 10.95931339263916
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sh600336",
+      "名称": "澳柯玛",
+      "连板数": 1,
+      "细分板块": "机器人",
+      "大主线": "机器人",
+      "code": "sh600336",
+      "name": "澳柯玛",
+      "level": 1,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "093028",
+      "last_limit_time": "093058",
+      "limit_up_fund": 32474631,
+      "turnover_rate": 1.3451972007751465,
+      "amount": 65324435,
+      "float_market_cap": 4899810681.66,
+      "break_count": 1,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 65324435
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 1
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "093028"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 4899810681.66
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "093058"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 32474631
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 1.3451972007751465
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sh600405",
+      "名称": "动力源",
+      "连板数": 1,
+      "细分板块": "算力",
+      "大主线": "AI算力",
+      "code": "sh600405",
+      "name": "动力源",
+      "level": 1,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "093059",
+      "last_limit_time": "093323",
+      "limit_up_fund": 64434188,
+      "turnover_rate": 3.3335065841674805,
+      "amount": 93405888,
+      "float_market_cap": 2831272696.56,
+      "break_count": 1,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 93405888
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 1
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "093059"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 2831272696.56
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "093323"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 64434188
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 3.3335065841674805
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sh600410",
+      "名称": "华胜天成",
+      "连板数": 2,
+      "细分板块": "算力",
+      "大主线": "AI算力",
+      "code": "sh600410",
+      "name": "华胜天成",
+      "level": 2,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "095501",
+      "last_limit_time": "095501",
+      "limit_up_fund": 284220155,
+      "turnover_rate": 19.029348373413086,
+      "amount": 3412211376,
+      "float_market_cap": 18443040568.06,
+      "break_count": 0,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 3412211376
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "095501"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 18443040568.06
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "095501"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 284220155
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 19.029348373413086
+        }
+      },
+      "height": 2
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sh600839",
+      "名称": "四川长虹",
+      "连板数": 1,
+      "细分板块": "AI应用",
+      "大主线": "AI应用",
+      "code": "sh600839",
+      "name": "四川长虹",
+      "level": 1,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "093501",
+      "last_limit_time": "093501",
+      "limit_up_fund": 210352665,
+      "turnover_rate": 2.2895829677581787,
+      "amount": 589539904,
+      "float_market_cap": 26212965024.079998,
+      "break_count": 0,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 589539904
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "093501"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 26212965024.079998
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "093501"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 210352665
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 2.2895829677581787
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sh603030",
+      "名称": "全筑股份",
+      "连板数": 2,
+      "细分板块": "芯片",
+      "大主线": "AI算力",
+      "code": "sh603030",
+      "name": "全筑股份",
+      "level": 2,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "092502",
+      "last_limit_time": "092502",
+      "limit_up_fund": 86329202,
+      "turnover_rate": 1.3333898782730103,
+      "amount": 37402498,
+      "float_market_cap": 2805068397.6,
+      "break_count": 0,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 37402498
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "092502"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 2805068397.6
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "092502"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 86329202
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 1.3333898782730103
+        }
+      },
+      "height": 2
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sh603220",
+      "名称": "中贝通信",
+      "连板数": 1,
+      "细分板块": "算力",
+      "大主线": "AI算力",
+      "code": "sh603220",
+      "name": "中贝通信",
+      "level": 1,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "111403",
+      "last_limit_time": "131503",
+      "limit_up_fund": 99799304,
+      "turnover_rate": 9.783069610595703,
+      "amount": 797651520,
+      "float_market_cap": 8377922034.9,
+      "break_count": 1,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 797651520
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 1
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "111403"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 8377922034.9
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "131503"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 99799304
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 9.783069610595703
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sh603324",
+      "名称": "盛剑科技",
+      "连板数": 2,
+      "细分板块": "半导体",
+      "大主线": "AI算力",
+      "code": "sh603324",
+      "name": "盛剑科技",
+      "level": 2,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "092500",
+      "last_limit_time": "092500",
+      "limit_up_fund": 54785502,
+      "turnover_rate": 1.3445854187011719,
+      "amount": 44917434,
+      "float_market_cap": 3340615818.0,
+      "break_count": 0,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 44917434
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "092500"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 3340615818.0
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "092500"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 54785502
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 1.3445854187011719
+        }
+      },
+      "height": 2
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sh603629",
+      "名称": "利通电子",
+      "连板数": 1,
+      "细分板块": "算力",
+      "大主线": "AI算力",
+      "code": "sh603629",
+      "name": "利通电子",
+      "level": 1,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "112611",
+      "last_limit_time": "131444",
+      "limit_up_fund": 239386658,
+      "turnover_rate": 10.030691146850586,
+      "amount": 2115359488,
+      "float_market_cap": 21978876762.0,
+      "break_count": 1,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 2115359488
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 1
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "112611"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 21978876762.0
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "131444"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 239386658
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 10.030691146850586
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sh603657",
+      "名称": "春光科技",
+      "连板数": 1,
+      "细分板块": "机器人",
+      "大主线": "机器人",
+      "code": "sh603657",
+      "name": "春光科技",
+      "level": 1,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "093013",
+      "last_limit_time": "093019",
+      "limit_up_fund": 45014622,
+      "turnover_rate": 1.1994225978851318,
+      "amount": 54720248,
+      "float_market_cap": 4588350297.0,
+      "break_count": 1,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 54720248
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 1
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "093013"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 4588350297.0
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "093019"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 45014622
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 1.1994225978851318
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sh603887",
+      "名称": "城地香江",
+      "连板数": 1,
+      "细分板块": "算力",
+      "大主线": "AI算力",
+      "code": "sh603887",
+      "name": "城地香江",
+      "level": 1,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "101442",
+      "last_limit_time": "105330",
+      "limit_up_fund": 75529212,
+      "turnover_rate": 7.941469669342041,
+      "amount": 381726880,
+      "float_market_cap": 4924600663.78,
+      "break_count": 1,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 381726880
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 1
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "101442"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 4924600663.78
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "105330"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 75529212
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 7.941469669342041
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sh603985",
+      "名称": "恒润股份",
+      "连板数": 1,
+      "细分板块": "算力",
+      "大主线": "AI算力",
+      "code": "sh603985",
+      "name": "恒润股份",
+      "level": 1,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "132136",
+      "last_limit_time": "132136",
+      "limit_up_fund": 25332654,
+      "turnover_rate": 3.2598564624786377,
+      "amount": 203075333,
+      "float_market_cap": 6493838384.190001,
+      "break_count": 0,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 203075333
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "132136"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 6493838384.190001
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "132136"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 25332654
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 3.2598564624786377
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sh688316",
+      "名称": "青云科技-U",
+      "连板数": 1,
+      "细分板块": "算力",
+      "大主线": "AI算力",
+      "code": "sh688316",
+      "name": "青云科技-U",
+      "level": 1,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "131700",
+      "last_limit_time": "131700",
+      "limit_up_fund": 31650492,
+      "turnover_rate": 13.446233749389648,
+      "amount": 305627376,
+      "float_market_cap": 2435397056.4,
+      "break_count": 0,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 305627376
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "131700"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 2435397056.4
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "131700"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 31650492
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 13.446233749389648
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sh688757",
+      "名称": "胜科纳米",
+      "连板数": 1,
+      "细分板块": "半导体",
+      "大主线": "AI算力",
+      "code": "sh688757",
+      "name": "胜科纳米",
+      "level": 1,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "131940",
+      "last_limit_time": "133946",
+      "limit_up_fund": 78793352,
+      "turnover_rate": 13.440289497375488,
+      "amount": 622855472,
+      "float_market_cap": 5045174460.48,
+      "break_count": 2,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 622855472
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 2
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "131940"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 5045174460.48
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "133946"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 78793352
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 13.440289497375488
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sz000158",
+      "名称": "常山北明",
+      "连板数": 1,
+      "细分板块": "算力",
+      "大主线": "AI算力",
+      "code": "sz000158",
+      "name": "常山北明",
+      "level": 1,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "100212",
+      "last_limit_time": "100212",
+      "limit_up_fund": 163495867,
+      "turnover_rate": 4.793107986450195,
+      "amount": 919356480,
+      "float_market_cap": 19771700507.35,
+      "break_count": 0,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 919356480
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "100212"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 19771700507.35
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "100212"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 163495867
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 4.793107986450195
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sz000410",
+      "名称": "沈阳机床",
+      "连板数": 1,
+      "细分板块": "其它",
+      "大主线": "其它",
+      "code": "sz000410",
+      "name": "沈阳机床",
+      "level": 1,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "094945",
+      "last_limit_time": "130048",
+      "limit_up_fund": 38747489,
+      "turnover_rate": 5.450445652008057,
+      "amount": 604185280,
+      "float_market_cap": 11254514681.43,
+      "break_count": 3,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 604185280
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 3
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "094945"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 11254514681.43
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "130048"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 38747489
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 5.450445652008057
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sz000707",
+      "名称": "双环科技",
+      "连板数": 2,
+      "细分板块": "化工",
+      "大主线": "周期资源",
+      "code": "sz000707",
+      "name": "双环科技",
+      "level": 2,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "094224",
+      "last_limit_time": "104918",
+      "limit_up_fund": 16229220,
+      "turnover_rate": 14.940593719482422,
+      "amount": 406595968,
+      "float_market_cap": 2781053124.45,
+      "break_count": 1,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 406595968
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 1
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "094224"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 2781053124.45
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "104918"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 16229220
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 14.940593719482422
+        }
+      },
+      "height": 2
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sz000711",
+      "名称": "京蓝科技",
+      "连板数": 1,
+      "细分板块": "半导体",
+      "大主线": "AI算力",
+      "code": "sz000711",
+      "name": "京蓝科技",
+      "level": 1,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "095103",
+      "last_limit_time": "095103",
+      "limit_up_fund": 51890280,
+      "turnover_rate": 3.3390116691589355,
+      "amount": 263324135,
+      "float_market_cap": 8202411712.8,
+      "break_count": 0,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 263324135
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "095103"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 8202411712.8
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "095103"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 51890280
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 3.3390116691589355
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sz000815",
+      "名称": "美利云",
+      "连板数": 1,
+      "细分板块": "算力",
+      "大主线": "AI算力",
+      "code": "sz000815",
+      "name": "美利云",
+      "level": 1,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "100527",
+      "last_limit_time": "105009",
+      "limit_up_fund": 112575782,
+      "turnover_rate": 10.522540092468262,
+      "amount": 1023883312,
+      "float_market_cap": 9949214030.85,
+      "break_count": 1,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 1023883312
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 1
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "100527"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 9949214030.85
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "105009"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 112575782
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 10.522540092468262
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sz000889",
+      "名称": "中嘉博创",
+      "连板数": 1,
+      "细分板块": "算力",
+      "大主线": "AI算力",
+      "code": "sz000889",
+      "name": "中嘉博创",
+      "level": 1,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "094557",
+      "last_limit_time": "094557",
+      "limit_up_fund": 78201370,
+      "turnover_rate": 6.450659275054932,
+      "amount": 185586796,
+      "float_market_cap": 2939922144.38,
+      "break_count": 0,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 185586796
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "094557"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 2939922144.38
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "094557"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 78201370
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 6.450659275054932
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sz000980",
+      "名称": "众泰汽车",
+      "连板数": 1,
+      "细分板块": "氢能",
+      "大主线": "新能源电网",
+      "code": "sz000980",
+      "name": "众泰汽车",
+      "level": 1,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "094654",
+      "last_limit_time": "094654",
+      "limit_up_fund": 51528147,
+      "turnover_rate": 4.505163192749023,
+      "amount": 372748464,
+      "float_market_cap": 8420951351.13,
+      "break_count": 0,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 372748464
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "094654"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 8420951351.13
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "094654"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 51528147
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 4.505163192749023
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sz002042",
+      "名称": "华孚时尚",
+      "连板数": 1,
+      "细分板块": "算力",
+      "大主线": "AI算力",
+      "code": "sz002042",
+      "name": "华孚时尚",
+      "level": 1,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "111836",
+      "last_limit_time": "133530",
+      "limit_up_fund": 39544956,
+      "turnover_rate": 9.93101692199707,
+      "amount": 637167072,
+      "float_market_cap": 6734698165.8,
+      "break_count": 3,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 637167072
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 3
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "111836"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 6734698165.8
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "133530"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 39544956
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 9.93101692199707
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sz002148",
+      "名称": "北纬科技",
+      "连板数": 1,
+      "细分板块": "机器人",
+      "大主线": "机器人",
+      "code": "sz002148",
+      "name": "北纬科技",
+      "level": 1,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "093009",
+      "last_limit_time": "130000",
+      "limit_up_fund": 75387495,
+      "turnover_rate": 42.01815414428711,
+      "amount": 1676260976,
+      "float_market_cap": 4023157370.12,
+      "break_count": 4,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 1676260976
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 4
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "093009"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 4023157370.12
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "130000"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 75387495
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 42.01815414428711
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sz002194",
+      "名称": "武汉凡谷",
+      "连板数": 1,
+      "细分板块": "光通信",
+      "大主线": "AI算力",
+      "code": "sz002194",
+      "name": "武汉凡谷",
+      "level": 1,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "093000",
+      "last_limit_time": "093000",
+      "limit_up_fund": 123188132,
+      "turnover_rate": 3.46767520904541,
+      "amount": 166126062,
+      "float_market_cap": 4791364966.5,
+      "break_count": 0,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 166126062
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "093000"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 4791364966.5
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "093000"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 123188132
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 3.46767520904541
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sz002197",
+      "名称": "证通电子",
+      "连板数": 1,
+      "细分板块": "算力",
+      "大主线": "AI算力",
+      "code": "sz002197",
+      "name": "证通电子",
+      "level": 1,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "101245",
+      "last_limit_time": "102357",
+      "limit_up_fund": 42570801,
+      "turnover_rate": 7.186985015869141,
+      "amount": 229285580,
+      "float_market_cap": 3262740073.32,
+      "break_count": 2,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 229285580
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 2
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "101245"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 3262740073.32
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "102357"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 42570801
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 7.186985015869141
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sz002272",
+      "名称": "川润股份",
+      "连板数": 1,
+      "细分板块": "液冷",
+      "大主线": "AI算力",
+      "code": "sz002272",
+      "name": "川润股份",
+      "level": 1,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "133112",
+      "last_limit_time": "133112",
+      "limit_up_fund": 69595076,
+      "turnover_rate": 12.489601135253906,
+      "amount": 633356768,
+      "float_market_cap": 5270149124.34,
+      "break_count": 0,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 633356768
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "133112"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 5270149124.34
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "133112"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 69595076
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 12.489601135253906
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sz002403",
+      "名称": "爱仕达",
+      "连板数": 1,
+      "细分板块": "机器人",
+      "大主线": "机器人",
+      "code": "sz002403",
+      "name": "爱仕达",
+      "level": 1,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "093127",
+      "last_limit_time": "093127",
+      "limit_up_fund": 88700016,
+      "turnover_rate": 2.8495049476623535,
+      "amount": 94921903,
+      "float_market_cap": 3375754117.44,
+      "break_count": 0,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 94921903
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "093127"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 3375754117.44
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "093127"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 88700016
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 2.8495049476623535
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sz002463",
+      "名称": "沪电股份",
+      "连板数": 1,
+      "细分板块": "PCB",
+      "大主线": "AI算力",
+      "code": "sz002463",
+      "name": "沪电股份",
+      "level": 1,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "133015",
+      "last_limit_time": "145009",
+      "limit_up_fund": 62596314,
+      "turnover_rate": 5.423372268676758,
+      "amount": 8186049536,
+      "float_market_cap": 154974305815.56,
+      "break_count": 3,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 8186049536
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 3
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "133015"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 154974305815.56
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "145009"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 62596314
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 5.423372268676758
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sz002685",
+      "名称": "华东重机",
+      "连板数": 4,
+      "细分板块": "算力",
+      "大主线": "AI算力",
+      "code": "sz002685",
+      "name": "华东重机",
+      "level": 4,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "092500",
+      "last_limit_time": "092500",
+      "limit_up_fund": 532152537,
+      "turnover_rate": 2.2006258964538574,
+      "amount": 163417007,
+      "float_market_cap": 7425933258.92,
+      "break_count": 0,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 163417007
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "092500"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 7425933258.92
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "092500"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 532152537
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 2.2006258964538574
+        }
+      },
+      "height": 4
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sz002771",
+      "名称": "真视通",
+      "连板数": 2,
+      "细分板块": "算力",
+      "大主线": "AI算力",
+      "code": "sz002771",
+      "name": "真视通",
+      "level": 2,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "093003",
+      "last_limit_time": "093003",
+      "limit_up_fund": 108498775,
+      "turnover_rate": 7.908108711242676,
+      "amount": 185998810,
+      "float_market_cap": 2360342079.85,
+      "break_count": 0,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 185998810
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "093003"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 2360342079.85
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "093003"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 108498775
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 7.908108711242676
+        }
+      },
+      "height": 2
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sz002843",
+      "名称": "泰嘉股份",
+      "连板数": 2,
+      "细分板块": "算力",
+      "大主线": "AI算力",
+      "code": "sz002843",
+      "name": "泰嘉股份",
+      "level": 2,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "132751",
+      "last_limit_time": "134239",
+      "limit_up_fund": 53105484,
+      "turnover_rate": 27.566104888916016,
+      "amount": 1115749024,
+      "float_market_cap": 4342479817.08,
+      "break_count": 1,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 1115749024
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 1
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "132751"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 4342479817.08
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "134239"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 53105484
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 27.566104888916016
+        }
+      },
+      "height": 2
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sz002916",
+      "名称": "深南电路",
+      "连板数": 1,
+      "细分板块": "PCB",
+      "大主线": "AI算力",
+      "code": "sz002916",
+      "name": "深南电路",
+      "level": 1,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "131912",
+      "last_limit_time": "131912",
+      "limit_up_fund": 185275669,
+      "turnover_rate": 2.0702064037323,
+      "amount": 2666632880,
+      "float_market_cap": 133759190784.45,
+      "break_count": 0,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 2666632880
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "131912"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 133759190784.45
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "131912"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 185275669
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 2.0702064037323
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sz002929",
+      "名称": "润建股份",
+      "连板数": 1,
+      "细分板块": "算力",
+      "大主线": "AI算力",
+      "code": "sz002929",
+      "name": "润建股份",
+      "level": 1,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "111454",
+      "last_limit_time": "131639",
+      "limit_up_fund": 129888998,
+      "turnover_rate": 16.129335403442383,
+      "amount": 1799247952,
+      "float_market_cap": 11645920419.84,
+      "break_count": 1,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 1799247952
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 1
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "111454"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 11645920419.84
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "131639"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 129888998
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 16.129335403442383
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sz002955",
+      "名称": "鸿合科技",
+      "连板数": 1,
+      "细分板块": "算力",
+      "大主线": "AI算力",
+      "code": "sz002955",
+      "name": "鸿合科技",
+      "level": 1,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "112600",
+      "last_limit_time": "112600",
+      "limit_up_fund": 34457934,
+      "turnover_rate": 3.2592670917510986,
+      "amount": 178355627,
+      "float_market_cap": 5632931973.24,
+      "break_count": 0,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 178355627
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "112600"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 5632931973.24
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "112600"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 34457934
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 3.2592670917510986
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sz300324",
+      "名称": "旋极信息",
+      "连板数": 1,
+      "细分板块": "算力",
+      "大主线": "AI算力",
+      "code": "sz300324",
+      "name": "旋极信息",
+      "level": 1,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "095803",
+      "last_limit_time": "100248",
+      "limit_up_fund": 59554004,
+      "turnover_rate": 18.514610290527344,
+      "amount": 1325750080,
+      "float_market_cap": 7592326065.120001,
+      "break_count": 1,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 1325750080
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 1
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "095803"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 7592326065.120001
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "100248"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 59554004
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 18.514610290527344
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sz300991",
+      "名称": "创益通",
+      "连板数": 1,
+      "细分板块": "元件",
+      "大主线": "AI算力",
+      "code": "sz300991",
+      "name": "创益通",
+      "level": 1,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "094506",
+      "last_limit_time": "094506",
+      "limit_up_fund": 23102755,
+      "turnover_rate": 7.331221103668213,
+      "amount": 167016363,
+      "float_market_cap": 2383815420.0,
+      "break_count": 0,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 167016363
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "094506"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 2383815420.0
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "094506"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 23102755
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 7.331221103668213
+        }
+      },
+      "height": 1
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sz301391",
+      "名称": "卡莱特",
+      "连板数": 2,
+      "细分板块": "芯片",
+      "大主线": "AI算力",
+      "code": "sz301391",
+      "name": "卡莱特",
+      "level": 2,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "101554",
+      "last_limit_time": "101554",
+      "limit_up_fund": 45677853,
+      "turnover_rate": 10.149170875549316,
+      "amount": 394627712,
+      "float_market_cap": 4331703076.86,
+      "break_count": 0,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 394627712
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "101554"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 4331703076.86
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "101554"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 45677853
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 10.149170875549316
+        }
+      },
+      "height": 2
+    },
+    {
+      "日期": "20261118",
+      "类型": "ZT",
+      "代码": "sz301396",
+      "名称": "宏景科技",
+      "连板数": 1,
+      "细分板块": "算力",
+      "大主线": "AI算力",
+      "code": "sz301396",
+      "name": "宏景科技",
+      "level": 1,
+      "report_date": "20261118",
+      "date_verified": true,
+      "bucket": "local_cache",
+      "limit_up_attempted": null,
+      "broken": null,
+      "reclosed": null,
+      "board_type": null,
+      "first_limit_time": "133006",
+      "last_limit_time": "133006",
+      "limit_up_fund": 116705889,
+      "turnover_rate": 13.672689437866211,
+      "amount": 2021234032,
+      "float_market_cap": 16216678707.0,
+      "break_count": 0,
+      "source": "akshare_em",
+      "source_timestamp": "2026-11-18T17:29:08.537396+00:00",
+      "source_timestamp_kind": "fetched_at",
+      "fetched_at": "2026-11-18T17:29:08.537396+00:00",
+      "trade_date": "2026-11-18",
+      "trade_date_source": "request",
+      "trade_date_evidence": null,
+      "event_evidence": {
+        "amount": {
+          "field": "成交额",
+          "value": 2021234032
+        },
+        "break_count": {
+          "field": "炸板次数",
+          "value": 0
+        },
+        "first_limit_time": {
+          "field": "首次封板时间",
+          "value": "133006"
+        },
+        "float_market_cap": {
+          "field": "流通市值",
+          "value": 16216678707.0
+        },
+        "last_limit_time": {
+          "field": "最后封板时间",
+          "value": "133006"
+        },
+        "limit_up_fund": {
+          "field": "封板资金",
+          "value": 116705889
+        },
+        "turnover_rate": {
+          "field": "换手率",
+          "value": 13.672689437866211
+        }
+      },
+      "height": 1
+    }
+  ],
+  "snapshot_schema": "daily-fact-snapshot/v1",
+  "snapshot_source": "daily_snapshot",
+  "source": "daily_snapshot",
+  "date_verified": true,
+  "immutable": true
+}
