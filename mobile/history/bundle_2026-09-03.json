@@ -1,0 +1,69 @@
+{
+  "meta": {
+    "version": "1.2.0",
+    "updated_at": "2026-09-03 15:30:00",
+    "date": "2026-09-03",
+    "sources": [
+      "量化投研归档",
+      "开盘啦",
+      "财联社"
+    ],
+    "is_history": true
+  },
+  "tab_mood": {
+    "degree": 18,
+    "status_text": "冰点 · 空仓观望",
+    "color_tag": "emerald",
+    "turnover": "1.85万亿",
+    "turnover_change": "",
+    "up_count": 1769,
+    "down_count": 3488,
+    "zt_count": 144,
+    "dt_count": 16,
+    "broken_ratio": 9.9,
+    "yesterday_zt_perf": -1.5,
+    "tianti_stocks": [],
+    "distribution_bins": {
+      "-10%": 13,
+      "-7%": 120,
+      "-5%": 350,
+      "-2%": 1200,
+      "0%": 600,
+      "+2%": 900,
+      "+5%": 400,
+      "+7%": 180,
+      "+10%": 144
+    }
+  },
+  "tab_crowding": {
+    "mainline_desc": "2026-09-03 市场主线与题材梯队",
+    "mainlines": [
+      {
+        "title": "核心题材",
+        "hot": 45,
+        "desc": "空间龙头带领题材展开接力，全天共封板 144 只。"
+      }
+    ],
+    "tuyeres": [],
+    "fund_heat": [],
+    "local_cycles": []
+  },
+  "tab_focus": [],
+  "tab_strategy": {
+    "title": "2026-09-03 实战推演与交易预案",
+    "action_slogan": "防守防风险，静待冰点出清",
+    "recommended_position": "0 ~ 2 成轻仓",
+    "is_melt": true,
+    "melt_text": "防守熔断：跌停 16 家，严格控制仓位！",
+    "priority_matrix": [],
+    "checklist": [],
+    "avoid_list": [],
+    "scenarios": [],
+    "rules": [
+      "大盘情绪读数 18（冰点 · 空仓观望），涨跌家数比 1769:3488。",
+      "连板空间高度锚定在 缺3板，全天涨停 144 家，跌停 16 家。",
+      "严格恪守盘面铁律与仓位纪律，弱势期宁可空仓不可盲目接力后排。"
+    ],
+    "defense_line": "单日亏损触及本金 2% 或跌破 EMA20 支撑无条件触发止损纪律。"
+  }
+}

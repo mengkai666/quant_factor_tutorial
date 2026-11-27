@@ -1,0 +1,292 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="report-date" content="2026-09-28">
+<title>今日深度复盘与明日实战预案 · 2026-09-29</title><style>
+:root {
+  --bg-primary: #0d1117;
+  --bg-card: #161b22;
+  --bg-card-sub: #0f141c;
+  --border-color: #30363d;
+  --border-hover: #58a6ff;
+  --text-primary: #f0f6fc;
+  --text-secondary: #8b949e;
+  --accent-red: #f85149;
+  --accent-green: #3fb950;
+  --accent-blue: #58a6ff;
+  --accent-yellow: #d29922;
+  --accent-purple: #bc8cff;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg-primary);
+  color: #c9d1d9;
+  font: 14px/1.65 -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+.wrap { max-width: 1140px; margin: 0 auto; padding: 24px 20px 60px; }
+.back-link { margin-bottom: 16px; }
+.back-link a { color: var(--accent-blue); text-decoration: none; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+.back-link a:hover { text-decoration: underline; }
+
+/* Hero Header */
+.hero {
+  background: linear-gradient(135deg, rgba(88, 166, 255, 0.12) 0%, rgba(210, 153, 34, 0.08) 50%, rgba(248, 81, 73, 0.12) 100%);
+  border: 1px solid rgba(88, 166, 255, 0.3);
+  border-radius: 12px;
+  padding: 24px 28px;
+  margin-bottom: 24px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+}
+.hero-top { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 14px; }
+.hero-title { font-size: 24px; font-weight: 800; color: #f0f6fc; margin: 0 0 6px; }
+.hero-sub { color: var(--text-secondary); font-size: 13px; margin: 0; }
+.pulse-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 700;
+  background: rgba(248, 81, 73, 0.15); color: #f85149; border: 1px solid rgba(248, 81, 73, 0.4);
+}
+.pulse-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: #f85149;
+  box-shadow: 0 0 0 0 rgba(248, 81, 73, 0.7);
+  animation: pulse-ring 2s infinite;
+}
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(248, 81, 73, 0.7); }
+  70% { box-shadow: 0 0 0 8px rgba(248, 81, 73, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(248, 81, 73, 0); }
+}
+
+h2 {
+  font-size: 16px; margin: 32px 0 12px; color: #f0f6fc;
+  border-left: 3px solid var(--accent-blue); padding-left: 10px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.sub { color: var(--text-secondary); font-size: 12.5px; margin: -4px 0 12px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 16px; min-width: 0; }
+.card:hover { border-color: rgba(88, 166, 255, 0.4); }
+.k { color: var(--text-secondary); font-size: 11.5px; margin-bottom: 2px; }
+.v { font-size: 20px; font-weight: 800; color: #f0f6fc; }
+.gate h3 { margin: 0 0 6px; font-size: 13.5px; color: var(--text-primary); }
+.gate .hl { font-weight: 700; color: #f0f6fc; font-size: 15px; margin-bottom: 4px; }
+.gate .chk { color: var(--text-secondary); font-size: 12px; margin-top: 8px; padding-top: 6px; border-top: 1px dashed #21262d; }
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 8px 10px; border-bottom: 1px solid #21262d; text-align: left; vertical-align: top; }
+th { color: var(--text-secondary); font-weight: 600; font-size: 12px; background: rgba(0, 0, 0, 0.2); }
+.tw { overflow-x: auto; }
+.up { color: var(--accent-red); font-weight: 600; }
+.down { color: var(--accent-green); font-weight: 600; }
+.muted { color: #8b949e; }
+.tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11.5px; border: 1px solid var(--border-color); font-weight: 600; }
+.primary { border-color: #d29922; background: rgba(210, 153, 34, 0.05); }
+.primary .tag { color: #d29922; border-color: #d29922; }
+ul { margin: 6px 0 0; padding-left: 18px; }
+li { margin-bottom: 4px; }
+.phase { margin-top: 8px; background: var(--bg-card-sub); padding: 8px 12px; border-radius: 6px; border-left: 3px solid var(--accent-blue); }
+.phase b { color: var(--accent-blue); font-weight: 600; margin-right: 8px; display: inline-block; min-width: 72px; }
+
+/* Tactical Breakdown & Priority Matrix */
+.law-card {
+  background: rgba(22, 27, 34, 0.95); border: 1px solid rgba(248, 81, 73, 0.35); border-left: 4px solid var(--accent-red);
+  border-radius: 8px; padding: 14px 18px; margin-bottom: 12px;
+}
+.law-title { font-weight: 700; color: #f0f6fc; font-size: 14px; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+.law-desc { color: #c9d1d9; font-size: 13px; line-height: 1.6; }
+.law-rule { color: var(--accent-red); font-weight: 600; margin-top: 6px; font-size: 12.5px; }
+
+.pm-card {
+  background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px;
+  padding: 14px 18px; margin-bottom: 12px; border-left: 4px solid var(--border-color);
+}
+.pm-p0 { border-left-color: var(--accent-red); }
+.pm-p1 { border-left-color: var(--accent-yellow); }
+.pm-p2 { border-left-color: var(--accent-blue); }
+.pm-p3 { border-left-color: var(--accent-purple); }
+.pm-black { border-left-color: #da3633; background: rgba(218, 54, 51, 0.08); border-color: rgba(218, 54, 51, 0.3); }
+
+.pm-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.pm-badge { font-size: 11.5px; font-weight: 700; padding: 2px 10px; border-radius: 12px; }
+.pm-p0 .pm-badge { background: rgba(248, 81, 73, 0.2); color: var(--accent-red); border: 1px solid var(--accent-red); }
+.pm-p1 .pm-badge { background: rgba(210, 153, 34, 0.2); color: var(--accent-yellow); border: 1px solid var(--accent-yellow); }
+.pm-p2 .pm-badge { background: rgba(88, 166, 255, 0.2); color: var(--accent-blue); border: 1px solid var(--accent-blue); }
+.pm-p3 .pm-badge { background: rgba(188, 140, 255, 0.2); color: var(--accent-purple); border: 1px solid var(--accent-purple); }
+.pm-black .pm-badge { background: rgba(248, 81, 73, 0.25); color: #ff7b72; border: 1px solid #da3633; }
+
+.checklist-table td { padding: 9px 12px; }
+.time-tag { background: rgba(88, 166, 255, 0.15); color: var(--accent-blue); border: 1px solid rgba(88, 166, 255, 0.3); padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 12px; }
+
+a { color: var(--accent-blue); }
+footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--border-color); color: var(--text-secondary); font-size: 12px; text-align: center; }
+</style></head><body><div class="wrap">
+<div class="top-nav" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:20px;padding:10px 16px;background:rgba(22,27,34,0.8);border:1px solid #30363d;border-radius:8px">
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <a href="../index.html" style="color:#58a6ff;text-decoration:none;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:4px">🏠 导航门户</a>
+    <span style="color:#30363d">|</span>
+    <a href="../reports/2026-09-28.html" style="color:#58a6ff;text-decoration:none;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:4px">📊 主线追踪大报告</a>
+    <span style="color:#30363d">|</span>
+    <a href="../dashboards/latest.html" style="color:#58a6ff;text-decoration:none;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:4px">📈 决策看板</a>
+    <span style="color:#30363d">|</span>
+    <a href="../dragon/latest.html" style="color:#58a6ff;text-decoration:none;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:4px">🐉 龙头接替谱系</a>
+  </div>
+  <div style="font-size:12px;color:#8b949e">当前页面：今日复盘与明日预案 (2026-09-28)</div>
+</div>
+
+<!-- Hero Header -->
+<div class="hero">
+  <div class="hero-top">
+    <div>
+      <div class="hero-title">今日深度复盘 · 明日实战预案</div>
+      <div class="hero-sub">实战操盘手册 · 优先级分层矩阵 × 三大情景推演 × 游资两大血泪铁律 · 基于 2026-09-28 盘面真实数据</div>
+    </div>
+    <div class="pulse-badge"><span class="pulse-dot"></span>🔴 极度防守 · 不开新仓 (跌停潮 56 家)</div>
+  </div>
+</div>
+
+<!-- 深度复盘解构 -->
+<h2>今日盘面深度解构（大盘体检 · 板块博弈 · 资金流动）</h2>
+<div class="grid" style="margin-bottom:12px">
+  <div class="card">
+    <div class="k">大盘全景体检</div>
+    <div style="font-size:13.5px;color:#f0f6fc;font-weight:700;margin:4px 0">跌停潮爆发 (56 家跌停)，全市场普跌释放流动性恐慌</div>
+    <div style="font-size:12.5px;color:#8b949e">
+      上涨占比仅 16.2%，超过 83.8% 个股收跌；跌停家数从 13 家暴增至 56 家，连板晋级率从 25.5% 骤降至 13.5%，处于极端退潮冰点杀跌期。
+    </div>
+  </div>
+  <div class="card">
+    <div class="k">主线分化与博弈</div>
+    <div style="font-size:13.5px;color:#f0f6fc;font-weight:700;margin:4px 0">高位双子星反向决裂 vs 中高位梯队批量一字核按钮</div>
+    <div style="font-size:12.5px;color:#8b949e">
+      新华传媒艰难晋级 5 板独苗，新华文轩竞价不及预期放量单边大跌 -8.99%；天威视讯 (-9.96%)、泰慕士 (-10%)、集泰股份 (-10%)、南威软件 (-9.95%)、华远控股 (-10.16%) 批量跌停。
+    </div>
+  </div>
+</div>
+
+<!-- 游资实战战法升维 -->
+<h2>游资实战战法升维 · 两大血泪铁律</h2>
+<div class="law-card">
+  <div class="law-title">⚠️ 铁律一：断板反包幻觉律（新华文轩 / 天威视讯惨痛教训）</div>
+  <div class="law-desc">
+    <b>量化历史回测真值：</b>2 板以上个股一旦断板，次日反包涨停率仅为 7.6%，3 日内仅 15.8%！
+  </div>
+  <div class="law-rule">操盘军规：退潮期高位票断板次日任何冲高都是主力自救诱多，严禁低吸、严禁抄底、严禁搏首阴反包！今日断板的新华文轩、泰慕士、奥佳华、天威视讯、上工申贝明日一律拉入黑名单。</div>
+</div>
+<div class="law-card">
+  <div class="law-title">⚠️ 铁律二：极端跌停潮的“次日冰点修复陷阱”</div>
+  <div class="law-desc">
+    <b>盘面机理：</b>单日 56 家跌停属于情绪释放高潮，次日早盘通常会有恐慌盘砸出的短线流动性抵抗，部分中位票可能会脉冲甚至触板。
+  </div>
+  <div class="law-rule">操盘军规：弱市无集群题材护航的孤立脉冲，多为存量资金制造的“假冲天炮出逃”，只看不追，绝不在早盘 10:00 前盲目开仓！</div>
+</div>
+
+<!-- 核心标的关注及优先级分层矩阵 -->
+<h2>核心标的关注及优先级分层作战矩阵 (Priority Matrix)</h2>
+<p class="sub">严格限制总仓位在 0~1 成。优先级层级由高至低执行，绝不越级；黑名单标的盘中坚决回避。</p>
+
+<div class="pm-card pm-p0">
+  <div class="pm-header">
+    <div><span class="tag">P0 空间独苗先锋</span> <b style="color:#f0f6fc;font-size:14px;margin-left:6px">新华传媒 (sh600825) · 5 进 6</b></div>
+    <span class="pm-badge">空间独苗 · 情绪穿越试金石</span>
+  </div>
+  <div style="font-size:13px;color:#c9d1d9">
+    <b>触发条件：</b>9:25 集合竞价成交额需大于 1.2 亿元，维持在 +2% ~ +5% 之间有良性换手推升；同板块新华文轩竞价不能继续封死跌停；<b style="color:#f85149">若竞价加速顶一字诱多坚决不追</b>。<br>
+    <b>失效/止损：</b>盘中炸板超过 3 分钟不回封，或跌破分时均线立即放弃/止损。
+  </div>
+</div>
+
+<div class="pm-card pm-p1">
+  <div class="pm-header">
+    <div><span class="tag">P1 中位换手卡位</span> <b style="color:#f0f6fc;font-size:14px;margin-left:6px">雪龙集团 (sh603949) / 福建水泥 (sh600802) / 金辰股份 (sh603396) · 3 进 4</b></div>
+    <span class="pm-badge">身位卡位先锋 & 换手活口</span>
+  </div>
+  <div style="font-size:13px;color:#c9d1d9">
+    <b>触发条件：</b>9:25 竞价量比与封单金额最大者胜出，且所在题材必须有至少 1 只首板小弟助攻联动；动用仓位上限不超过 1 成。<br>
+    <b>失效/止损：</b>开盘快速跳水翻绿，或冲高无量回落，严禁低吸。
+  </div>
+</div>
+
+<div class="pm-card pm-p2">
+  <div class="pm-header">
+    <div><span class="tag">P2 低位防守试错</span> <b style="color:#f0f6fc;font-size:14px;margin-left:6px">襄阳轴承 (sz000678) / 大业股份 (sh603278) / 吉鑫科技 (sh601218) · 2 进 3</b></div>
+    <span class="pm-badge">机器人 & 零部件低位防御</span>
+  </div>
+  <div style="font-size:13px;color:#c9d1d9">
+    <b>触发条件：</b>必须伴随所在细分题材出现至少 2 只首板助攻，首次回封且分时放量，仅作极轻仓套利观察。<br>
+    <b>失效/止损：</b>冲高回落跌破昨日收盘价且板块无联动跟随，立即离场。
+  </div>
+</div>
+
+<div class="pm-card pm-p3">
+  <div class="pm-header">
+    <div><span class="tag">P3 风险情绪温度计</span> <b style="color:#f0f6fc;font-size:14px;margin-left:6px">新华文轩 (sh601811) / 天威视讯 (sz002238) / 泰慕士 (sz001234) / 集泰股份 (sz002909)</b></div>
+    <span class="pm-badge">跌停封单风向标 · 操盘熔断器</span>
+  </div>
+  <div style="font-size:13px;color:#c9d1d9">
+    <b>监控要点：</b>9:25 重点观察跌停板封单金额是否大幅收窄；若天威视讯、泰慕士等继续大单焊死一字跌停，则全天新仓计划全线作废，执行 0 仓位。
+  </div>
+</div>
+
+<div class="pm-card pm-black">
+  <div class="pm-header">
+    <div><span class="tag" style="border-color:#da3633;color:#ff7b72">P-Black 禁买雷区</span> <b style="color:#ff7b72;font-size:14px;margin-left:6px">新华文轩、天威视讯、泰慕士、奥佳华、华茂股份、东方中科、康强电子、上工申贝、南威软件、华远控股</b></div>
+    <span class="pm-badge">绝对禁止开仓</span>
+  </div>
+  <div style="font-size:13px;color:#c9d1d9">
+    <b>回避逻辑：</b>① 昨日 ≥2 板今日断板个股（历史回测次日反包率仅 7.6%），反包即诱多；② 跌停破位股次日惯性下杀；③ 弱市假冲天炮出逃诱多，坚决不抄底。
+  </div>
+</div>
+
+<!-- 量化事实与规则面板 -->
+<h2>今日盘面事实</h2>
+<div class="grid"><div class='card'><div class='k'>上涨占比</div><div class='v'>16.2%</div></div><div class='card'><div class='k'>涨停 / 跌停</div><div class='v'>33 / 56</div></div><div class='card'><div class='k'>晋级率</div><div class='v'>13.5%</div></div><div class='card'><div class='k'>明日仓位上限</div><div class='v'>1 成</div></div></div>
+<div class="card tw" style="margin-top:10px"><table><tr><th>连板高度</th><th>标的</th></tr><tr><td>5 板</td><td>新华传媒</td></tr><tr><td>3 板</td><td>福建水泥、金辰股份、雪龙集团</td></tr><tr><td>2 板</td><td>吉鑫科技、大业股份、襄阳轴承</td></tr></table></div>
+
+<h2>明日三道开关</h2>
+<p class="sub">默认动作：不开新仓，只观察条件是否成立 · 条件未确认前不执行</p>
+<div class="grid"><div class='card gate'><h3 class='k'>市场开关</h3><div class='hl'>当前不开新仓</div><div>默认动作：不开新仓，只观察条件是否成立</div><div class='chk'>盘中检查：9:35 前观察上涨家数、跌停反馈和中位梯队承接；恶化则取消全部新仓。</div></div><div class='card gate'><h3 class='k'>唯一主线</h3><div class='hl'>机器人 · 17%</div><div>条件候选：暂无合格主线候选</div><div class='chk'>盘中检查：至少出现同题材联动和梯队晋级；单一高开或孤立涨停不算确认。</div></div><div class='card gate'><h3 class='k'>风险开关</h3><div class='hl'>新华文轩、泰慕士、天威视讯</div><div>高标只作情绪锚，不作为追高理由。</div><div class='chk'>盘中检查：放量断板、批量负反馈或跌停扩张时，立即维持或恢复空仓。</div></div></div>
+<div class='card tw' style='margin-top:10px'><table><tr><th>候选</th><th>角色</th><th>触发条件</th><th>失效 / 止损</th></tr><tr><td>襄阳轴承 <span class='muted'>sz000678</span></td><td>进攻观察</td><td>满足观察条件后进入确认名单：首次回封且同题材至少 2 只保持红盘</td><td>跌破昨日收盘且题材无跟随</td></tr><tr><td>吉鑫科技 <span class='muted'>sh601218</span></td><td>进攻观察</td><td>满足观察条件后进入确认名单：首次回封且同题材至少 2 只保持红盘</td><td>跌破昨日收盘且题材无跟随</td></tr><tr><td>大业股份 <span class='muted'>sh603278</span></td><td>进攻观察</td><td>满足观察条件后进入确认名单：首次回封且同题材至少 2 只保持红盘</td><td>跌破昨日收盘且题材无跟随</td></tr><tr><td>雪龙集团 <span class='muted'>sh603949</span></td><td>确认观察</td><td>满足观察条件后进入确认名单：放量晋级且同梯队至少 1 只跟随</td><td>炸板后不能回封或同梯队集体转弱</td></tr><tr><td>新华传媒 <span class='muted'>sh600825</span></td><td>确认观察</td><td>满足观察条件后进入确认名单：放量晋级且同梯队至少 1 只跟随</td><td>炸板后不能回封或同梯队集体转弱</td></tr><tr><td>福建水泥 <span class='muted'>sh600802</span></td><td>确认观察</td><td>满足观察条件后进入确认名单：放量晋级且同梯队至少 1 只跟随</td><td>炸板后不能回封或同梯队集体转弱</td></tr><tr><td>金辰股份 <span class='muted'>sh603396</span></td><td>确认观察</td><td>满足观察条件后进入确认名单：放量晋级且同梯队至少 1 只跟随</td><td>炸板后不能回封或同梯队集体转弱</td></tr><tr><td>新华文轩 <span class='muted'>sh601811</span></td><td>风险锚</td><td>仅作情绪锚，不把孤峰回封当作追高依据</td><td>放量断板或跌停反馈扩大</td></tr><tr><td>泰慕士 <span class='muted'>sz001234</span></td><td>风险锚</td><td>仅作情绪锚，不把孤峰回封当作追高依据</td><td>放量断板或跌停反馈扩大</td></tr><tr><td>天威视讯 <span class='muted'>sz002238</span></td><td>风险锚</td><td>仅作情绪锚，不把孤峰回封当作追高依据</td><td>放量断板或跌停反馈扩大</td></tr></table></div>
+
+<h2>情景推演</h2>
+<div class='card primary' style='margin-bottom:10px'><div><span class='tag'>主情景</span> <b style='color:#f0f6fc'>广度弱、接力弱：高位退潮优先</b> <span class='muted'>仓位上限 20%</span></div><div class='k' style='margin-top:6px'>前提</div><ul><li>市场广度弱</li><li>接力质量弱</li><li>高位负反馈需要先止住</li></ul><div class='k' style='margin-top:6px'>分时段触发</div><div class='phase'><b>竞价 9:25</b>高位核心竞价低于预期时不追；观察是否出现批量低开与撤单</div><div class='phase'><b>开盘 9:35</b>9:35 前跌停和炸板不再扩张；高位反馈不继续向中位传导</div><div class='phase'><b>确认 10:00</b>10:00 前至少看到宽度或晋级一项修复；否则维持风险优先</div><div class='phase'><b>午后</b>午后只记录修复信号；修复未扩散前不启动交易候选</div><div class='k' style='margin-top:6px'>失效条件（出现即取消）</div><ul><li>跌停扩张并伴随高位负反馈</li><li>晋级继续恶化且核心失守</li></ul><div class='k' style='margin-top:6px'>仓位调整</div><ul><li>空仓或仅保留观察仓</li><li>修复确认后再逐步恢复</li></ul><div class='k' style='margin-top:6px'>观察池</div><div>襄阳轴承（2板）、雪龙集团（3板）、九阳股份（1板）、泰尔股份（1板）、新筑股份（1板）、吉鑫科技（2板）、大业股份（2板）、新华传媒（5板）</div></div><div class='card ' style='margin-bottom:10px'><div><span class='tag'>备选</span> <b style='color:#f0f6fc'>风险观察：等待宽度与接力同时止跌</b> <span class='muted'>仓位上限 10%</span></div><div class='k' style='margin-top:6px'>前提</div><ul><li>宽度弱</li><li>接力弱</li><li>当前跌停约56家</li></ul><div class='k' style='margin-top:6px'>分时段触发</div><div class='phase'><b>竞价 9:25</b>竞价只记录状态，不把高开当作反转；观察核心是否出现承接</div><div class='phase'><b>开盘 9:35</b>9:35 前上涨家数不再恶化；高位负反馈收敛</div><div class='phase'><b>确认 10:00</b>10:00 前宽度和接力至少一项明确改善；改善不能只来自单只个股</div><div class='phase'><b>午后</b>午后确认修复能否扩散；未扩散则继续防守</div><div class='k' style='margin-top:6px'>失效条件（出现即取消）</div><ul><li>跌停继续增加</li><li>负反馈向中位梯队扩散</li></ul><div class='k' style='margin-top:6px'>仓位调整</div><ul><li>不主动开仓</li><li>仅在双确认后恢复观察仓</li></ul><div class='k' style='margin-top:6px'>观察池</div><div>襄阳轴承（2板）、雪龙集团（3板）、九阳股份（1板）、泰尔股份（1板）、新筑股份（1板）、吉鑫科技（2板）、大业股份（2板）、新华传媒（5板）</div></div>
+
+<h2>不追名单</h2>
+<div class="card"><p class="sub" style="margin:0">昨日 2 板以上、今日断板的个股。回测显示断板后 1 日内反包成功约 7.6%、3 日内 15.8%，次日冲板不追。</p><ul><li>新华文轩（昨 5 板，今日断板）</li><li>泰慕士（昨 4 板，今日断板）</li><li>奥佳华（昨 4 板，今日断板）</li><li>天威视讯（昨 3 板，今日断板）</li><li>华茂股份（昨 2 板，今日断板）</li><li>东方中科（昨 2 板，今日断板）</li><li>康强电子（昨 2 板，今日断板）</li><li>集泰股份（昨 2 板，今日断板）</li><li>上工申贝（昨 2 板，今日断板）</li></ul></div>
+
+<!-- 分时段操盘执行检查表 -->
+<h2>分时段操盘执行检查表 (Checklist)</h2>
+<div class="card tw">
+  <table class="checklist-table">
+    <tr><th>时间节点</th><th>监控焦点</th><th>量化通过门槛</th><th>熔断动作</th></tr>
+    <tr>
+      <td><span class="time-tag">09:25 集合竞价</span></td>
+      <td>全市场跌停家数、高标溢价率</td>
+      <td>跌停家数 &le; 10 家，新华传媒红开 +2% 以上且成交 &gt; 1.2 亿</td>
+      <td>跌停 &gt; 15 家，或天威视讯大单焊死跌停：全天禁止开新仓</td>
+    </tr>
+    <tr>
+      <td><span class="time-tag">09:35 开盘前10分</span></td>
+      <td>跌停封单变化、黄白线分化</td>
+      <td>上涨家数不再恶化，跌停板无新增扩散，有承接盘撬板</td>
+      <td>出现高标快速拉高天地板跳水：判定为出货诱多，立即放弃参与</td>
+    </tr>
+    <tr>
+      <td><span class="time-tag">10:00 盘中确认</span></td>
+      <td>梯队晋级情况、市场宽度回暖</td>
+      <td>上涨家数回升至 2000 家以上，有明确主流题材走出 2 只连板</td>
+      <td>上涨家数 &lt; 1500 家且无板块合力：全天彻底锁定空仓</td>
+    </tr>
+    <tr>
+      <td><span class="time-tag">14:00 午后防守</span></td>
+      <td>尾盘流动性与抢筹真实度</td>
+      <td>尾盘无大规模砸盘，主流板块有持续大买单护盘</td>
+      <td>无增量资金进场严禁尾盘博弈次日抢筹，防范次日低开埋人</td>
+    </tr>
+  </table>
+</div>
+
+<h2>昨日预案对账</h2>
+<p class='sub'>对照 2026-09-24 收盘后发布的预案（主情景：广度弱、接力弱：高位退潮优先），用 2026-09-28 收盘价逐只记分，涨跌停按前收盘价精确重建，全部列出、不挑样本。观察池 77 只：22 只收涨、52 只收跌，等权 -3.11%</p><div class='grid'><div class='card tw'><table><tr><th>市场指标</th><th>2026-09-24</th><th>2026-09-28</th></tr><tr><td>上涨占比</td><td>20.1%</td><td>16.2%</td></tr><tr><td>涨停家数</td><td>52</td><td>33</td></tr><tr><td>跌停家数</td><td>13</td><td>56</td></tr><tr><td>晋级率</td><td>25.5%</td><td>13.5%</td></tr></table></div><div class='card'><div class='k'>昨日主情景的失效条件</div><ul><li>跌停扩张并伴随高位负反馈</li><li>晋级继续恶化且核心失守</li></ul></div></div><div class='card tw' style='margin-top:10px'><div class='k'>核心标的（进攻 / 确认 / 风险锚）</div><table><tr><th>标的</th><th>角色</th><th>当日涨跌</th><th>涨跌停</th></tr><tr><td>新华传媒 <span class='muted'>sh600825</span></td><td>确认观察</td><td class='up'>+10.04%</td><td>涨停 · 5 板</td></tr><tr><td>雪龙集团 <span class='muted'>sh603949</span></td><td>进攻观察</td><td class='up'>+10.00%</td><td>涨停 · 3 板</td></tr><tr><td>金辰股份 <span class='muted'>sh603396</span></td><td>进攻观察</td><td class='up'>+9.99%</td><td>涨停 · 3 板</td></tr><tr><td>江淮汽车 <span class='muted'>sh600418</span></td><td>风险锚</td><td class='up'>+9.99%</td><td>涨停 · 1 板</td></tr><tr><td>福建水泥 <span class='muted'>sh600802</span></td><td>进攻观察</td><td class='up'>+9.97%</td><td>涨停 · 3 板</td></tr><tr><td>浩欧博 <span class='muted'>sh688656</span></td><td>风险锚</td><td class='up'>+4.17%</td><td></td></tr><tr><td>沃格光电 <span class='muted'>sh603773</span></td><td>风险锚</td><td class='up'>+2.34%</td><td></td></tr><tr><td>奥佳华 <span class='muted'>sz002614</span></td><td>确认观察</td><td class='up'>+2.04%</td><td>断板（昨 4 板）</td></tr><tr><td>我爱我家 <span class='muted'>sz000560</span></td><td>风险锚</td><td class='up'>+1.37%</td><td></td></tr><tr><td>华茂股份 <span class='muted'>sz000850</span></td><td>进攻观察</td><td class='up'>+0.39%</td><td>断板（昨 2 板）</td></tr><tr><td>康强电子 <span class='muted'>sz002119</span></td><td>进攻观察</td><td class='up'>+0.34%</td><td>断板（昨 2 板）</td></tr><tr><td>鸿路钢构 <span class='muted'>sz002541</span></td><td>风险锚</td><td class=''>+0.00%</td><td></td></tr><tr><td>汇通能源 <span class='muted'>sh600605</span></td><td>风险锚</td><td class='down'>-1.59%</td><td></td></tr><tr><td>保龄宝 <span class='muted'>sz002286</span></td><td>风险锚</td><td class='down'>-1.77%</td><td></td></tr><tr><td>领先股份 <span class='muted'>sh603991</span></td><td>风险锚</td><td class='down'>-2.21%</td><td></td></tr><tr><td>通用电梯 <span class='muted'>sz300931</span></td><td>风险锚</td><td class='down'>-2.63%</td><td></td></tr><tr><td>济民健康 <span class='muted'>sh603222</span></td><td>风险锚</td><td class='down'>-3.14%</td><td></td></tr><tr><td>申科股份 <span class='muted'>sz002633</span></td><td>风险锚</td><td class='down'>-3.72%</td><td></td></tr><tr><td>申华控股 <span class='muted'>sh600653</span></td><td>风险锚</td><td class='down'>-4.55%</td><td></td></tr><tr><td>胜利精密 <span class='muted'>sz002426</span></td><td>风险锚</td><td class='down'>-4.64%</td><td></td></tr><tr><td>沧州大化 <span class='muted'>sh600230</span></td><td>风险锚</td><td class='down'>-5.44%</td><td></td></tr><tr><td>中天精装 <span class='muted'>sz002989</span></td><td>风险锚</td><td class='down'>-5.54%</td><td></td></tr><tr><td>上工申贝 <span class='muted'>sh600843</span></td><td>进攻观察</td><td class='down'>-6.33%</td><td>断板（昨 2 板）</td></tr><tr><td>东方中科 <span class='muted'>sz002819</span></td><td>进攻观察</td><td class='down'>-6.34%</td><td>断板（昨 2 板）</td></tr><tr><td>安洁科技 <span class='muted'>sz002635</span></td><td>风险锚</td><td class='down'>-6.89%</td><td></td></tr><tr><td>华丽家族 <span class='muted'>sh600503</span></td><td>风险锚</td><td class='down'>-7.55%</td><td></td></tr><tr><td>依顿电子 <span class='muted'>sh603328</span></td><td>风险锚</td><td class='down'>-7.92%</td><td></td></tr><tr><td>新华文轩 <span class='muted'>sh601811</span></td><td>确认观察</td><td class='down'>-8.99%</td><td>断板（昨 5 板）</td></tr><tr><td>中一科技 <span class='muted'>sz301150</span></td><td>风险锚</td><td class='down'>-9.33%</td><td></td></tr><tr><td>南威软件 <span class='muted'>sh603636</span></td><td>风险锚</td><td class='down'>-9.95%</td><td>跌停</td></tr><tr><td>天威视讯 <span class='muted'>sz002238</span></td><td>确认观察</td><td class='down'>-9.96%</td><td>跌停</td></tr><tr><td>瑞斯康达 <span class='muted'>sh603803</span></td><td>风险锚</td><td class='down'>-9.97%</td><td>跌停</td></tr><tr><td>万向德农 <span class='muted'>sh600371</span></td><td>风险锚</td><td class='down'>-9.97%</td><td>跌停</td></tr><tr><td>江南新材 <span class='muted'>sh603124</span></td><td>风险锚</td><td class='down'>-10.00%</td><td>跌停</td></tr><tr><td>泰慕士 <span class='muted'>sz001234</span></td><td>确认观察</td><td class='down'>-10.00%</td><td>跌停</td></tr><tr><td>集泰股份 <span class='muted'>sz002909</span></td><td>进攻观察</td><td class='down'>-10.01%</td><td>跌停</td></tr><tr><td>华远控股 <span class='muted'>sh600743</span></td><td>风险锚</td><td class='down'>-10.16%</td><td>跌停</td></tr><tr><td>优利德 <span class='muted'>sh688628</span></td><td>风险锚</td><td class='down'>-17.04%</td><td></td></tr></table></div><details class='card tw' style='margin-top:10px'><summary>其余观察池 39 只（展开）</summary><table><tr><th>标的</th><th>角色</th><th>当日涨跌</th><th>涨跌停</th></tr><tr><td>襄阳轴承 <span class='muted'>sz000678</span></td><td>观察池</td><td class='up'>+10.02%</td><td>涨停 · 2 板</td></tr><tr><td>吉鑫科技 <span class='muted'>sh601218</span></td><td>观察池</td><td class='up'>+10.00%</td><td>涨停 · 2 板</td></tr><tr><td>大业股份 <span class='muted'>sh603278</span></td><td>观察池</td><td class='up'>+10.00%</td><td>涨停 · 2 板</td></tr><tr><td>平潭发展 <span class='muted'>sz000592</span></td><td>观察池</td><td class='up'>+3.53%</td><td>断板（昨 1 板）</td></tr><tr><td>漳州发展 <span class='muted'>sz000753</span></td><td>观察池</td><td class='up'>+3.18%</td><td>断板（昨 1 板）</td></tr><tr><td>海峡创新 <span class='muted'>sz300300</span></td><td>观察池</td><td class='up'>+2.50%</td><td>断板（昨 1 板）</td></tr><tr><td>福建金森 <span class='muted'>sz002679</span></td><td>观察池</td><td class='up'>+2.42%</td><td>断板（昨 1 板）</td></tr><tr><td>雷科防务 <span class='muted'>sz002413</span></td><td>观察池</td><td class='up'>+2.34%</td><td>断板（昨 1 板）</td></tr><tr><td>山东路桥 <span class='muted'>sz000498</span></td><td>观察池</td><td class='up'>+1.95%</td><td>断板（昨 1 板）</td></tr><tr><td>中马传动 <span class='muted'>sh603767</span></td><td>观察池</td><td class='up'>+1.83%</td><td>断板（昨 1 板）</td></tr><tr><td>昆船智能 <span class='muted'>sz301311</span></td><td>观察池</td><td class='up'>+1.78%</td><td>断板（昨 1 板）</td></tr><tr><td>双象股份 <span class='muted'>sz002395</span></td><td>观察池</td><td class='down'>-0.50%</td><td>断板（昨 1 板）</td></tr><tr><td>盛景微 <span class='muted'>sh603375</span></td><td>观察池</td><td class='down'>-1.34%</td><td>断板（昨 1 板）</td></tr><tr><td>国旅联合 <span class='muted'>sh600358</span></td><td>观察池</td><td class='down'>-1.75%</td><td>断板（昨 1 板）</td></tr><tr><td>合富中国 <span class='muted'>sh603122</span></td><td>观察池</td><td class='down'>-2.14%</td><td>断板（昨 1 板）</td></tr><tr><td>中农立华 <span class='muted'>sh603970</span></td><td>观察池</td><td class='down'>-2.55%</td><td>断板（昨 1 板）</td></tr><tr><td>云煤能源 <span class='muted'>sh600792</span></td><td>观察池</td><td class='down'>-3.51%</td><td>断板（昨 1 板）</td></tr><tr><td>厦门港务 <span class='muted'>sz000905</span></td><td>观察池</td><td class='down'>-3.98%</td><td>断板（昨 1 板）</td></tr><tr><td>祥和实业 <span class='muted'>sh603500</span></td><td>观察池</td><td class='down'>-4.13%</td><td>断板（昨 1 板）</td></tr><tr><td>七 匹 狼 <span class='muted'>sz002029</span></td><td>观察池</td><td class='down'>-4.32%</td><td>断板（昨 1 板）</td></tr><tr><td>长华集团 <span class='muted'>sh605018</span></td><td>观察池</td><td class='down'>-5.18%</td><td>断板（昨 1 板）</td></tr><tr><td>华神科技 <span class='muted'>sz000790</span></td><td>观察池</td><td class='down'>-5.56%</td><td>断板（昨 1 板）</td></tr><tr><td>新宏泽 <span class='muted'>sz002836</span></td><td>观察池</td><td class='down'>-5.70%</td><td>断板（昨 1 板）</td></tr><tr><td>宁波东力 <span class='muted'>sz002164</span></td><td>观察池</td><td class='down'>-5.74%</td><td>断板（昨 1 板）</td></tr><tr><td>新 华 都 <span class='muted'>sz002264</span></td><td>观察池</td><td class='down'>-6.03%</td><td>断板（昨 1 板）</td></tr><tr><td>皓宸医疗 <span class='muted'>sz002622</span></td><td>观察池</td><td class='down'>-6.25%</td><td>断板（昨 1 板）</td></tr><tr><td>华英农业 <span class='muted'>sz002321</span></td><td>观察池</td><td class='down'>-6.61%</td><td>断板（昨 1 板）</td></tr><tr><td>贝瑞基因 <span class='muted'>sz000710</span></td><td>观察池</td><td class='down'>-6.63%</td><td>断板（昨 1 板）</td></tr><tr><td>宿迁联盛 <span class='muted'>sh603065</span></td><td>观察池</td><td class='down'>-7.07%</td><td>断板（昨 1 板）</td></tr><tr><td>霍莱沃 <span class='muted'>sh688682</span></td><td>观察池</td><td class='down'>-8.67%</td><td>断板（昨 1 板）</td></tr><tr><td>国统股份 <span class='muted'>sz002205</span></td><td>观察池</td><td class='down'>-9.23%</td><td>断板（昨 1 板）</td></tr><tr><td>厦工股份 <span class='muted'>sh600815</span></td><td>观察池</td><td class='down'>-9.89%</td><td>跌停</td></tr><tr><td>三星电气 <span class='muted'>sh601567</span></td><td>观察池</td><td class='down'>-9.97%</td><td>跌停</td></tr><tr><td>华脉科技 <span class='muted'>sh603042</span></td><td>观察池</td><td class='down'>-9.98%</td><td>跌停</td></tr><tr><td>泉阳泉 <span class='muted'>sh600189</span></td><td>观察池</td><td class='down'>-10.00%</td><td>跌停</td></tr><tr><td>内蒙新华 <span class='muted'>sh603230</span></td><td>观察池</td><td class='down'>-10.02%</td><td>跌停</td></tr><tr><td>路桥信息 <span class='muted'>bj920748</span></td><td>观察池</td><td class='down'>-11.23%</td><td>断板（昨 1 板）</td></tr><tr><td>电科思仪 <span class='muted'>sz301689</span></td><td>观察池</td><td class=''>—</td><td>断板（昨 1 板）</td></tr><tr><td>洛轴股份 <span class='muted'>sz301699</span></td><td>观察池</td><td class=''>—</td><td>断板（昨 1 板）</td></tr></table></details>
+
+<h2>AI 补充 · 竞价风向标</h2><p class="sub">由 Gemini 基于当日真实行情生成，属于推演而非事实；与上文规则结论冲突时以规则为准。</p><div class='card' style='margin-bottom:8px'><b>雷达 1：空间独苗 5 进 6 晋级测试</b><div></div></div><div class='card' style='margin-bottom:8px'><b>雷达 2：跌停潮情绪是否进一步收敛</b><div></div></div><div class='card' style='margin-bottom:8px'><b>雷达 3：活口卡位龙 3 进 4 承接力观察</b><div></div></div>
+
+<footer>数据自动跑批生成 · 规则结论来自报告同一套上下文 · 仅供研究参考，不构成投资建议</footer>
+</div></body></html>
